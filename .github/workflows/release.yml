@@ -84,7 +84,7 @@ jobs:
           sha256sum ${{ env.BINARY_NAME }}-${{ matrix.target }}.zip > ${{ env.BINARY_NAME }}-${{ matrix.target }}.zip.sha256
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.target }}
           path: |
