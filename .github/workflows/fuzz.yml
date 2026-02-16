@@ -1,0 +1,88 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # Nightly at 3am UTC
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Specific fuzz target (blank for all)"
+        required: false
+        default: ""
+      duration:
+        description: "Duration per target in seconds"
+        required: false
+        default: "30"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz testing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fuzz
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Run fuzz targets
+        run: |
+          DEFAULT_DURATION="${{ inputs.duration || '30' }}"
+          SPECIFIC_TARGET="${{ inputs.target }}"
+
+          # Security-critical targets get extra time
+          SECURITY_TARGETS="fuzz_command_validator fuzz_sanitizer fuzz_shell_escape fuzz_security_config"
+
+          if [ -n "$SPECIFIC_TARGET" ]; then
+            echo "::group::Fuzzing $SPECIFIC_TARGET for ${DEFAULT_DURATION}s"
+            cargo +nightly fuzz run "$SPECIFIC_TARGET" -- -max_total_time="$DEFAULT_DURATION" 2>&1 || true
+            echo "::endgroup::"
+          else
+            for target in $(cargo +nightly fuzz list); do
+              DURATION="$DEFAULT_DURATION"
+              if echo "$SECURITY_TARGETS" | grep -qw "$target"; then
+                DURATION=60
+              fi
+              echo "::group::Fuzzing $target for ${DURATION}s"
+              cargo +nightly fuzz run "$target" -- -max_total_time="$DURATION" 2>&1 || {
+                echo "::error::Crash found in $target"
+                CRASHES_FOUND=true
+              }
+              echo "::endgroup::"
+            done
+          fi
+
+          if [ "${CRASHES_FOUND:-false}" = "true" ]; then
+            echo "CRASHES_FOUND=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Upload crash artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          path: fuzz/artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Create issue on crash
+        if: env.CRASHES_FOUND == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            await github.rest.issues.create({
+              owner,
+              repo,
+              title: `Fuzz testing found crashes (${new Date().toISOString().split('T')[0]})`,
+              body: `Nightly fuzz testing found one or more crashes.\n\nSee [workflow run](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}) for details.\n\nDownload the crash artifacts to reproduce locally.`,
+              labels: ['bug', 'security']
+            });

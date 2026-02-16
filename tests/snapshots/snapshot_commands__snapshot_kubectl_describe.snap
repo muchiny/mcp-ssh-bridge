@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "KubernetesCommandBuilder::build_describe_command(Some(\"kubectl\"), \"pod\",\n\"my-pod\", Some(\"production\"),)"
+---
+kubectl describe 'pod' 'my-pod' -n 'production'

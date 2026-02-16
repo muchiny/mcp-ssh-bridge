@@ -1,0 +1,6 @@
+---
+source: tests/snapshot_commands.rs
+assertion_line: 104
+expression: "DockerCommandBuilder::build_ps_command(None, false, None, None)"
+---
+$(if command -v docker &>/dev/null; then echo docker; elif command -v podman &>/dev/null; then echo podman; else echo ERROR_DOCKER_NOT_FOUND; fi) ps

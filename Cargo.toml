@@ -1,0 +1,135 @@
+[package]
+name = "mcp-ssh-bridge"
+version = "2.0.1"
+edition = "2024"
+rust-version = "1.93"
+description = "MCP server that bridges Claude Code to air-gapped environments via SSH"
+authors = ["muchini"]
+license = "MIT"
+repository = "https://github.com/muchini/mcp-ssh-bridge"
+keywords = ["mcp", "ssh", "claude", "bridge", "security"]
+categories = ["command-line-utilities", "network-programming"]
+readme = "README.md"
+documentation = "https://docs.rs/mcp-ssh-bridge"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["cli"]
+cli = ["dep:clap"]
+mimalloc = ["dep:mimalloc"]
+full = ["cli", "mimalloc"]
+
+[dependencies]
+# Async runtime (explicit features instead of "full" for smaller binary)
+tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "process", "time", "fs", "io-std", "macros", "sync"] }
+
+# SSH
+russh = "0.57"
+russh-sftp = "2.1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-saphyr = "0.0.19"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI (optional, enabled by default)
+clap = { version = "4.5", features = ["derive"], optional = true }
+
+# Tokio utilities (CancellationToken for ssh_exec_multi)
+tokio-util = "0.7"
+
+# Utils
+regex = "1"
+aho-corasick = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+dirs = "6"
+shellexpand = "3"
+tokio-socks = "0.5"
+async-trait = "0.1"
+sha2 = "0.10"
+const-hex = "1"
+zeroize = { version = "1", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+
+# File watching for hot-reload
+notify = "8.2"
+
+# Data parallelism for multi-host metrics parsing
+rayon = "1"
+
+# Alternative allocator (optional, recommended for musl builds)
+mimalloc = { version = "0.1", default-features = false, optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.8", features = ["html_reports"] }
+filetime = "0.2"
+tracing-test = "0.2"
+proptest = "1"
+insta = { version = "1", features = ["json", "yaml"] }
+
+[[bench]]
+name = "validator_bench"
+harness = false
+
+[[bin]]
+name = "mcp-ssh-bridge"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev]
+# Faster dev builds
+opt-level = 0
+debug = true
+
+[profile.mutants]
+# Optimized for mutation testing
+inherits = "test"
+debug = "none"
+
+[lints.rust]
+unsafe_code = "forbid"
+# 330 items need docs — enable progressively per-module
+missing_docs = "allow"
+
+[lints.clippy]
+# Correctness
+correctness = { level = "deny", priority = -1 }
+
+# Suspicious code
+suspicious = { level = "warn", priority = -1 }
+
+# Style
+style = { level = "warn", priority = -1 }
+
+# Complexity
+complexity = { level = "warn", priority = -1 }
+
+# Performance
+perf = { level = "warn", priority = -1 }
+
+# Pedantic (more strict)
+pedantic = { level = "warn", priority = -1 }
+
+# Specific overrides
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"

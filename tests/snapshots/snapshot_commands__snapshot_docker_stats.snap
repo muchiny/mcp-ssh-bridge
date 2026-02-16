@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "DockerCommandBuilder::build_stats_command(Some(\"docker\"),\nSome(&[\"web\".to_string(), \"db\".to_string()]), true, None)"
+---
+docker stats --no-stream 'web' 'db'

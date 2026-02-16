@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "KubernetesCommandBuilder::build_get_command(Some(\"kubectl\"), \"pods\", None,\nSome(\"default\"), false, None, None, Some(\"wide\"), None,)"
+---
+kubectl get 'pods' -n 'default' -o 'wide'

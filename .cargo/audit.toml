@@ -1,0 +1,15 @@
+# cargo-audit configuration
+# https://rustsec.org/
+
+[advisories]
+# Advisories to ignore (no fix available upstream)
+ignore = [
+    # Marvin Attack on RSA - timing sidechannel
+    # Transitive dependency: russh -> rsa 0.10.0-rc.12
+    # Severity: 5.9 (medium) - not critical for CLI tool
+    # No fixed version available
+    "RUSTSEC-2023-0071",
+]
+
+# Warn instead of error for informational advisories
+informational_warnings = ["unmaintained"]

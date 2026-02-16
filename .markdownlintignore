@@ -1,0 +1,10 @@
+# Files to ignore for markdownlint
+
+# Claude Code instructions (special format)
+CLAUDE.md
+
+# Build artifacts
+target/
+
+# Node modules (if any)
+node_modules/

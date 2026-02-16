@@ -1,0 +1,37 @@
+# SSH Integration Test Configuration Template
+#
+# Copy this file to tests/ssh_test_config.yaml and fill with real values.
+# The actual config file is gitignored - never commit real credentials.
+#
+# Run integration tests with:
+#   cargo test --test ssh_integration -- --ignored
+#   cargo test --test sftp_integration -- --ignored
+
+ssh_test:
+  # SSH connection details
+  hostname: "192.168.x.x"     # IP address or hostname
+  port: 22
+  user: "pi"                  # SSH username
+
+  # Authentication - choose one method
+  auth:
+    # Option 1: SSH key (recommended)
+    key:
+      path: "~/.ssh/id_ed25519"  # Path to private key
+      passphrase: null            # Passphrase if key is encrypted
+
+    # Option 2: Password (not recommended)
+    # password: "your-password"
+
+    # Option 3: SSH agent
+    # agent: true
+
+  # Host key verification mode
+  # - strict: Verify against known_hosts (most secure)
+  # - accept_new: Accept new keys, reject changed keys
+  # - off: Accept all keys (for testing only)
+  host_key_verification: "off"
+
+  # Test directories on remote host
+  # These directories will be created/used for SFTP tests
+  remote_test_dir: "/tmp/mcp-ssh-bridge-tests"

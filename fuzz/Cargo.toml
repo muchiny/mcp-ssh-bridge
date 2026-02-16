@@ -1,0 +1,200 @@
+[package]
+name = "mcp-ssh-bridge-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-saphyr = "0.0.18"
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[dependencies.mcp-ssh-bridge]
+path = ".."
+
+[[bin]]
+name = "fuzz_shell_escape"
+path = "fuzz_targets/fuzz_shell_escape.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_validate_path"
+path = "fuzz_targets/fuzz_validate_path.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_sanitizer"
+path = "fuzz_targets/fuzz_sanitizer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_command_validator"
+path = "fuzz_targets/fuzz_command_validator.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_metrics"
+path = "fuzz_targets/fuzz_parse_metrics.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_truncate_output"
+path = "fuzz_targets/fuzz_truncate_output.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_jsonrpc_parse"
+path = "fuzz_targets/fuzz_jsonrpc_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_yaml_config"
+path = "fuzz_targets/fuzz_yaml_config.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_regex_redos"
+path = "fuzz_targets/fuzz_regex_redos.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_transfer_mode"
+path = "fuzz_targets/fuzz_transfer_mode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tool_params"
+path = "fuzz_targets/fuzz_tool_params.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_host_config"
+path = "fuzz_targets/fuzz_host_config.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_rate_limiter"
+path = "fuzz_targets/fuzz_rate_limiter.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_char_boundary"
+path = "fuzz_targets/fuzz_char_boundary.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_audit_serialize"
+path = "fuzz_targets/fuzz_audit_serialize.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_security_config"
+path = "fuzz_targets/fuzz_security_config.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_db_command_builder"
+path = "fuzz_targets/fuzz_db_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_db_query_validation"
+path = "fuzz_targets/fuzz_db_query_validation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_db_type_parse"
+path = "fuzz_targets/fuzz_db_type_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ssh_config_parser"
+path = "fuzz_targets/fuzz_ssh_config_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tunnel_manager"
+path = "fuzz_targets/fuzz_tunnel_manager.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_k8s_command_builder"
+path = "fuzz_targets/fuzz_k8s_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_k8s_validation"
+path = "fuzz_targets/fuzz_k8s_validation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_helm_command_builder"
+path = "fuzz_targets/fuzz_helm_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ansible_command_builder"
+path = "fuzz_targets/fuzz_ansible_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ansible_validation"
+path = "fuzz_targets/fuzz_ansible_validation.rs"
+test = false
+doc = false
+bench = false

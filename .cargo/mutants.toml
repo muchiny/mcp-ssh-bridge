@@ -1,0 +1,29 @@
+# cargo-mutants configuration
+# https://mutants.rs/config-file.html
+
+# Use nextest for faster test runs
+test_tool = "nextest"
+
+# Exclude files that are not worth mutating
+exclude_globs = [
+    "src/main.rs",           # CLI entry point
+    "examples/**/*.rs",      # Examples
+    "benches/**/*.rs",       # Benchmarks
+]
+
+# Skip calls that don't affect logic (logging)
+skip_calls = [
+    "debug",
+    "info",
+    "warn",
+    "error",
+    "trace",
+]
+
+# Use optimized profile for faster mutation testing
+profile = "mutants"
+
+# Examine groups for focused mutation testing:
+# - `make mutants`      -> security module (src/security/)
+# - `make mutants-db`   -> database command builder (src/domain/use_cases/database.rs)
+# - `make mutants-full` -> entire codebase

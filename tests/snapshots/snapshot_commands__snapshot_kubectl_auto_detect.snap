@@ -1,0 +1,6 @@
+---
+source: tests/snapshot_commands.rs
+assertion_line: 196
+expression: "KubernetesCommandBuilder::build_get_command(None, \"nodes\", None, None, false,\nNone, None, None, None,)"
+---
+$(if command -v kubectl &>/dev/null; then echo kubectl; elif command -v k3s &>/dev/null; then echo 'k3s kubectl'; elif command -v microk8s &>/dev/null; then echo 'microk8s kubectl'; else echo ERROR_KUBECTL_NOT_FOUND; fi) get 'nodes'

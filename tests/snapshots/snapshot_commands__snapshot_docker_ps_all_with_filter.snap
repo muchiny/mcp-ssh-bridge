@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "DockerCommandBuilder::build_ps_command(Some(\"docker\"), true,\nSome(\"status=running\"), Some(\"table {{.Names}}\\t{{.Status}}\"))"
+---
+docker ps --all --filter 'status=running' --format 'table {{.Names}}	{{.Status}}'

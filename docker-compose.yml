@@ -1,0 +1,7 @@
+services:
+  mcp-ssh-bridge:
+    build: .
+    stdin_open: true
+    volumes:
+      - ~/.config/mcp-ssh-bridge:/home/bridge/.config/mcp-ssh-bridge:ro
+      - ~/.ssh:/home/bridge/.ssh:ro

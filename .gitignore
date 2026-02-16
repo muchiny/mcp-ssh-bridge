@@ -1,0 +1,125 @@
+# Rust
+/target/
+Cargo.lock
+*.rs.bk
+
+# Build artifacts
+*.so
+*.dylib
+*.dll
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Config with secrets
+config.yaml
+!config/config.example.yaml
+
+# Test coverage
+*.profraw
+*.profdata
+*.lcov
+lcov.info
+coverage/
+tarpaulin-report.html
+
+# Fuzzing
+fuzz/corpus/
+fuzz/artifacts/
+
+# Mutation testing
+mutants.out/
+mutants.out.old/
+
+# SBOM (cargo-cyclonedx)
+*.cdx.json
+bom.xml
+
+# Profiling / flamegraph
+perf.data*
+flamegraph.svg
+*.folded
+
+# Audit database cache
+.cargo/advisory-db/
+
+# Merge/patch conflict artifacts
+*.orig
+*.rej
+
+# SSH keys and credentials (safety — NEVER commit these)
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+id_ecdsa
+id_ecdsa.pub
+id_dsa
+known_hosts
+authorized_keys
+cle/
+
+# Test configuration with real credentials
+test-config.yaml
+tests/ssh_test_config.yaml
+
+# Secrets and credentials
+*.secret
+*.credentials
+*credentials.json
+*service-account*.json
+*.keystore
+*.jks
+
+# Claude Code
+.claude/
+
+# MCP server config (local paths)
+.mcp.json
+
+# Node.js
+node_modules/
+
+
+# Docker
+docker-compose.override.yml
+
+# Migration scripts (one-off)
+migrate_handlers.py
+
+# Snapshot testing (insta) - only ignore pending reviews
+*.snap.new
+
+# Release artifacts (cross-compilation)
+releases/
+
+# Geiger reports
+geiger-report.txt
+
+# Trivy scan results
+trivy-results.*
+
+# Benchmark history
+bench-history.json

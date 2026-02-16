@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "DockerCommandBuilder::build_images_command(Some(\"docker\"), true,\nSome(\"dangling=true\"), None)"
+---
+docker images --all --filter 'dangling=true'
