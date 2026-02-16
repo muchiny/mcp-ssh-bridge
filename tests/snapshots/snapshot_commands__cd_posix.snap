@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "shell::cd_and_run(\"/var/log\", \"tail -f syslog\", ShellType::Posix)"
+---
+cd '/var/log' && tail -f syslog

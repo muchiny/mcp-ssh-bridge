@@ -1,0 +1,22 @@
+# typos configuration
+# https://github.com/crate-ci/typos
+
+[default]
+extend-ignore-identifiers-re = [
+    # Company names
+    "HashiCorp",
+    "Hashi",
+    # Mermaid diagram node IDs (e.g., K8SROLL, K8SGET)
+    "K8S[A-Z]+",
+]
+
+[default.extend-words]
+# French words used in documentation
+projet = "projet"
+
+[files]
+# Ignore generated files
+extend-exclude = [
+    "target/",
+    "*.lock",
+]

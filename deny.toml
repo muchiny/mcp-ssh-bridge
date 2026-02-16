@@ -1,0 +1,77 @@
+# cargo-deny configuration
+# https://embarkstudios.github.io/cargo-deny/
+#
+# Run with: cargo deny check
+
+[graph]
+# Targets to check (all by default)
+targets = []
+# Exclude dev-dependencies from checks
+exclude-dev = false
+
+# =============================================================================
+# Advisories - check for known vulnerabilities
+# =============================================================================
+[advisories]
+version = 2
+# RUSTSEC-2023-0071: Marvin Attack on RSA - no fix available upstream
+# Transitive dependency from russh -> rsa crate
+# Safe for local use, timing attack requires network observation
+ignore = ["RUSTSEC-2023-0071"]
+
+# =============================================================================
+# Licenses - ensure dependencies use acceptable licenses
+# =============================================================================
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "BSL-1.0",
+    "OpenSSL",  # Used by aws-lc-sys (russh dependency)
+]
+confidence-threshold = 0.8
+
+# Clarify licenses for specific crates if needed
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# =============================================================================
+# Bans - deny or allow specific crates
+# =============================================================================
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+
+# Deny specific crates (security/quality concerns)
+deny = [
+    # { name = "openssl" }  # Prefer rustls
+]
+
+# Skip duplicate version checks for these crates
+skip = []
+
+# Skip tree (ignore entire dependency subtrees)
+skip-tree = []
+
+# =============================================================================
+# Sources - restrict where crates can come from
+# =============================================================================
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

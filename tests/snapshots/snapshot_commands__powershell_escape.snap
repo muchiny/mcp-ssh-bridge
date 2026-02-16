@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "shell::escape(input, ShellType::PowerShell)"
+---
+'it''s a "test" with $var & pipe | redirect > file'

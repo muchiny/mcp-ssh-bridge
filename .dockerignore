@@ -1,0 +1,12 @@
+target/
+.git/
+.github/
+.cargo/
+fuzz/
+tests/
+*.md
+!README.md
+.gitignore
+.rustfmt.toml
+deny.toml
+Makefile

@@ -1,0 +1,234 @@
+//! Log Resource Handler
+//!
+//! Reads remote log files via `tail`.
+//! URI format: `log://{host}/{path}?lines={n}`
+
+use async_trait::async_trait;
+
+use crate::error::{BridgeError, Result};
+use crate::mcp::protocol::{ResourceContent, ResourceDefinition};
+use crate::mcp::tool_handlers::utils::shell_escape;
+use crate::ports::{ResourceHandler, ToolContext};
+use crate::ssh::{is_retryable_error, with_retry_if};
+
+/// Default number of lines to tail
+const DEFAULT_LINES: u64 = 100;
+
+/// Max file path length to prevent abuse
+const MAX_PATH_LEN: usize = 1024;
+
+/// Resource handler for remote log files
+pub struct LogResourceHandler;
+
+/// Parsed log URI components
+struct LogUri {
+    host: String,
+    path: String,
+    lines: u64,
+}
+
+/// Parse a log URI into its components.
+///
+/// Format: `log://{host}/{path}?lines={n}`
+fn parse_log_uri(uri: &str) -> Result<LogUri> {
+    let rest = uri
+        .strip_prefix("log://")
+        .ok_or_else(|| BridgeError::McpInvalidRequest(format!("Invalid log URI: {uri}")))?;
+
+    // Split host from path
+    let (host, path_with_query) = rest
+        .split_once('/')
+        .ok_or_else(|| BridgeError::McpInvalidRequest("log URI must include a path".to_string()))?;
+
+    if host.is_empty() {
+        return Err(BridgeError::McpInvalidRequest(
+            "log URI host is empty".to_string(),
+        ));
+    }
+
+    // Split path from query string
+    let (path, lines) = if let Some((path, query)) = path_with_query.split_once('?') {
+        let lines = query
+            .split('&')
+            .find_map(|param| {
+                let (key, val) = param.split_once('=')?;
+                if key == "lines" {
+                    val.parse::<u64>().ok()
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(DEFAULT_LINES);
+        (path, lines)
+    } else {
+        (path_with_query, DEFAULT_LINES)
+    };
+
+    let full_path = format!("/{path}");
+
+    if full_path.len() > MAX_PATH_LEN {
+        return Err(BridgeError::McpInvalidRequest("Path too long".to_string()));
+    }
+
+    Ok(LogUri {
+        host: host.to_string(),
+        path: full_path,
+        lines,
+    })
+}
+
+#[async_trait]
+impl ResourceHandler for LogResourceHandler {
+    fn scheme(&self) -> &'static str {
+        "log"
+    }
+
+    fn description(&self) -> &'static str {
+        "Tail remote log files (log://{host}/{path}?lines=N)"
+    }
+
+    async fn list(&self, _ctx: &ToolContext) -> Result<Vec<ResourceDefinition>> {
+        // Log resources are template-based; no concrete listing.
+        Ok(Vec::new())
+    }
+
+    async fn read(&self, uri: &str, ctx: &ToolContext) -> Result<Vec<ResourceContent>> {
+        let parsed = parse_log_uri(uri)?;
+
+        let host_config =
+            ctx.config
+                .hosts
+                .get(&parsed.host)
+                .ok_or_else(|| BridgeError::UnknownHost {
+                    host: parsed.host.clone(),
+                })?;
+
+        // Build tail command
+        let command = format!("tail -n {} {}", parsed.lines, shell_escape(&parsed.path));
+
+        // Validate command
+        ctx.execute_use_case.validate(&command)?;
+
+        // Check rate limit
+        if ctx.rate_limiter.check(&parsed.host).is_err() {
+            return Err(BridgeError::McpInvalidRequest(format!(
+                "Rate limit exceeded for host '{}'",
+                parsed.host
+            )));
+        }
+
+        let limits = ctx.config.limits.clone();
+        let retry_config = limits.retry_config();
+
+        let jump_host = host_config.proxy_jump.as_ref().and_then(|jump_name| {
+            ctx.config
+                .hosts
+                .get(jump_name)
+                .map(|jc| (jump_name.as_str(), jc))
+        });
+
+        let output = with_retry_if(
+            &retry_config,
+            "log_resource",
+            async || {
+                let mut conn = ctx
+                    .connection_pool
+                    .get_connection_with_jump(&parsed.host, host_config, &limits, jump_host)
+                    .await?;
+
+                match conn.exec(&command, &limits).await {
+                    Ok(out) => Ok(out),
+                    Err(e) => {
+                        conn.mark_failed();
+                        Err(e)
+                    }
+                }
+            },
+            is_retryable_error,
+        )
+        .await?;
+
+        Ok(vec![ResourceContent {
+            uri: uri.to_string(),
+            mime_type: Some("text/plain".to_string()),
+            text: Some(output.stdout),
+        }])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scheme() {
+        let handler = LogResourceHandler;
+        assert_eq!(handler.scheme(), "log");
+        assert!(!handler.description().is_empty());
+    }
+
+    #[test]
+    fn test_parse_log_uri_basic() {
+        let parsed = parse_log_uri("log://server1/var/log/syslog").unwrap();
+        assert_eq!(parsed.host, "server1");
+        assert_eq!(parsed.path, "/var/log/syslog");
+        assert_eq!(parsed.lines, DEFAULT_LINES);
+    }
+
+    #[test]
+    fn test_parse_log_uri_with_lines() {
+        let parsed = parse_log_uri("log://server1/var/log/syslog?lines=50").unwrap();
+        assert_eq!(parsed.host, "server1");
+        assert_eq!(parsed.path, "/var/log/syslog");
+        assert_eq!(parsed.lines, 50);
+    }
+
+    #[test]
+    fn test_parse_log_uri_invalid_scheme() {
+        let result = parse_log_uri("file://server1/path");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_log_uri_no_path() {
+        let result = parse_log_uri("log://server1");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_log_uri_empty_host() {
+        let result = parse_log_uri("log:///var/log/syslog");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_list_returns_empty() {
+        let handler = LogResourceHandler;
+        let ctx = crate::ports::mock::create_test_context();
+
+        let resources = handler.list(&ctx).await.unwrap();
+        assert!(resources.is_empty());
+    }
+
+    #[test]
+    fn test_parse_log_uri_path_too_long() {
+        let long_path = "a".repeat(MAX_PATH_LEN + 10);
+        let uri = format!("log://server1/{long_path}");
+        let result = parse_log_uri(&uri);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_log_uri_with_extra_query_params() {
+        let parsed = parse_log_uri("log://server1/var/log/syslog?lines=25&follow=true").unwrap();
+        assert_eq!(parsed.lines, 25);
+        assert_eq!(parsed.path, "/var/log/syslog");
+    }
+
+    #[test]
+    fn test_parse_log_uri_invalid_lines_value() {
+        // Non-numeric lines should fall back to default
+        let parsed = parse_log_uri("log://server1/var/log/syslog?lines=abc").unwrap();
+        assert_eq!(parsed.lines, DEFAULT_LINES);
+    }
+}

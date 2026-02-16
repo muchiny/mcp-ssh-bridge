@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "shell::cd_and_run(\"C:\\\\Users\\\\Admin\", \"dir\", ShellType::Cmd)"
+---
+cd /d "C:\Users\Admin" && dir

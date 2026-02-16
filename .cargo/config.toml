@@ -1,0 +1,18 @@
+# Cargo configuration
+# https://doc.rust-lang.org/cargo/reference/config.html
+
+[alias]
+# Development shortcuts
+dev = "watch -x 'check --all-targets'"
+lint = "clippy --all-targets --all-features -- -D warnings"
+fmt-check = "fmt --all -- --check"
+test-all = "nextest run"
+# Note: cargo audit is an external command, not an alias
+
+[build]
+# Faster incremental builds
+incremental = true
+
+[target.aarch64-unknown-linux-gnu]
+# Link-time optimizations for release builds
+rustflags = ["-C", "target-cpu=native"]

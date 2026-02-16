@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "DockerCommandBuilder::build_exec_command(Some(\"docker\"), \"my-container\",\n\"npm test\", None, None,\nSome(&[\"NODE_ENV=test\".to_string(), \"CI=true\".to_string()]))"
+---
+docker exec -e 'NODE_ENV=test' -e 'CI=true' 'my-container' sh -c 'npm test'

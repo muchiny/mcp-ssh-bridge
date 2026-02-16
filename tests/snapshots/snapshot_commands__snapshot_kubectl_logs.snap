@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "KubernetesCommandBuilder::build_logs_command(Some(\"kubectl\"), \"my-pod\",\nSome(\"kube-system\"), Some(\"my-container\"), Some(100), Some(\"1h\"), false,\nfalse,)"
+---
+kubectl logs 'my-pod' -n 'kube-system' -c 'my-container' --tail=100 --since='1h'

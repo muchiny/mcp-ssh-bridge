@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "KubernetesCommandBuilder::build_get_command(Some(\"kubectl\"), \"deployments\",\nNone, None, true, Some(\"app=web\"), None, Some(\"json\"), None,)"
+---
+kubectl get 'deployments' -A -l 'app=web' -o 'json'

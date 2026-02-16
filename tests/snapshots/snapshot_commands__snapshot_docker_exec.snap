@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_commands.rs
+expression: "DockerCommandBuilder::build_exec_command(Some(\"docker\"), \"my-container\",\n\"ls -la /app\", Some(\"node\"), Some(\"/app\"), None)"
+---
+docker exec -u 'node' -w '/app' 'my-container' sh -c 'ls -la /app'
