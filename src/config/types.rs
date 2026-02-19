@@ -414,6 +414,21 @@ pub struct LimitsConfig {
     /// Maximum number of cached output entries kept in memory (default: 100)
     #[serde(default = "default_output_cache_max_entries")]
     pub output_cache_max_entries: usize,
+
+    /// Maximum number of concurrent async tasks (default: 50).
+    /// When the limit is reached, new task-augmented requests are rejected.
+    #[serde(default = "default_max_tasks")]
+    pub max_tasks: usize,
+
+    /// Maximum TTL for async tasks in milliseconds (default: 3600000 = 1 hour).
+    /// Client-requested TTLs are capped to this value.
+    #[serde(default = "default_max_task_ttl_ms")]
+    pub max_task_ttl_ms: u64,
+
+    /// Default poll interval hint for async tasks in milliseconds (default: 2000).
+    /// Clients use this to determine how often to poll `tasks/get`.
+    #[serde(default = "default_task_poll_interval_ms")]
+    pub task_poll_interval_ms: u64,
 }
 
 impl Default for LimitsConfig {
@@ -431,6 +446,9 @@ impl Default for LimitsConfig {
             client_overrides: Vec::new(),
             output_cache_ttl_seconds: default_output_cache_ttl(),
             output_cache_max_entries: default_output_cache_max_entries(),
+            max_tasks: default_max_tasks(),
+            max_task_ttl_ms: default_max_task_ttl_ms(),
+            task_poll_interval_ms: default_task_poll_interval_ms(),
         }
     }
 }
@@ -541,6 +559,18 @@ const fn default_output_cache_ttl() -> u64 {
 
 const fn default_output_cache_max_entries() -> usize {
     100
+}
+
+const fn default_max_tasks() -> usize {
+    50
+}
+
+const fn default_max_task_ttl_ms() -> u64 {
+    3_600_000 // 1 hour
+}
+
+const fn default_task_poll_interval_ms() -> u64 {
+    2_000 // 2 seconds
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

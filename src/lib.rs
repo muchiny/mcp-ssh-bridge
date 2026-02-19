@@ -42,3 +42,9 @@ pub use mcp::protocol::{JsonRpcRequest, ToolCallParams};
 pub use security::{AuditEvent, CommandResult, CommandValidator, RateLimiter};
 #[doc(hidden)]
 pub use ssh::TransferMode;
+// Protocol types for fuzzing (MCP Tasks)
+#[doc(hidden)]
+pub use mcp::protocol::{
+    InitializeParams, PromptsGetParams, ResourcesReadParams, TaskCancelParams, TaskGetParams,
+    TaskListParams, TaskRequest, TaskResultParams,
+};

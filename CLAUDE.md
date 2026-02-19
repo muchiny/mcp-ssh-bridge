@@ -277,7 +277,7 @@ Note: Uses LLVM engine due to ptrace compatibility issues. Current coverage: ~54
 
 ### Fuzz Testing (cargo-fuzz)
 
-26 fuzz targets available in `fuzz/fuzz_targets/`:
+53 fuzz targets available in `fuzz/fuzz_targets/`:
 
 ```bash
 cargo +nightly fuzz list

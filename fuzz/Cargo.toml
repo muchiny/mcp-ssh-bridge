@@ -198,3 +198,192 @@ path = "fuzz_targets/fuzz_ansible_validation.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_task_params"
+path = "fuzz_targets/fuzz_task_params.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_initialize_params"
+path = "fuzz_targets/fuzz_initialize_params.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_prompts_get_params"
+path = "fuzz_targets/fuzz_prompts_get_params.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_resource_uri"
+path = "fuzz_targets/fuzz_resource_uri.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_task_store"
+path = "fuzz_targets/fuzz_task_store.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_output_cache"
+path = "fuzz_targets/fuzz_output_cache.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_docker_command_builder"
+path = "fuzz_targets/fuzz_docker_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_terraform_command_builder"
+path = "fuzz_targets/fuzz_terraform_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_vault_command_builder"
+path = "fuzz_targets/fuzz_vault_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_redis_command_builder"
+path = "fuzz_targets/fuzz_redis_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_nginx_command_builder"
+path = "fuzz_targets/fuzz_nginx_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_firewall_command_builder"
+path = "fuzz_targets/fuzz_firewall_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_cron_command_builder"
+path = "fuzz_targets/fuzz_cron_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_certificate_command_builder"
+path = "fuzz_targets/fuzz_certificate_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_git_command_builder"
+path = "fuzz_targets/fuzz_git_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_systemd_command_builder"
+path = "fuzz_targets/fuzz_systemd_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_network_command_builder"
+path = "fuzz_targets/fuzz_network_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_process_command_builder"
+path = "fuzz_targets/fuzz_process_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_package_command_builder"
+path = "fuzz_targets/fuzz_package_command_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_windows_service_builder"
+path = "fuzz_targets/fuzz_windows_service_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_windows_event_builder"
+path = "fuzz_targets/fuzz_windows_event_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_active_directory_builder"
+path = "fuzz_targets/fuzz_active_directory_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_scheduled_task_builder"
+path = "fuzz_targets/fuzz_scheduled_task_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_windows_firewall_builder"
+path = "fuzz_targets/fuzz_windows_firewall_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_iis_builder"
+path = "fuzz_targets/fuzz_iis_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_hyperv_builder"
+path = "fuzz_targets/fuzz_hyperv_builder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_windows_registry_builder"
+path = "fuzz_targets/fuzz_windows_registry_builder.rs"
+test = false
+doc = false
+bench = false

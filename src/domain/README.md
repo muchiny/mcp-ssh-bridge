@@ -10,6 +10,7 @@ domain/
 ├── 📄 history.rs                → CommandHistory, HistoryEntry, HistoryConfig
 ├── 📄 output_cache.rs           → 📦 OutputCache for paginated output retrieval
 ├── 📄 output_truncator.rs       → ✂️ Head+tail output truncation
+├── 📄 task_store.rs             → 📋 TaskStore for MCP Tasks async lifecycle (v1.1.0)
 └── 📂 use_cases/
     ├── 📄 mod.rs                → Use case exports
     ├── 📄 execute_command.rs    → Main UseCase

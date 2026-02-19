@@ -169,6 +169,30 @@ pub struct ServerCapabilities {
     pub prompts: Option<PromptsCapability>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resources: Option<ResourcesCapability>,
+    /// Experimental Tasks capability (MCP 2025-11-25+).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tasks: Option<TasksCapability>,
+}
+
+/// Tasks capability declaration for MCP `initialize` response.
+#[derive(Debug, Clone, Serialize)]
+pub struct TasksCapability {
+    pub list: Value,
+    pub cancel: Value,
+    pub requests: TaskRequestsCapability,
+}
+
+/// Which request types support task augmentation.
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskRequestsCapability {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<TaskToolsCapability>,
+}
+
+/// Task support for `tools/call`.
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskToolsCapability {
+    pub call: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -204,6 +228,17 @@ pub struct Tool {
     /// Behavioral hints for MCP clients (MCP 2025-03-26+).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub annotations: Option<ToolAnnotations>,
+    /// Execution hints for task support (MCP 2025-11-25+).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution: Option<ToolExecution>,
+}
+
+/// Tool execution hints (MCP 2025-11-25+).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolExecution {
+    /// `"forbidden"` | `"optional"` | `"required"`
+    pub task_support: String,
 }
 
 /// MCP Tools List Response
@@ -218,6 +253,17 @@ pub struct ToolCallParams {
     pub name: String,
     #[serde(default)]
     pub arguments: Option<Value>,
+    /// When present, the client requests task-augmented execution (MCP 2025-11-25+).
+    #[serde(default)]
+    pub task: Option<TaskRequest>,
+}
+
+/// Client-provided task parameters for task-augmented requests.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TaskRequest {
+    /// Requested TTL in milliseconds. Server may cap this.
+    #[serde(default)]
+    pub ttl: Option<u64>,
 }
 
 // Contract types re-exported from ports (canonical location: crate::ports::protocol)
@@ -292,6 +338,82 @@ pub struct ResourcesCapability {
 }
 
 // ============================================================================
+// MCP Tasks Types (MCP 2025-11-25+, experimental)
+// ============================================================================
+
+/// Task lifecycle status values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskStatus {
+    Working,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+/// Task metadata returned by task operations.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskInfo {
+    pub task_id: String,
+    pub status: TaskStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_message: Option<String>,
+    pub created_at: String,
+    pub last_updated_at: String,
+    /// Time-to-live in milliseconds before the task expires.
+    pub ttl: u64,
+    /// Suggested poll interval in milliseconds.
+    pub poll_interval: u64,
+}
+
+/// Response for a task-augmented `tools/call` request.
+#[derive(Debug, Clone, Serialize)]
+pub struct CreateTaskResult {
+    pub task: TaskInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "_meta")]
+    pub meta: Option<Value>,
+}
+
+/// Parameters for `tasks/get`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskGetParams {
+    pub task_id: String,
+}
+
+/// Parameters for `tasks/result`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskResultParams {
+    pub task_id: String,
+}
+
+/// Parameters for `tasks/cancel`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskCancelParams {
+    pub task_id: String,
+}
+
+/// Parameters for `tasks/list`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TaskListParams {
+    #[serde(default)]
+    pub cursor: Option<String>,
+}
+
+/// Response for `tasks/list`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskListResult {
+    pub tasks: Vec<TaskInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+// ============================================================================
 // JSON-RPC Notifications
 // ============================================================================
 
@@ -300,6 +422,9 @@ pub struct ResourcesCapability {
 pub struct JsonRpcNotification {
     pub jsonrpc: String,
     pub method: String,
+    /// Optional params payload (used by `notifications/tasks/status`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<Value>,
 }
 
 impl JsonRpcNotification {
@@ -309,6 +434,7 @@ impl JsonRpcNotification {
         Self {
             jsonrpc: "2.0".to_string(),
             method: "notifications/tools/list_changed".to_string(),
+            params: None,
         }
     }
 
@@ -318,6 +444,7 @@ impl JsonRpcNotification {
         Self {
             jsonrpc: "2.0".to_string(),
             method: "notifications/prompts/list_changed".to_string(),
+            params: None,
         }
     }
 
@@ -327,6 +454,17 @@ impl JsonRpcNotification {
         Self {
             jsonrpc: "2.0".to_string(),
             method: "notifications/resources/list_changed".to_string(),
+            params: None,
+        }
+    }
+
+    /// Create a `notifications/tasks/status` notification (MCP 2025-11-25+).
+    #[must_use]
+    pub fn task_status(task_info: &TaskInfo) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            method: "notifications/tasks/status".to_string(),
+            params: serde_json::to_value(task_info).ok(),
         }
     }
 }
@@ -491,6 +629,7 @@ mod tests {
                     list_changed: false,
                 }),
                 resources: None,
+                tasks: None,
             },
             server_info: ServerInfo {
                 name: SERVER_NAME.to_string(),
@@ -506,6 +645,7 @@ mod tests {
         // Optional fields should be omitted when None
         assert!(!json.contains("description"));
         assert!(!json.contains("websiteUrl"));
+        assert!(!json.contains("tasks"));
     }
 
     #[test]
@@ -541,11 +681,14 @@ mod tests {
             description: "Execute command".to_string(),
             input_schema: json!({"type": "object"}),
             annotations: None,
+            execution: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
         assert!(json.contains("inputSchema"));
         // annotations: None should be omitted
         assert!(!json.contains("annotations"));
+        // execution: None should be omitted
+        assert!(!json.contains("execution"));
     }
 
     #[test]
@@ -639,6 +782,7 @@ mod tests {
             description: "List containers".to_string(),
             input_schema: json!({"type": "object"}),
             annotations: Some(ToolAnnotations::read_only("List Docker Containers")),
+            execution: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
         assert!(json.contains("\"annotations\""));
@@ -654,6 +798,7 @@ mod tests {
             description: "test".to_string(),
             input_schema: json!({"type": "object"}),
             annotations: None,
+            execution: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
         assert!(!json.contains("annotations"));
@@ -787,5 +932,283 @@ mod tests {
     fn test_notification_resources_list_changed() {
         let n = JsonRpcNotification::resources_list_changed();
         assert_eq!(n.method, "notifications/resources/list_changed");
+    }
+
+    #[test]
+    fn test_notification_params_omitted_when_none() {
+        let n = JsonRpcNotification::tools_list_changed();
+        let json = serde_json::to_string(&n).unwrap();
+        assert!(!json.contains("\"params\""));
+    }
+
+    // ============== Task Types Tests (MCP 2025-11-25+) ==============
+
+    #[test]
+    fn test_task_status_serialization() {
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Working).unwrap(),
+            "\"working\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Completed).unwrap(),
+            "\"completed\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Failed).unwrap(),
+            "\"failed\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TaskStatus::Cancelled).unwrap(),
+            "\"cancelled\""
+        );
+    }
+
+    #[test]
+    fn test_task_info_serialization_camel_case() {
+        let info = TaskInfo {
+            task_id: "abc-123".to_string(),
+            status: TaskStatus::Working,
+            status_message: Some("Processing...".to_string()),
+            created_at: "2025-11-25T10:30:00Z".to_string(),
+            last_updated_at: "2025-11-25T10:30:00Z".to_string(),
+            ttl: 60000,
+            poll_interval: 5000,
+        };
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["taskId"], "abc-123");
+        assert_eq!(json["status"], "working");
+        assert_eq!(json["statusMessage"], "Processing...");
+        assert_eq!(json["createdAt"], "2025-11-25T10:30:00Z");
+        assert_eq!(json["lastUpdatedAt"], "2025-11-25T10:30:00Z");
+        assert_eq!(json["ttl"], 60000);
+        assert_eq!(json["pollInterval"], 5000);
+        // Verify camelCase, not snake_case
+        assert!(json.get("task_id").is_none());
+    }
+
+    #[test]
+    fn test_task_info_omits_none_status_message() {
+        let info = TaskInfo {
+            task_id: "id".to_string(),
+            status: TaskStatus::Completed,
+            status_message: None,
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            last_updated_at: "2025-01-01T00:00:00Z".to_string(),
+            ttl: 1000,
+            poll_interval: 500,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(!json.contains("statusMessage"));
+    }
+
+    #[test]
+    fn test_create_task_result_serialization() {
+        let result = CreateTaskResult {
+            task: TaskInfo {
+                task_id: "task-1".to_string(),
+                status: TaskStatus::Working,
+                status_message: None,
+                created_at: "2025-01-01T00:00:00Z".to_string(),
+                last_updated_at: "2025-01-01T00:00:00Z".to_string(),
+                ttl: 30000,
+                poll_interval: 2000,
+            },
+            meta: None,
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["task"]["taskId"], "task-1");
+        assert_eq!(json["task"]["status"], "working");
+        assert!(json.get("_meta").is_none());
+    }
+
+    #[test]
+    fn test_create_task_result_with_meta() {
+        let result = CreateTaskResult {
+            task: TaskInfo {
+                task_id: "task-2".to_string(),
+                status: TaskStatus::Working,
+                status_message: None,
+                created_at: "2025-01-01T00:00:00Z".to_string(),
+                last_updated_at: "2025-01-01T00:00:00Z".to_string(),
+                ttl: 30000,
+                poll_interval: 2000,
+            },
+            meta: Some(json!({
+                "io.modelcontextprotocol/model-immediate-response": "Task started"
+            })),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(
+            json["_meta"]["io.modelcontextprotocol/model-immediate-response"],
+            "Task started"
+        );
+    }
+
+    #[test]
+    fn test_task_get_params_deserialization() {
+        let json = json!({"taskId": "abc-123"});
+        let params: TaskGetParams = serde_json::from_value(json).unwrap();
+        assert_eq!(params.task_id, "abc-123");
+    }
+
+    #[test]
+    fn test_task_result_params_deserialization() {
+        let json = json!({"taskId": "def-456"});
+        let params: TaskResultParams = serde_json::from_value(json).unwrap();
+        assert_eq!(params.task_id, "def-456");
+    }
+
+    #[test]
+    fn test_task_cancel_params_deserialization() {
+        let json = json!({"taskId": "ghi-789"});
+        let params: TaskCancelParams = serde_json::from_value(json).unwrap();
+        assert_eq!(params.task_id, "ghi-789");
+    }
+
+    #[test]
+    fn test_task_list_params_deserialization_with_cursor() {
+        let json = json!({"cursor": "page2"});
+        let params: TaskListParams = serde_json::from_value(json).unwrap();
+        assert_eq!(params.cursor.as_deref(), Some("page2"));
+    }
+
+    #[test]
+    fn test_task_list_params_deserialization_without_cursor() {
+        let json = json!({});
+        let params: TaskListParams = serde_json::from_value(json).unwrap();
+        assert!(params.cursor.is_none());
+    }
+
+    #[test]
+    fn test_task_list_result_serialization() {
+        let result = TaskListResult {
+            tasks: vec![],
+            next_cursor: Some("next".to_string()),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert!(json["tasks"].as_array().unwrap().is_empty());
+        assert_eq!(json["nextCursor"], "next");
+    }
+
+    #[test]
+    fn test_task_list_result_omits_none_cursor() {
+        let result = TaskListResult {
+            tasks: vec![],
+            next_cursor: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(!json.contains("nextCursor"));
+    }
+
+    #[test]
+    fn test_tool_call_params_with_task() {
+        let json = json!({
+            "name": "ssh_exec",
+            "arguments": {"host": "web1", "command": "ls"},
+            "task": {"ttl": 60000}
+        });
+        let params: ToolCallParams = serde_json::from_value(json).unwrap();
+        assert_eq!(params.name, "ssh_exec");
+        assert!(params.task.is_some());
+        assert_eq!(params.task.unwrap().ttl, Some(60000));
+    }
+
+    #[test]
+    fn test_tool_call_params_without_task() {
+        let json = json!({
+            "name": "ssh_status",
+            "arguments": {}
+        });
+        let params: ToolCallParams = serde_json::from_value(json).unwrap();
+        assert!(params.task.is_none());
+    }
+
+    #[test]
+    fn test_tool_call_params_with_empty_task() {
+        let json = json!({
+            "name": "ssh_exec",
+            "arguments": {},
+            "task": {}
+        });
+        let params: ToolCallParams = serde_json::from_value(json).unwrap();
+        assert!(params.task.is_some());
+        assert!(params.task.unwrap().ttl.is_none());
+    }
+
+    #[test]
+    fn test_tool_execution_serialization() {
+        let exec = ToolExecution {
+            task_support: "optional".to_string(),
+        };
+        let json = serde_json::to_value(&exec).unwrap();
+        assert_eq!(json["taskSupport"], "optional");
+    }
+
+    #[test]
+    fn test_tool_with_execution_serialization() {
+        let tool = Tool {
+            name: "ssh_exec".to_string(),
+            description: "Execute".to_string(),
+            input_schema: json!({"type": "object"}),
+            annotations: None,
+            execution: Some(ToolExecution {
+                task_support: "optional".to_string(),
+            }),
+        };
+        let json = serde_json::to_value(&tool).unwrap();
+        assert_eq!(json["execution"]["taskSupport"], "optional");
+    }
+
+    #[test]
+    fn test_tasks_capability_serialization() {
+        let cap = TasksCapability {
+            list: json!({}),
+            cancel: json!({}),
+            requests: TaskRequestsCapability {
+                tools: Some(TaskToolsCapability { call: json!({}) }),
+            },
+        };
+        let json = serde_json::to_value(&cap).unwrap();
+        assert!(json["list"].is_object());
+        assert!(json["cancel"].is_object());
+        assert!(json["requests"]["tools"]["call"].is_object());
+    }
+
+    #[test]
+    fn test_server_capabilities_with_tasks() {
+        let caps = ServerCapabilities {
+            tools: Some(ToolsCapability { list_changed: true }),
+            prompts: None,
+            resources: None,
+            tasks: Some(TasksCapability {
+                list: json!({}),
+                cancel: json!({}),
+                requests: TaskRequestsCapability {
+                    tools: Some(TaskToolsCapability { call: json!({}) }),
+                },
+            }),
+        };
+        let json = serde_json::to_value(&caps).unwrap();
+        assert!(json["tasks"].is_object());
+        assert!(json["tasks"]["requests"]["tools"]["call"].is_object());
+    }
+
+    #[test]
+    fn test_notification_task_status() {
+        let info = TaskInfo {
+            task_id: "task-99".to_string(),
+            status: TaskStatus::Completed,
+            status_message: Some("Done".to_string()),
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            last_updated_at: "2025-01-01T00:01:00Z".to_string(),
+            ttl: 60000,
+            poll_interval: 5000,
+        };
+        let n = JsonRpcNotification::task_status(&info);
+        assert_eq!(n.method, "notifications/tasks/status");
+        assert!(n.params.is_some());
+        let params = n.params.unwrap();
+        assert_eq!(params["taskId"], "task-99");
+        assert_eq!(params["status"], "completed");
     }
 }

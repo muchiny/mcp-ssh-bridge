@@ -1274,7 +1274,7 @@ Fully automated via **GitHub Actions**:
 | **Release** | Tag `v*` | Cross-compile 5 platforms, SBOM, provenance attestation |
 | **Security** | Weekly + PR | Cargo audit, security tests, mutation testing |
 | **Docker** | Tag `v*` | Build, Trivy scan, push to GHCR |
-| **Fuzz** | Nightly | 26 fuzz targets with crash detection |
+| **Fuzz** | Nightly | 53 fuzz targets with crash detection |
 | **Deps** | Weekly | Outdated and unused dependency checks |
 
 ### 📚 Examples & Benchmarks

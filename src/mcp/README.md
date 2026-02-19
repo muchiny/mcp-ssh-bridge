@@ -489,6 +489,7 @@ pub struct McpServer {
     prompt_registry: PromptRegistry,
     session_manager: Arc<SessionManager>,    // v0.6.0
     resource_registry: ResourceRegistry,     // v0.5.0
+    task_store: Arc<TaskStore>,            // v1.1.0: MCP Tasks
     initialized: AtomicBool,               // v0.2.0: thread-safe
     concurrent_limit: Arc<Semaphore>,      // v0.2.0
 }
@@ -590,6 +591,10 @@ sequenceDiagram
 | 📊 `resources/list` | List available resources | `ResourcesListResult` |
 | 📖 `resources/read` | Read a resource content | `ResourcesReadResult` |
 | 📡 `ping` | Connectivity check | `{}` |
+| 📋 `tasks/get` | Get task status (MCP 2025-11-25) | `Task` |
+| 🚫 `tasks/cancel` | Cancel a running task (MCP 2025-11-25) | `Task` |
+| 📤 `tasks/result` | Wait for and get task result (MCP 2025-11-25) | `ToolCallResult` |
+| 📋 `tasks/list` | List tasks with pagination (MCP 2025-11-25) | `TaskListResult` |
 
 ## 📡 Protocol (`protocol.rs`)
 

@@ -325,6 +325,29 @@ fn test_destructive_tools_not_marked_read_only() {
     }
 }
 
+// ============== Task Execution Field ==============
+
+#[test]
+fn test_every_tool_has_execution_task_support() {
+    let config = ToolGroupsConfig::default();
+    let registry = create_filtered_registry(&config);
+    let tools = registry.list_tools();
+
+    for tool in &tools {
+        assert!(
+            tool.execution.is_some(),
+            "Tool '{}' should have an execution field",
+            tool.name
+        );
+        assert_eq!(
+            tool.execution.as_ref().unwrap().task_support,
+            "optional",
+            "Tool '{}' should have taskSupport: \"optional\"",
+            tool.name
+        );
+    }
+}
+
 // ============== Schema Validity ==============
 
 #[test]

@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-02-19
+
+### Added
+
+- **MCP Tasks Support (MCP 2025-11-25)**: Async request primitive for long-running tool executions
+  - `tools/call` with `"task": true` returns `CreateTaskResult` immediately, background worker executes
+  - **Task lifecycle**: Working → Completed | Failed | Cancelled, with `CancellationToken` and `Notify` for blocking wait
+  - **4 new MCP methods**: `tasks/get`, `tasks/cancel`, `tasks/result`, `tasks/list`
+  - **`TaskStore`**: In-memory async task store with `RwLock<HashMap>`, TTL-based expiry, capacity limits, cursor-based pagination
+  - **Task configuration**: `tasks.max_tasks` (default: 100), `tasks.default_ttl_ms` (default: 3600000) in `config.yaml`
+  - All **197 tools** advertise `taskSupport: "optional"` via `execution` field
+- **27 new fuzz targets** (53 total, was 26):
+  - **Protocol/Domain** (6): `fuzz_task_params`, `fuzz_initialize_params`, `fuzz_prompts_get_params`, `fuzz_resource_uri`, `fuzz_task_store`, `fuzz_output_cache`
+  - **Linux Builders** (13): `fuzz_docker_command_builder`, `fuzz_terraform_command_builder`, `fuzz_vault_command_builder`, `fuzz_redis_command_builder`, `fuzz_nginx_command_builder`, `fuzz_firewall_command_builder`, `fuzz_cron_command_builder`, `fuzz_certificate_command_builder`, `fuzz_git_command_builder`, `fuzz_systemd_command_builder`, `fuzz_network_command_builder`, `fuzz_process_command_builder`, `fuzz_package_command_builder`
+  - **Windows Builders** (8): `fuzz_windows_service_builder`, `fuzz_windows_event_builder`, `fuzz_active_directory_builder`, `fuzz_scheduled_task_builder`, `fuzz_windows_firewall_builder`, `fuzz_iis_builder`, `fuzz_hyperv_builder`, `fuzz_windows_registry_builder`
+- **26 new tests** for MCP Tasks:
+  - `task_store.rs`: 15 tests (state transitions, get_result edges, wait_for_result, pagination, TTL capping, is_empty)
+  - `server.rs`: 10 tests (cancel completed/cancelled, get completed, result cancelled/already-completed, missing params, dispatch)
+  - `tool_filtering.rs`: 1 test (`test_every_tool_has_execution_task_support`)
+
+### Fixed
+
+- **TTL capping bug** in `TaskStore`: Expression `t.min(self.default_ttl_ms.max(t))` simplified to just `t` — custom TTLs were not actually capped at the configured default. Fixed to `t.min(self.default_ttl_ms)`
+
+### Changed
+
+- **Fuzz Targets**: 26 → 53 targets (100% coverage of all command builders + protocol types)
+- **Test Count**: ~3788 → ~3888 tests
+- **MCP Protocol**: `2025-11-25` Tasks support (experimental)
+
 ## [2.0.1] - 2026-02-16
 
 ### Changed
@@ -402,7 +432,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sanitizer now uses sequential processing when patterns match. Parallel
   detection via `RegexSet` is still used for fast-path rejection.
 
-## [1.1.0] - 2026-01-30
+## [1.1.0-dev] - 2026-01-30
 
 ### Added
 
@@ -654,7 +684,8 @@ This release marks the first stable version of MCP SSH Bridge with a completely 
 - Hexagonal architecture (ports & adapters)
 - Extensible tool handler registry (Open/Closed principle)
 
-[Unreleased]: https://github.com/muchini/mcp-ssh-bridge/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.0.0...v1.1.0
 [2.0.1]: https://github.com/muchini/mcp-ssh-bridge/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.9.0...v2.0.0
 [1.9.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.8.3...v1.9.0
@@ -667,8 +698,8 @@ This release marks the first stable version of MCP SSH Bridge with a completely 
 [1.5.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.0.0...v1.1.0
+[1.2.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.1.0-dev...v1.2.0
+[1.1.0-dev]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.0.0...v1.1.0-dev
 [1.0.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v0.7.0...v0.8.0

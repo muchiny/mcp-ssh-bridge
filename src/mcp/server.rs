@@ -8,7 +8,7 @@ use tokio::sync::{RwLock, Semaphore, mpsc};
 use tracing::{debug, error, info, warn};
 
 use crate::config::{Config, ConfigWatcher};
-use crate::domain::{ExecuteCommandUseCase, OutputCache, TunnelManager};
+use crate::domain::{ExecuteCommandUseCase, OutputCache, TaskStore, TunnelManager};
 use crate::error::Result;
 use crate::ports::ToolContext;
 use crate::security::{AuditLogger, AuditWriterTask, CommandValidator, RateLimiter, Sanitizer};
@@ -17,12 +17,14 @@ use crate::ssh::{ConnectionPool, SessionManager};
 use super::history::CommandHistory;
 use super::prompt_registry::{PromptRegistry, create_default_prompt_registry};
 use super::protocol::{
-    ClientInfo, InitializeParams, InitializeResult, JsonRpcError, JsonRpcNotification,
-    JsonRpcRequest, JsonRpcResponse, PROTOCOL_VERSION, PromptsCapability, PromptsGetParams,
-    PromptsGetResult, PromptsListResult, ResourcesCapability, ResourcesListResult,
-    ResourcesReadParams, ResourcesReadResult, SERVER_NAME, SERVER_VERSION,
-    SUPPORTED_PROTOCOL_VERSIONS, ServerCapabilities, ServerInfo, ToolCallParams, ToolCallResult,
-    ToolsCapability, ToolsListResult, WriterMessage,
+    ClientInfo, CreateTaskResult, InitializeParams, InitializeResult, JsonRpcError,
+    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, PROTOCOL_VERSION, PromptsCapability,
+    PromptsGetParams, PromptsGetResult, PromptsListResult, ResourcesCapability,
+    ResourcesListResult, ResourcesReadParams, ResourcesReadResult, SERVER_NAME, SERVER_VERSION,
+    SUPPORTED_PROTOCOL_VERSIONS, ServerCapabilities, ServerInfo, TaskCancelParams, TaskGetParams,
+    TaskListParams, TaskListResult, TaskRequestsCapability, TaskResultParams, TaskToolsCapability,
+    TasksCapability, ToolCallParams, ToolCallResult, ToolsCapability, ToolsListResult,
+    WriterMessage,
 };
 use super::registry::{ToolRegistry, create_filtered_registry};
 use super::resource_registry::{ResourceRegistry, create_default_resource_registry};
@@ -43,10 +45,14 @@ pub struct McpServer {
     session_manager: Arc<SessionManager>,
     tunnel_manager: Arc<TunnelManager>,
     output_cache: Arc<OutputCache>,
+    task_store: Arc<TaskStore>,
     initialized: AtomicBool,
     concurrent_limit: Arc<Semaphore>,
     client_info: RwLock<Option<ClientInfo>>,
     runtime_max_output_chars: Arc<RwLock<Option<usize>>>,
+    /// Writer channel for sending task status notifications from background workers.
+    /// Initialized in `run()` before the main loop starts.
+    notification_tx: Arc<RwLock<Option<mpsc::Sender<WriterMessage>>>>,
 }
 
 impl McpServer {
@@ -116,6 +122,13 @@ impl McpServer {
             config.limits.output_cache_max_entries,
         ));
 
+        // Create task store for async task management (MCP 2025-11-25+)
+        let task_store = Arc::new(TaskStore::new(
+            config.limits.max_tasks,
+            config.limits.max_task_ttl_ms,
+            config.limits.task_poll_interval_ms,
+        ));
+
         let server = Self {
             config: Arc::new(RwLock::new(config)),
             validator,
@@ -131,10 +144,12 @@ impl McpServer {
             session_manager,
             tunnel_manager,
             output_cache,
+            task_store,
             initialized: AtomicBool::new(false),
             concurrent_limit,
             client_info: RwLock::new(None),
             runtime_max_output_chars: Arc::new(RwLock::new(None)),
+            notification_tx: Arc::new(RwLock::new(None)),
         };
 
         (server, audit_task)
@@ -199,6 +214,9 @@ impl McpServer {
 
         let (tx, mut rx) = mpsc::channel::<WriterMessage>(100);
 
+        // Store the writer channel so background task workers can send notifications
+        *self.notification_tx.write().await = Some(tx.clone());
+
         // Start config watcher for hot-reload if path is provided.
         // The on_reload callback sends list_changed notifications through the
         // writer channel so Claude Code can re-fetch tools/prompts/resources.
@@ -235,6 +253,16 @@ impl McpServer {
             loop {
                 interval.tick().await;
                 cleanup_sm.cleanup().await;
+            }
+        });
+
+        // Spawn task store cleanup task (runs every 60 seconds)
+        let cleanup_ts = Arc::clone(&self.task_store);
+        let task_cleanup_handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                cleanup_ts.cleanup().await;
             }
         });
 
@@ -326,8 +354,9 @@ impl McpServer {
             });
         }
 
-        // Shutdown: stop cleanup task, close all tunnels and sessions
+        // Shutdown: stop cleanup tasks, close all tunnels and sessions
         cleanup_handle.abort();
+        task_cleanup_handle.abort();
         self.tunnel_manager.close_all().await;
         self.session_manager.close_all().await;
 
@@ -353,6 +382,10 @@ impl McpServer {
             "prompts/get" => self.handle_prompts_get(id, request.params).await,
             "resources/list" => self.handle_resources_list(id).await,
             "resources/read" => self.handle_resources_read(id, request.params).await,
+            "tasks/get" => self.handle_tasks_get(id, request.params).await,
+            "tasks/result" => self.handle_tasks_result(id, request.params).await,
+            "tasks/list" => self.handle_tasks_list(id, request.params).await,
+            "tasks/cancel" => self.handle_tasks_cancel(id, request.params).await,
             "ping" => JsonRpcResponse::success(id, json!({})),
             _ => {
                 error!(method = %request.method, "Unknown method");
@@ -417,6 +450,13 @@ impl McpServer {
                 tools: Some(ToolsCapability { list_changed: true }),
                 prompts: Some(PromptsCapability { list_changed: true }),
                 resources: Some(ResourcesCapability { list_changed: true }),
+                tasks: Some(TasksCapability {
+                    list: json!({}),
+                    cancel: json!({}),
+                    requests: TaskRequestsCapability {
+                        tools: Some(TaskToolsCapability { call: json!({}) }),
+                    },
+                }),
             },
             server_info: ServerInfo {
                 name: SERVER_NAME.to_string(),
@@ -452,6 +492,7 @@ impl McpServer {
         JsonRpcResponse::success_or_serialize_error(id, &result)
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle_tools_call(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
         let Some(params) = params else {
             return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
@@ -469,6 +510,14 @@ impl McpServer {
 
         info!(tool = %call_params.name, "Tool call");
 
+        // Task-augmented request: spawn background worker and return immediately
+        if let Some(task_request) = call_params.task {
+            return self
+                .handle_tools_call_async(call_params.name, call_params.arguments, task_request, id)
+                .await;
+        }
+
+        // Synchronous path (unchanged)
         let ctx = self.create_tool_context().await;
 
         match self
@@ -483,6 +532,91 @@ impl McpServer {
                 JsonRpcResponse::success_or_serialize_error(id, &error_result)
             }
         }
+    }
+
+    /// Handle a task-augmented `tools/call`: create a task, spawn a background
+    /// worker, and return `CreateTaskResult` immediately.
+    async fn handle_tools_call_async(
+        &self,
+        tool_name: String,
+        arguments: Option<Value>,
+        task_request: super::protocol::TaskRequest,
+        id: Option<Value>,
+    ) -> JsonRpcResponse {
+        // Get the handler first to validate the tool exists
+        let Some(handler) = self.registry.get(&tool_name) else {
+            let error_result = ToolCallResult::error(format!("Unknown tool: {tool_name}"));
+            return JsonRpcResponse::success_or_serialize_error(id, &error_result);
+        };
+        let handler = Arc::clone(handler);
+
+        // Create the task
+        let Some((task_id, cancel_token)) = self.task_store.create_task(task_request.ttl).await
+        else {
+            return JsonRpcResponse::error(
+                id,
+                JsonRpcError::internal_error("Task limit reached, try again later"),
+            );
+        };
+
+        // Get the initial task info for the response
+        let task_info = self.task_store.get_task(&task_id).await.unwrap();
+
+        // Clone dependencies for the background worker
+        let task_store = Arc::clone(&self.task_store);
+        let notification_tx = Arc::clone(&self.notification_tx);
+        let ctx = self.create_tool_context().await;
+
+        // Spawn the background worker
+        tokio::spawn(async move {
+            let result = tokio::select! {
+                res = handler.execute(arguments, &ctx) => res,
+                () = cancel_token.cancelled() => {
+                    // Task was cancelled, no need to store result
+                    return;
+                }
+            };
+
+            // Store the result and send notification
+            let info = match result {
+                Ok(tool_result) => {
+                    let result_value =
+                        serde_json::to_value(&tool_result).unwrap_or_else(|e| json!({
+                            "content": [{"type": "text", "text": format!("Serialization error: {e}")}],
+                            "isError": true,
+                        }));
+                    task_store.complete_task(&task_id, result_value).await
+                }
+                Err(e) => {
+                    let error_result = ToolCallResult::error(e.to_string());
+                    let result_value =
+                        serde_json::to_value(&error_result).unwrap_or_else(|e| json!({
+                            "content": [{"type": "text", "text": format!("Serialization error: {e}")}],
+                            "isError": true,
+                        }));
+                    task_store
+                        .fail_task(&task_id, &e.to_string(), result_value)
+                        .await
+                }
+            };
+
+            // Send status notification (best-effort)
+            if let Some(info) = info {
+                let tx_guard = notification_tx.read().await;
+                if let Some(tx) = tx_guard.as_ref() {
+                    let _ = tx.try_send(WriterMessage::Notification(
+                        JsonRpcNotification::task_status(&info),
+                    ));
+                }
+            }
+        });
+
+        // Return CreateTaskResult immediately
+        let create_result = CreateTaskResult {
+            task: task_info,
+            meta: None,
+        };
+        JsonRpcResponse::success_or_serialize_error(id, &create_result)
     }
 
     fn handle_prompts_list(&self, id: Option<Value>) -> JsonRpcResponse {
@@ -579,6 +713,120 @@ impl McpServer {
                 error!(error = %e, "Resource read failed");
                 JsonRpcResponse::error(id, JsonRpcError::internal_error(e.to_string()))
             }
+        }
+    }
+
+    // =========================================================================
+    // Task handlers (MCP 2025-11-25+)
+    // =========================================================================
+
+    async fn handle_tasks_get(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
+        let Some(params) = params else {
+            return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
+        };
+
+        let get_params: TaskGetParams = match serde_json::from_value(params) {
+            Ok(p) => p,
+            Err(e) => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params(format!("Invalid params: {e}")),
+                );
+            }
+        };
+
+        match self.task_store.get_task(&get_params.task_id).await {
+            Some(info) => JsonRpcResponse::success_or_serialize_error(id, &info),
+            None => JsonRpcResponse::error(
+                id,
+                JsonRpcError::invalid_params(format!("Task not found: {}", get_params.task_id)),
+            ),
+        }
+    }
+
+    async fn handle_tasks_result(
+        &self,
+        id: Option<Value>,
+        params: Option<Value>,
+    ) -> JsonRpcResponse {
+        let Some(params) = params else {
+            return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
+        };
+
+        let result_params: TaskResultParams = match serde_json::from_value(params) {
+            Ok(p) => p,
+            Err(e) => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params(format!("Invalid params: {e}")),
+                );
+            }
+        };
+
+        // Block until the task reaches a terminal state
+        match self
+            .task_store
+            .wait_for_result(&result_params.task_id)
+            .await
+        {
+            Some(result) => {
+                // Inject task correlation metadata
+                let mut response = result;
+                if let Some(obj) = response.as_object_mut() {
+                    obj.insert(
+                        "_meta".to_string(),
+                        json!({
+                            "io.modelcontextprotocol/related-task": {
+                                "taskId": result_params.task_id
+                            }
+                        }),
+                    );
+                }
+                JsonRpcResponse::success(id, response)
+            }
+            None => JsonRpcResponse::error(
+                id,
+                JsonRpcError::invalid_params(format!("Task not found: {}", result_params.task_id)),
+            ),
+        }
+    }
+
+    async fn handle_tasks_list(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
+        let list_params: TaskListParams = params
+            .and_then(|p| serde_json::from_value(p).ok())
+            .unwrap_or(TaskListParams { cursor: None });
+
+        let (tasks, next_cursor) = self
+            .task_store
+            .list_tasks(list_params.cursor.as_deref(), 20)
+            .await;
+
+        let result = TaskListResult { tasks, next_cursor };
+        JsonRpcResponse::success_or_serialize_error(id, &result)
+    }
+
+    async fn handle_tasks_cancel(
+        &self,
+        id: Option<Value>,
+        params: Option<Value>,
+    ) -> JsonRpcResponse {
+        let Some(params) = params else {
+            return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
+        };
+
+        let cancel_params: TaskCancelParams = match serde_json::from_value(params) {
+            Ok(p) => p,
+            Err(e) => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params(format!("Invalid params: {e}")),
+                );
+            }
+        };
+
+        match self.task_store.cancel_task(&cancel_params.task_id).await {
+            Ok(info) => JsonRpcResponse::success_or_serialize_error(id, &info),
+            Err(e) => JsonRpcResponse::error(id, JsonRpcError::invalid_params(e)),
         }
     }
 }
@@ -1307,5 +1555,434 @@ mod tests {
         let response = server.handle_request(request).await;
 
         assert!(response.error.is_some());
+    }
+
+    // ============== Task Tests (MCP 2025-11-25+) ==============
+
+    #[tokio::test]
+    async fn test_initialize_includes_tasks_capability() {
+        let server = create_test_server();
+        let params = json!({
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {
+                "name": "test-client",
+                "version": "1.0.0"
+            }
+        });
+
+        let response = server.handle_initialize(Some(json!(1)), Some(params)).await;
+
+        let result = response.result.unwrap();
+        assert!(result["capabilities"]["tasks"].is_object());
+        assert!(result["capabilities"]["tasks"]["list"].is_object());
+        assert!(result["capabilities"]["tasks"]["cancel"].is_object());
+        assert!(result["capabilities"]["tasks"]["requests"]["tools"]["call"].is_object());
+    }
+
+    #[test]
+    fn test_tools_list_includes_execution_field() {
+        let server = create_test_server();
+        let response = server.handle_tools_list(Some(json!(1)));
+
+        let result = response.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+
+        for tool in tools {
+            assert_eq!(
+                tool["execution"]["taskSupport"], "optional",
+                "Tool {} missing execution.taskSupport",
+                tool["name"]
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_without_task_field_is_synchronous() {
+        let server = create_test_server();
+        let params = json!({
+            "name": "ssh_status",
+            "arguments": {}
+        });
+
+        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+
+        // Synchronous: should return content directly (not CreateTaskResult)
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["content"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_with_task_field_returns_create_task_result() {
+        let server = create_test_server();
+        let params = json!({
+            "name": "ssh_status",
+            "arguments": {},
+            "task": {"ttl": 30000}
+        });
+
+        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        // Should have task field with taskId and status
+        assert!(result["task"]["taskId"].is_string());
+        assert_eq!(result["task"]["status"], "working");
+        assert!(result["task"]["createdAt"].is_string());
+        assert!(result["task"]["pollInterval"].is_number());
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_async_unknown_tool() {
+        let server = create_test_server();
+        let params = json!({
+            "name": "nonexistent_tool",
+            "arguments": {},
+            "task": {}
+        });
+
+        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+
+        // Unknown tool should return error content, not CreateTaskResult
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["isError"].as_bool().unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn test_tasks_get_returns_status() {
+        let server = create_test_server();
+        // Create a task via tools/call
+        let call_params = json!({
+            "name": "ssh_status",
+            "arguments": {},
+            "task": {"ttl": 60000}
+        });
+        let call_response = server
+            .handle_tools_call(Some(json!(1)), Some(call_params))
+            .await;
+        let task_id = call_response.result.unwrap()["task"]["taskId"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        // Poll the task
+        let get_params = json!({"taskId": task_id});
+        // Small delay to let the worker potentially finish
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let response = server
+            .handle_tasks_get(Some(json!(2)), Some(get_params))
+            .await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert_eq!(result["taskId"], task_id);
+        // Status could be working or completed at this point
+        assert!(result["status"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_tasks_get_nonexistent() {
+        let server = create_test_server();
+        let params = json!({"taskId": "nonexistent-id"});
+
+        let response = server.handle_tasks_get(Some(json!(1)), Some(params)).await;
+
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
+
+    #[tokio::test]
+    async fn test_tasks_cancel() {
+        let server = create_test_server();
+        // Create a task
+        let (task_id, _) = server.task_store.create_task(Some(60_000)).await.unwrap();
+
+        let params = json!({"taskId": task_id});
+        let response = server
+            .handle_tasks_cancel(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert_eq!(result["status"], "cancelled");
+    }
+
+    #[tokio::test]
+    async fn test_tasks_cancel_nonexistent() {
+        let server = create_test_server();
+        let params = json!({"taskId": "no-such-task"});
+
+        let response = server
+            .handle_tasks_cancel(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_tasks_list_empty() {
+        let server = create_test_server();
+
+        let response = server.handle_tasks_list(Some(json!(1)), None).await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["tasks"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_tasks_list_with_tasks() {
+        let server = create_test_server();
+        server.task_store.create_task(Some(60_000)).await.unwrap();
+        server.task_store.create_task(Some(60_000)).await.unwrap();
+
+        let response = server.handle_tasks_list(Some(json!(1)), None).await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert_eq!(result["tasks"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_tasks_result_waits_for_completion() {
+        let server = create_test_server();
+        let params = json!({
+            "name": "ssh_status",
+            "arguments": {},
+            "task": {"ttl": 60000}
+        });
+
+        let call_response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let task_id = call_response.result.unwrap()["task"]["taskId"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        // tasks/result blocks until terminal
+        let result_params = json!({"taskId": task_id});
+        let response = server
+            .handle_tasks_result(Some(json!(2)), Some(result_params))
+            .await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        // Should have _meta with related-task
+        assert_eq!(
+            result["_meta"]["io.modelcontextprotocol/related-task"]["taskId"],
+            task_id
+        );
+        // Should have content from the tool execution
+        assert!(result["content"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_tasks_result_nonexistent() {
+        let server = create_test_server();
+        let params = json!({"taskId": "no-such-task"});
+
+        let response = server
+            .handle_tasks_result(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_tasks_cancel_already_completed_returns_error() {
+        let server = create_test_server();
+        let (task_id, _) = server.task_store.create_task(Some(60_000)).await.unwrap();
+        server
+            .task_store
+            .complete_task(
+                &task_id,
+                json!({"content": [{"type": "text", "text": "done"}]}),
+            )
+            .await;
+
+        let params = json!({"taskId": task_id});
+        let response = server
+            .handle_tasks_cancel(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_some());
+        let err = response.error.unwrap();
+        assert_eq!(err.code, -32602);
+    }
+
+    #[tokio::test]
+    async fn test_tasks_cancel_already_cancelled_returns_error() {
+        let server = create_test_server();
+        let (task_id, _) = server.task_store.create_task(Some(60_000)).await.unwrap();
+        server.task_store.cancel_task(&task_id).await.unwrap();
+
+        let params = json!({"taskId": task_id});
+        let response = server
+            .handle_tasks_cancel(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_tasks_get_on_completed_task() {
+        let server = create_test_server();
+        let (task_id, _) = server.task_store.create_task(Some(60_000)).await.unwrap();
+        server
+            .task_store
+            .complete_task(
+                &task_id,
+                json!({"content": [{"type": "text", "text": "ok"}]}),
+            )
+            .await;
+
+        let params = json!({"taskId": task_id});
+        let response = server.handle_tasks_get(Some(json!(1)), Some(params)).await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert_eq!(result["status"], "completed");
+        assert_eq!(result["taskId"], task_id);
+    }
+
+    #[tokio::test]
+    async fn test_tasks_result_on_cancelled_task() {
+        let server = create_test_server();
+        let (task_id, _) = server.task_store.create_task(Some(60_000)).await.unwrap();
+        server.task_store.cancel_task(&task_id).await.unwrap();
+
+        let params = json!({"taskId": task_id});
+        let response = server
+            .handle_tasks_result(Some(json!(1)), Some(params))
+            .await;
+
+        // Cancelled tasks have no stored result — handler returns error
+        assert!(response.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_tasks_result_on_already_completed() {
+        let server = create_test_server();
+        let (task_id, _) = server.task_store.create_task(Some(60_000)).await.unwrap();
+        server
+            .task_store
+            .complete_task(
+                &task_id,
+                json!({"content": [{"type": "text", "text": "result data"}]}),
+            )
+            .await;
+
+        let params = json!({"taskId": task_id});
+        let response = server
+            .handle_tasks_result(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert_eq!(
+            result["_meta"]["io.modelcontextprotocol/related-task"]["taskId"],
+            task_id
+        );
+        assert!(result["content"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_tasks_get_missing_params() {
+        let server = create_test_server();
+
+        let response = server.handle_tasks_get(Some(json!(1)), None).await;
+
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
+
+    #[tokio::test]
+    async fn test_tasks_cancel_missing_params() {
+        let server = create_test_server();
+
+        let response = server.handle_tasks_cancel(Some(json!(1)), None).await;
+
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
+
+    #[tokio::test]
+    async fn test_tasks_result_missing_params() {
+        let server = create_test_server();
+
+        let response = server.handle_tasks_result(Some(json!(1)), None).await;
+
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_tasks_result_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "tasks/result".to_string(),
+            params: Some(json!({"taskId": "nonexistent"})),
+        };
+
+        let response = server.handle_request(request).await;
+
+        // Should be dispatched (not method_not_found)
+        assert!(response.error.is_some());
+        assert_ne!(response.error.unwrap().code, -32601);
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_tasks_get_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "tasks/get".to_string(),
+            params: Some(json!({"taskId": "nonexistent"})),
+        };
+
+        let response = server.handle_request(request).await;
+
+        // Should be dispatched (not method_not_found)
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602); // Invalid params (task not found)
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_tasks_list_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "tasks/list".to_string(),
+            params: None,
+        };
+
+        let response = server.handle_request(request).await;
+
+        // Should succeed with empty tasks list
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["tasks"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_tasks_cancel_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "tasks/cancel".to_string(),
+            params: Some(json!({"taskId": "nonexistent"})),
+        };
+
+        let response = server.handle_request(request).await;
+
+        // Should be dispatched (not method_not_found)
+        assert!(response.error.is_some());
+        assert_ne!(response.error.unwrap().code, -32601);
     }
 }

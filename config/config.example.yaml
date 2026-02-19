@@ -238,6 +238,16 @@ limits:
   # Max cached outputs in memory
   # output_cache_max_entries: 100
 
+  # --- Async Tasks (MCP 2025-11-25+) ---
+  # Maximum number of concurrent async tasks
+  # max_tasks: 50
+
+  # Maximum TTL for tasks in milliseconds (1 hour)
+  # max_task_ttl_ms: 3600000
+
+  # Suggested poll interval for tasks in milliseconds
+  # task_poll_interval_ms: 2000
+
 # =============================================================================
 # AUDIT LOGGING
 # =============================================================================

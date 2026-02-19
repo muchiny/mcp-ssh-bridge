@@ -10,7 +10,7 @@ use serde_json::json;
 
 use crate::config::ToolGroupsConfig;
 use crate::error::{BridgeError, Result};
-use crate::mcp::protocol::{Tool, ToolAnnotations, ToolCallResult};
+use crate::mcp::protocol::{Tool, ToolAnnotations, ToolCallResult, ToolExecution};
 #[cfg(test)]
 use crate::ports::ToolSchema;
 use crate::ports::{ToolContext, ToolHandler};
@@ -83,6 +83,9 @@ impl ToolRegistry {
                     } else {
                         Some(annotations)
                     },
+                    execution: Some(ToolExecution {
+                        task_support: "optional".to_string(),
+                    }),
                 }
             })
             .collect()
