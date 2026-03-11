@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -131,12 +133,16 @@ pub struct InitializeParams {
     pub client_info: ClientInfo,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct ClientCapabilities {
     #[serde(default)]
     pub roots: Option<RootsCapability>,
     #[serde(default)]
     pub sampling: Option<Value>,
+    #[serde(default)]
+    pub elicitation: Option<Value>,
+    #[serde(default)]
+    pub extensions: Option<HashMap<String, Value>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -172,6 +178,15 @@ pub struct ServerCapabilities {
     /// Experimental Tasks capability (MCP 2025-11-25+).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tasks: Option<TasksCapability>,
+    /// Completions capability (argument auto-completion).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completions: Option<CompletionsCapability>,
+    /// Logging capability (`logging/setLevel` + `notifications/message`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logging: Option<LoggingCapability>,
+    /// MCP Extensions (2025-11-25+). Map of extension URI to settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<HashMap<String, Value>>,
 }
 
 /// Tasks capability declaration for MCP `initialize` response.
@@ -253,9 +268,20 @@ pub struct ToolCallParams {
     pub name: String,
     #[serde(default)]
     pub arguments: Option<Value>,
+    /// Client-provided metadata (e.g., `progressToken` for progress notifications).
+    #[serde(rename = "_meta", default)]
+    pub meta: Option<ToolCallMeta>,
     /// When present, the client requests task-augmented execution (MCP 2025-11-25+).
     #[serde(default)]
     pub task: Option<TaskRequest>,
+}
+
+/// Client-provided metadata for tool calls.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ToolCallMeta {
+    /// Token for sending progress notifications back to the client.
+    #[serde(rename = "progressToken")]
+    pub progress_token: Option<Value>,
 }
 
 /// Client-provided task parameters for task-augmented requests.
@@ -392,6 +418,267 @@ pub struct TaskListResult {
 }
 
 // ============================================================================
+// MCP Completions Types
+// ============================================================================
+
+/// Completions capability for `ServerCapabilities`.
+#[derive(Debug, Clone, Serialize)]
+pub struct CompletionsCapability {}
+
+/// Reference type for completion requests (tagged by `"type"` field).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+pub enum CompletionRef {
+    /// Auto-complete a prompt argument.
+    #[serde(rename = "ref/prompt")]
+    Prompt { name: String },
+    /// Auto-complete a resource argument.
+    #[serde(rename = "ref/resource")]
+    Resource { uri: String },
+}
+
+/// Parameters for `completions/complete`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CompletionsCompleteParams {
+    /// The prompt or resource being completed.
+    #[serde(rename = "ref")]
+    pub reference: CompletionRef,
+    /// The argument being typed.
+    pub argument: CompletionArgument,
+}
+
+/// A single argument being auto-completed.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CompletionArgument {
+    /// Argument name (e.g. `"host"`).
+    pub name: String,
+    /// Prefix typed so far (e.g. `"web"`).
+    pub value: String,
+}
+
+/// Response for `completions/complete`.
+#[derive(Debug, Clone, Serialize)]
+pub struct CompletionsCompleteResult {
+    pub completion: CompletionResult,
+}
+
+/// The completion values returned to the client.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionResult {
+    pub values: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_more: Option<bool>,
+}
+
+// ============================================================================
+// MCP Logging Types
+// ============================================================================
+
+/// Logging capability for `ServerCapabilities`.
+#[derive(Debug, Clone, Serialize)]
+pub struct LoggingCapability {}
+
+/// MCP log levels ordered by severity (lowest to highest).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    Debug = 0,
+    Info = 1,
+    Notice = 2,
+    Warning = 3,
+    Error = 4,
+    Critical = 5,
+    Alert = 6,
+    Emergency = 7,
+}
+
+impl LogLevel {
+    /// Numeric severity (0 = debug, 7 = emergency).
+    #[must_use]
+    pub fn severity(self) -> u8 {
+        self as u8
+    }
+}
+
+/// Parameters for `logging/setLevel`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct LoggingSetLevelParams {
+    pub level: LogLevel,
+}
+
+// ============================================================================
+// MCP Elicitation Types
+// ============================================================================
+
+/// Parameters for `elicitation/create` (server → client request).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElicitationCreateParams {
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requested_schema: Option<Value>,
+    /// SEP-1036 URL mode: client opens browser.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+/// Response from client for `elicitation/create`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ElicitationCreateResult {
+    /// `"accept"`, `"decline"`, or `"cancel"`.
+    pub action: String,
+    #[serde(default)]
+    pub content: Option<Value>,
+}
+
+// ============================================================================
+// MCP Sampling Types (with Tools, SEP-1577)
+// ============================================================================
+
+/// Parameters for `sampling/createMessage` (server → client request).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SamplingCreateMessageParams {
+    pub messages: Vec<SamplingMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_preferences: Option<ModelPreferences>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+    /// `"none"`, `"thisServer"`, or `"allServers"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_context: Option<String>,
+    pub max_tokens: u32,
+    /// Tool definitions for tool-use in sampling (SEP-1577).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<SamplingTool>>,
+}
+
+/// A message in a sampling request.
+#[derive(Debug, Clone, Serialize)]
+pub struct SamplingMessage {
+    pub role: String,
+    pub content: SamplingContent,
+}
+
+/// Content of a sampling message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum SamplingContent {
+    Text { text: String },
+}
+
+/// Model preferences for sampling.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelPreferences {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hints: Option<Vec<ModelHint>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost_priority: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed_priority: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub intelligence_priority: Option<f64>,
+}
+
+/// A model hint for sampling preferences.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelHint {
+    pub name: String,
+}
+
+/// A tool definition for sampling with tools (SEP-1577).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SamplingTool {
+    pub name: String,
+    pub description: String,
+    pub input_schema: Value,
+}
+
+/// Response from client for `sampling/createMessage`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SamplingCreateMessageResult {
+    pub role: String,
+    pub content: SamplingContent,
+    pub model: String,
+    #[serde(default)]
+    pub stop_reason: Option<String>,
+}
+
+// ============================================================================
+// Reverse Request Types (server → client requests for Elicitation/Sampling)
+// ============================================================================
+
+/// Outbound JSON-RPC request (server → client).
+#[derive(Debug, Clone, Serialize)]
+pub struct JsonRpcOutboundRequest {
+    pub jsonrpc: String,
+    pub id: Value,
+    pub method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<Value>,
+}
+
+impl JsonRpcOutboundRequest {
+    #[must_use]
+    pub fn new(id: Value, method: impl Into<String>, params: Option<Value>) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id,
+            method: method.into(),
+            params,
+        }
+    }
+}
+
+/// Flexible inbound JSON-RPC message (can be a request OR a response).
+///
+/// Used by the main loop to distinguish client requests from client responses
+/// to server-initiated requests (elicitation, sampling).
+#[derive(Debug, Clone, Deserialize)]
+pub struct JsonRpcMessage {
+    pub jsonrpc: String,
+    #[serde(default)]
+    pub id: Option<Value>,
+    #[serde(default)]
+    pub method: Option<String>,
+    #[serde(default)]
+    pub params: Option<Value>,
+    #[serde(default)]
+    pub result: Option<Value>,
+    #[serde(default)]
+    pub error: Option<JsonRpcErrorData>,
+}
+
+/// Error data from a client response to a server-initiated request.
+#[derive(Debug, Clone, Deserialize)]
+pub struct JsonRpcErrorData {
+    pub code: i32,
+    pub message: String,
+    #[serde(default)]
+    pub data: Option<Value>,
+}
+
+// ============================================================================
+// MCP Extensions
+// ============================================================================
+
+/// Well-known extension URIs advertised by this server.
+pub mod extensions {
+    /// Tasks extension (standard MCP).
+    pub const TASKS: &str = "io.modelcontextprotocol/tasks";
+    /// Output pagination extension (custom).
+    pub const OUTPUT_PAGINATION: &str = "com.mcp-ssh-bridge/output-pagination";
+    /// Multi-host execution extension (custom).
+    pub const MULTI_HOST: &str = "com.mcp-ssh-bridge/multi-host";
+}
+
+// ============================================================================
 // JSON-RPC Notifications
 // ============================================================================
 
@@ -445,6 +732,45 @@ impl JsonRpcNotification {
             params: serde_json::to_value(task_info).ok(),
         }
     }
+
+    /// Create a `notifications/progress` notification (MCP Progress).
+    #[must_use]
+    pub fn progress(
+        token: &Value,
+        progress: u64,
+        total: Option<u64>,
+        message: Option<&str>,
+    ) -> Self {
+        let mut params = serde_json::json!({
+            "progressToken": token,
+            "progress": progress,
+        });
+        if let Some(t) = total {
+            params["total"] = serde_json::json!(t);
+        }
+        if let Some(m) = message {
+            params["message"] = serde_json::json!(m);
+        }
+        Self {
+            jsonrpc: "2.0".to_string(),
+            method: "notifications/progress".to_string(),
+            params: Some(params),
+        }
+    }
+
+    /// Create a `notifications/message` log notification (MCP Logging).
+    #[must_use]
+    pub fn log_message(level: LogLevel, logger: &str, data: &Value) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            method: "notifications/message".to_string(),
+            params: Some(serde_json::json!({
+                "level": level,
+                "logger": logger,
+                "data": data,
+            })),
+        }
+    }
 }
 
 /// Messages sent through the stdout writer channel.
@@ -456,6 +782,8 @@ pub enum WriterMessage {
     Response(Box<JsonRpcResponse>),
     /// An unsolicited server notification (e.g., `list_changed`).
     Notification(JsonRpcNotification),
+    /// A server-initiated JSON-RPC request (elicitation, sampling).
+    Request(JsonRpcOutboundRequest),
 }
 
 // ============================================================================
@@ -608,6 +936,9 @@ mod tests {
                 }),
                 resources: None,
                 tasks: None,
+                completions: None,
+                logging: None,
+                extensions: None,
             },
             server_info: ServerInfo {
                 name: SERVER_NAME.to_string(),
@@ -1165,6 +1496,9 @@ mod tests {
                     tools: Some(TaskToolsCapability { call: json!({}) }),
                 },
             }),
+            completions: None,
+            logging: None,
+            extensions: None,
         };
         let json = serde_json::to_value(&caps).unwrap();
         assert!(json["tasks"].is_object());

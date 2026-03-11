@@ -429,6 +429,15 @@ pub struct LimitsConfig {
     /// Clients use this to determine how often to poll `tasks/get`.
     #[serde(default = "default_task_poll_interval_ms")]
     pub task_poll_interval_ms: u64,
+
+    /// Timeout in seconds for server-to-client requests (elicitation, sampling).
+    /// Default: 120 seconds.
+    #[serde(default = "default_client_request_timeout")]
+    pub client_request_timeout_seconds: u64,
+
+    /// Maximum tokens for sampling `createMessage` requests (default: 4096).
+    #[serde(default = "default_sampling_max_tokens")]
+    pub sampling_max_tokens: u32,
 }
 
 impl Default for LimitsConfig {
@@ -449,6 +458,8 @@ impl Default for LimitsConfig {
             max_tasks: default_max_tasks(),
             max_task_ttl_ms: default_max_task_ttl_ms(),
             task_poll_interval_ms: default_task_poll_interval_ms(),
+            client_request_timeout_seconds: default_client_request_timeout(),
+            sampling_max_tokens: default_sampling_max_tokens(),
         }
     }
 }
@@ -571,6 +582,14 @@ const fn default_max_task_ttl_ms() -> u64 {
 
 const fn default_task_poll_interval_ms() -> u64 {
     2_000 // 2 seconds
+}
+
+const fn default_client_request_timeout() -> u64 {
+    120
+}
+
+const fn default_sampling_max_tokens() -> u32 {
+    4096
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

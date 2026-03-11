@@ -1,15 +1,23 @@
+pub mod client_requester;
+pub mod completion_provider;
+pub mod elicitation;
 pub mod history;
+pub mod logger;
+pub mod pending_requests;
+pub mod progress;
 pub mod prompt_registry;
 pub mod prompts;
 pub mod protocol;
 pub mod registry;
 pub mod resource_registry;
 pub mod resources;
+pub mod sampling;
 mod server;
 pub mod standard_tool;
 pub mod tool_handlers;
 
 pub use history::{CommandHistory, HistoryConfig, HistoryEntry};
+pub use logger::McpLogger;
 pub use prompt_registry::{PromptRegistry, create_default_prompt_registry};
 pub use protocol::*;
 pub use registry::{ToolRegistry, create_default_registry};

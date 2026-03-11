@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::time::Instant;
 
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -14,17 +16,24 @@ use crate::ports::ToolContext;
 use crate::security::{AuditLogger, AuditWriterTask, CommandValidator, RateLimiter, Sanitizer};
 use crate::ssh::{ConnectionPool, SessionManager};
 
+use super::completion_provider::DefaultCompletionProvider;
+use super::logger::McpLogger;
+use super::pending_requests::{ClientResponse, PendingRequests};
+use super::progress::ProgressReporter;
+use super::protocol::JsonRpcMessage;
+
 use super::history::CommandHistory;
 use super::prompt_registry::{PromptRegistry, create_default_prompt_registry};
 use super::protocol::{
-    ClientInfo, CreateTaskResult, InitializeParams, InitializeResult, JsonRpcError,
-    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, PROTOCOL_VERSION, PromptsCapability,
-    PromptsGetParams, PromptsGetResult, PromptsListResult, ResourcesCapability,
-    ResourcesListResult, ResourcesReadParams, ResourcesReadResult, SERVER_NAME, SERVER_VERSION,
-    SUPPORTED_PROTOCOL_VERSIONS, ServerCapabilities, ServerInfo, TaskCancelParams, TaskGetParams,
-    TaskListParams, TaskListResult, TaskRequestsCapability, TaskResultParams, TaskToolsCapability,
-    TasksCapability, ToolCallParams, ToolCallResult, ToolsCapability, ToolsListResult,
-    WriterMessage,
+    ClientInfo, CompletionRef, CompletionResult, CompletionsCapability, CompletionsCompleteParams,
+    CompletionsCompleteResult, CreateTaskResult, InitializeParams, InitializeResult, JsonRpcError,
+    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, LogLevel, LoggingCapability,
+    LoggingSetLevelParams, PROTOCOL_VERSION, PromptsCapability, PromptsGetParams, PromptsGetResult,
+    PromptsListResult, ResourcesCapability, ResourcesListResult, ResourcesReadParams,
+    ResourcesReadResult, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS,
+    ServerCapabilities, ServerInfo, TaskCancelParams, TaskGetParams, TaskListParams,
+    TaskListResult, TaskRequestsCapability, TaskResultParams, TaskToolsCapability, TasksCapability,
+    ToolCallParams, ToolCallResult, ToolContent, ToolsCapability, ToolsListResult, WriterMessage,
 };
 use super::registry::{ToolRegistry, create_filtered_registry};
 use super::resource_registry::{ResourceRegistry, create_default_resource_registry};
@@ -53,6 +62,15 @@ pub struct McpServer {
     /// Writer channel for sending task status notifications from background workers.
     /// Initialized in `run()` before the main loop starts.
     notification_tx: Arc<RwLock<Option<mpsc::Sender<WriterMessage>>>>,
+    /// Current minimum log level for MCP logging notifications.
+    log_level: Arc<AtomicU8>,
+    /// MCP logger for sending `notifications/message` to the client.
+    /// Initialized in `run()` once the writer channel is ready.
+    mcp_logger: Arc<RwLock<Option<Arc<McpLogger>>>>,
+    /// Completion provider for argument auto-completion.
+    completion_provider: DefaultCompletionProvider,
+    /// Pending server-to-client requests (elicitation, sampling).
+    pending_requests: Arc<PendingRequests>,
 }
 
 impl McpServer {
@@ -150,6 +168,10 @@ impl McpServer {
             client_info: RwLock::new(None),
             runtime_max_output_chars: Arc::new(RwLock::new(None)),
             notification_tx: Arc::new(RwLock::new(None)),
+            log_level: Arc::new(AtomicU8::new(LogLevel::Warning.severity())),
+            mcp_logger: Arc::new(RwLock::new(None)),
+            completion_provider: DefaultCompletionProvider,
+            pending_requests: Arc::new(PendingRequests::new()),
         };
 
         (server, audit_task)
@@ -217,6 +239,10 @@ impl McpServer {
         // Store the writer channel so background task workers can send notifications
         *self.notification_tx.write().await = Some(tx.clone());
 
+        // Create MCP logger for sending structured log notifications to the client
+        let mcp_logger = Arc::new(McpLogger::new(Arc::clone(&self.log_level), tx.clone()));
+        *self.mcp_logger.write().await = Some(Arc::clone(&mcp_logger));
+
         // Start config watcher for hot-reload if path is provided.
         // The on_reload callback sends list_changed notifications through the
         // writer channel so Claude Code can re-fetch tools/prompts/resources.
@@ -274,6 +300,7 @@ impl McpServer {
                 let json_str = match &msg {
                     WriterMessage::Response(r) => serde_json::to_string(r),
                     WriterMessage::Notification(n) => serde_json::to_string(n),
+                    WriterMessage::Request(r) => serde_json::to_string(&r),
                 };
                 let json_str = match json_str {
                     Ok(s) => s,
@@ -321,13 +348,13 @@ impl McpServer {
                 continue;
             }
 
-            debug!(request = %trimmed, "Received request");
+            debug!(request = %trimmed, "Received message");
 
-            // Parse the JSON-RPC request
-            let request = match serde_json::from_str::<JsonRpcRequest>(trimmed) {
-                Ok(req) => req,
+            // Parse as flexible JsonRpcMessage to handle both requests and responses
+            let message = match serde_json::from_str::<JsonRpcMessage>(trimmed) {
+                Ok(msg) => msg,
                 Err(e) => {
-                    error!(error = %e, "Failed to parse request");
+                    error!(error = %e, "Failed to parse message");
                     let response = JsonRpcResponse::error(
                         None,
                         JsonRpcError::parse_error(format!("Invalid JSON: {e}")),
@@ -335,6 +362,39 @@ impl McpServer {
                     let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
                     continue;
                 }
+            };
+
+            // Route: if message has a method, it's a client request.
+            // If it has result/error (no method), it's a response to a server-initiated request.
+            if message.method.is_none() {
+                // Client response to a server-initiated request (elicitation/sampling)
+                if let Some(id) = &message.id {
+                    let id_str = match id {
+                        Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    };
+                    let response = if let Some(error) = message.error {
+                        ClientResponse::Error {
+                            code: error.code,
+                            message: error.message,
+                            data: error.data,
+                        }
+                    } else {
+                        ClientResponse::Success(message.result.unwrap_or(Value::Null))
+                    };
+                    if !self.pending_requests.resolve(&id_str, response) {
+                        debug!(id = %id_str, "Received response for unknown request ID");
+                    }
+                }
+                continue;
+            }
+
+            // It's a client request — convert to JsonRpcRequest
+            let request = JsonRpcRequest {
+                jsonrpc: message.jsonrpc,
+                id: message.id,
+                method: message.method.unwrap_or_default(),
+                params: message.params,
             };
 
             // Acquire permit (blocks if at concurrency limit)
@@ -386,6 +446,8 @@ impl McpServer {
             "tasks/result" => self.handle_tasks_result(id, request.params).await,
             "tasks/list" => self.handle_tasks_list(id, request.params).await,
             "tasks/cancel" => self.handle_tasks_cancel(id, request.params).await,
+            "completions/complete" => self.handle_completions_complete(id, request.params),
+            "logging/setLevel" => self.handle_logging_set_level(id, request.params),
             "ping" => JsonRpcResponse::success(id, json!({})),
             _ => {
                 error!(method = %request.method, "Unknown method");
@@ -394,6 +456,29 @@ impl McpServer {
         }
     }
 
+    /// Build the server extensions map based on current configuration.
+    ///
+    /// Auto-detects: tasks (always), output-pagination (always, since
+    /// `OutputCache` is always created), multi-host (if >1 host configured).
+    async fn build_server_extensions(&self) -> Option<HashMap<String, Value>> {
+        use super::protocol::extensions;
+
+        let mut exts = HashMap::new();
+        exts.insert(extensions::TASKS.to_string(), json!({}));
+        exts.insert(extensions::OUTPUT_PAGINATION.to_string(), json!({}));
+
+        let host_count = self.config.read().await.hosts.len();
+        if host_count > 1 {
+            exts.insert(
+                extensions::MULTI_HOST.to_string(),
+                json!({ "hosts": host_count }),
+            );
+        }
+
+        Some(exts)
+    }
+
+    #[allow(clippy::too_many_lines)]
     async fn handle_initialize(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
         // Parse initialize params, negotiate version, and store client info
         let mut negotiated_version = PROTOCOL_VERSION.to_string();
@@ -457,6 +542,9 @@ impl McpServer {
                         tools: Some(TaskToolsCapability { call: json!({}) }),
                     },
                 }),
+                completions: Some(CompletionsCapability {}),
+                logging: Some(LoggingCapability {}),
+                extensions: self.build_server_extensions().await,
             },
             server_info: ServerInfo {
                 name: SERVER_NAME.to_string(),
@@ -467,16 +555,36 @@ impl McpServer {
                 website_url: Some("https://github.com/petermachini/mcp-ssh-bridge".to_string()),
             },
             instructions: Some(
-                "MCP SSH Bridge provides tools for remote server management via SSH. \
-                 Always call ssh_status first to discover available host aliases. \
-                 Use specialized tools (ssh_docker_*, ssh_k8s_*, ssh_service_*, \
-                 ssh_net_*, ssh_git_*, etc.) over ssh_exec when available — they \
-                 provide input validation, structured output, auto-detection of \
-                 binaries, and safety checks. Use ssh_exec only for ad-hoc commands \
-                 not covered by a specialized tool. If output is truncated, use \
-                 ssh_output_fetch with the provided output_id to retrieve the rest. \
-                 For multi-step workflows sharing state (cd, env vars), use \
-                 ssh_session_create + ssh_session_exec instead of ssh_exec."
+                "MCP SSH Bridge: remote server management via SSH (197 tools, 38 groups).\n\
+                 \n\
+                 WORKFLOW: Call ssh_status first to discover hosts, their OS type \
+                 (Linux/Windows), and connection state.\n\
+                 \n\
+                 TOOL NAMING: Tools follow ssh_<group>_<action> patterns.\n\
+                 - Linux groups: docker, k8s, helm, systemd (ssh_service_*), \
+                 network (ssh_net_*), process, package (ssh_pkg_*), firewall, cron, \
+                 git, ansible, terraform, vault, nginx, redis, certificates \
+                 (ssh_cert_*), esxi, database (ssh_db_*), backup, monitoring \
+                 (ssh_metrics*), sessions, tunnels, file_transfer \
+                 (ssh_upload/download/sync), config, directory (ssh_ls/find).\n\
+                 - Windows groups: ssh_win_service_*, ssh_win_event_*, ssh_ad_*, \
+                 ssh_schtask_*, ssh_win_firewall_*, ssh_iis_*, ssh_win_update_*, \
+                 ssh_win_perf_*, ssh_hyperv_*, ssh_reg_*, ssh_win_feature_*, \
+                 ssh_win_net_*, ssh_win_process_*.\n\
+                 \n\
+                 PREFER SPECIALIZED TOOLS over ssh_exec — they validate inputs, \
+                 structure output, auto-detect binaries, and enforce safety. \
+                 Use ssh_exec only for ad-hoc commands.\n\
+                 \n\
+                 ANNOTATIONS: Tools declare readOnlyHint or destructiveHint. \
+                 Prefer read-only tools for investigation before mutating ones.\n\
+                 \n\
+                 OUTPUT: Truncated output includes an output_id — call \
+                 ssh_output_fetch to get the rest.\n\
+                 \n\
+                 SESSIONS: For multi-step workflows needing shared state (cd, env \
+                 vars), use ssh_session_create + ssh_session_exec. Close with \
+                 ssh_session_close when done."
                     .to_string(),
             ),
         };
@@ -510,6 +618,17 @@ impl McpServer {
 
         info!(tool = %call_params.name, "Tool call");
 
+        // Create progress reporter if the client sent a progressToken
+        let progress_reporter = call_params
+            .meta
+            .as_ref()
+            .and_then(|m| m.progress_token.clone())
+            .and_then(|token| {
+                let tx_guard = self.notification_tx.try_read().ok()?;
+                let tx = tx_guard.as_ref()?.clone();
+                Some(ProgressReporter::new(token, tx, Some(3)))
+            });
+
         // Task-augmented request: spawn background worker and return immediately
         if let Some(task_request) = call_params.task {
             return self
@@ -517,17 +636,81 @@ impl McpServer {
                 .await;
         }
 
-        // Synchronous path (unchanged)
+        // Synchronous path
+        if let Some(ref reporter) = progress_reporter {
+            reporter.report(1, Some("Preparing execution..."));
+        }
+
         let ctx = self.create_tool_context().await;
+
+        if let Some(ref reporter) = progress_reporter {
+            reporter.report(2, Some(&format!("Executing {}...", call_params.name)));
+        }
+
+        let start = Instant::now();
+        let tool_name = call_params.name.clone();
 
         match self
             .registry
             .execute(&call_params.name, call_params.arguments, &ctx)
             .await
         {
-            Ok(result) => JsonRpcResponse::success_or_serialize_error(id, &result),
+            Ok(result) => {
+                let elapsed_ms = start.elapsed().as_millis();
+
+                if let Some(ref reporter) = progress_reporter {
+                    reporter.report(3, Some("Done"));
+                }
+
+                // Contextual log: give Claude structured info about the execution
+                if let Some(logger) = self.mcp_logger.read().await.as_ref() {
+                    let output_chars: usize = result
+                        .content
+                        .iter()
+                        .map(|c| match c {
+                            ToolContent::Text { text } => text.len(),
+                            _ => 0,
+                        })
+                        .sum();
+                    let is_truncated = result.content.iter().any(|c| {
+                        matches!(c,
+                        ToolContent::Text { text } if text.contains("output_id:"))
+                    });
+
+                    logger.log(
+                        super::protocol::LogLevel::Debug,
+                        "mcp-ssh-bridge",
+                        json!({
+                            "event": "tool_complete",
+                            "tool": tool_name,
+                            "duration_ms": elapsed_ms,
+                            "output_chars": output_chars,
+                            "truncated": is_truncated,
+                        }),
+                    );
+                }
+
+                JsonRpcResponse::success_or_serialize_error(id, &result)
+            }
             Err(e) => {
+                let elapsed_ms = start.elapsed().as_millis();
                 error!(error = %e, "Tool call failed");
+
+                if let Some(logger) = self.mcp_logger.read().await.as_ref() {
+                    logger.log(
+                        super::protocol::LogLevel::Error,
+                        "mcp-ssh-bridge",
+                        json!({
+                            "event": "tool_failed",
+                            "tool": tool_name,
+                            "duration_ms": elapsed_ms,
+                            "error": e.to_string(),
+                        }),
+                    );
+                }
+                if let Some(ref reporter) = progress_reporter {
+                    reporter.report(3, Some(&format!("Failed: {e}")));
+                }
                 let error_result = ToolCallResult::error(e.to_string());
                 JsonRpcResponse::success_or_serialize_error(id, &error_result)
             }
@@ -834,6 +1017,127 @@ impl McpServer {
             Err(e) => JsonRpcResponse::error(id, JsonRpcError::invalid_params(e)),
         }
     }
+
+    // ========================================================================
+    // Completions
+    // ========================================================================
+
+    fn handle_completions_complete(
+        &self,
+        id: Option<Value>,
+        params: Option<Value>,
+    ) -> JsonRpcResponse {
+        use crate::ports::CompletionProvider;
+
+        let Some(params) = params else {
+            return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
+        };
+
+        let complete_params: CompletionsCompleteParams = match serde_json::from_value(params) {
+            Ok(p) => p,
+            Err(e) => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params(format!("Invalid params: {e}")),
+                );
+            }
+        };
+
+        // We need a sync config snapshot for completion. Use try_read to avoid
+        // blocking; if the config lock is held, return empty completions.
+        let Ok(config) = self.config.try_read() else {
+            return JsonRpcResponse::success_or_serialize_error(
+                id,
+                &CompletionsCompleteResult {
+                    completion: CompletionResult {
+                        values: Vec::new(),
+                        total: None,
+                        has_more: None,
+                    },
+                },
+            );
+        };
+
+        // Build a minimal ToolContext with just the config for completion lookups.
+        // CompletionProvider only uses ctx.config.
+        let ctx = ToolContext::new(
+            Arc::new(config.clone()),
+            Arc::clone(&self.validator),
+            Arc::clone(&self.sanitizer),
+            Arc::clone(&self.audit_logger),
+            Arc::clone(&self.history),
+            Arc::clone(&self.connection_pool),
+            Arc::clone(&self.execute_use_case),
+            Arc::clone(&self.rate_limiter),
+            Arc::clone(&self.session_manager),
+        );
+
+        let values = match &complete_params.reference {
+            CompletionRef::Prompt { name } => self
+                .completion_provider
+                .complete_prompt_argument(
+                    name,
+                    &complete_params.argument.name,
+                    &complete_params.argument.value,
+                    &ctx,
+                )
+                .unwrap_or_default(),
+            CompletionRef::Resource { uri } => self
+                .completion_provider
+                .complete_resource_argument(
+                    uri,
+                    &complete_params.argument.name,
+                    &complete_params.argument.value,
+                    &ctx,
+                )
+                .unwrap_or_default(),
+        };
+
+        let total = values.len();
+        let has_more = total > 100;
+        let values: Vec<String> = values.into_iter().take(100).collect();
+
+        JsonRpcResponse::success_or_serialize_error(
+            id,
+            &CompletionsCompleteResult {
+                completion: CompletionResult {
+                    values,
+                    total: Some(total),
+                    has_more: if has_more { Some(true) } else { None },
+                },
+            },
+        )
+    }
+
+    // ========================================================================
+    // Logging
+    // ========================================================================
+
+    fn handle_logging_set_level(
+        &self,
+        id: Option<Value>,
+        params: Option<Value>,
+    ) -> JsonRpcResponse {
+        let Some(params) = params else {
+            return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
+        };
+
+        let level_params: LoggingSetLevelParams = match serde_json::from_value(params) {
+            Ok(p) => p,
+            Err(e) => {
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params(format!("Invalid params: {e}")),
+                );
+            }
+        };
+
+        self.log_level
+            .store(level_params.level.severity(), Ordering::Relaxed);
+        info!(level = ?level_params.level, "MCP log level updated");
+
+        JsonRpcResponse::success(id, json!({}))
+    }
 }
 
 #[cfg(test)]
@@ -962,6 +1266,30 @@ mod tests {
         server.handle_initialize(Some(json!(1)), None).await;
 
         assert!(server.initialized.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn test_handle_initialize_includes_extensions() {
+        let server = create_test_server();
+        let response = server.handle_initialize(Some(json!(1)), None).await;
+        let result = response.result.unwrap();
+        let caps = &result["capabilities"];
+
+        // Completions and logging capabilities are present
+        assert!(caps["completions"].is_object());
+        assert!(caps["logging"].is_object());
+
+        // Extensions should contain tasks + output-pagination at minimum
+        let exts = &caps["extensions"];
+        assert!(exts.is_object(), "extensions should be an object");
+        assert!(
+            exts["io.modelcontextprotocol/tasks"].is_object(),
+            "tasks extension should be present"
+        );
+        assert!(
+            exts["com.mcp-ssh-bridge/output-pagination"].is_object(),
+            "output-pagination extension should be present"
+        );
     }
 
     #[test]

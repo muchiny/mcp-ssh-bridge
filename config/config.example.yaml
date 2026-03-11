@@ -248,6 +248,13 @@ limits:
   # Suggested poll interval for tasks in milliseconds
   # task_poll_interval_ms: 2000
 
+  # --- Server-to-Client Requests (Elicitation / Sampling) ---
+  # Timeout in seconds for reverse requests sent to the MCP client
+  # client_request_timeout_seconds: 120
+
+  # Maximum tokens for sampling createMessage requests
+  # sampling_max_tokens: 4096
+
 # =============================================================================
 # AUDIT LOGGING
 # =============================================================================

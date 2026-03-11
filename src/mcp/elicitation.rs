@@ -1,0 +1,195 @@
+//! MCP Elicitation Service
+//!
+//! Allows the server to ask the client for user input via `elicitation/create`.
+//!
+//! Use cases:
+//! - SSH host key verification (confirm unknown host key fingerprint)
+//! - Password/passphrase input (encrypted SSH key)
+//! - Confirmation of destructive operations
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use serde_json::Value;
+
+use super::client_requester::{ClientRequestError, ClientRequester};
+use super::protocol::{ElicitationCreateParams, ElicitationCreateResult};
+
+/// MCP Elicitation service (server asks client for user input).
+pub struct ElicitationService {
+    requester: Arc<ClientRequester>,
+    client_supports: AtomicBool,
+}
+
+impl ElicitationService {
+    /// Create a new elicitation service.
+    #[must_use]
+    pub fn new(requester: Arc<ClientRequester>) -> Self {
+        Self {
+            requester,
+            client_supports: AtomicBool::new(false),
+        }
+    }
+
+    /// Set whether the client supports elicitation (called during initialize).
+    pub fn set_supported(&self, supported: bool) {
+        self.client_supports.store(supported, Ordering::Relaxed);
+    }
+
+    /// Whether the client supports elicitation.
+    #[must_use]
+    pub fn is_supported(&self) -> bool {
+        self.client_supports.load(Ordering::Relaxed)
+    }
+
+    /// Send an elicitation request to the client.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ClientRequestError::NotSupported` if the client doesn't support
+    /// elicitation, or other errors on communication failure.
+    pub async fn elicit(
+        &self,
+        message: &str,
+        schema: Option<Value>,
+    ) -> Result<ElicitationCreateResult, ClientRequestError> {
+        if !self.is_supported() {
+            return Err(ClientRequestError::NotSupported);
+        }
+
+        let params = ElicitationCreateParams {
+            message: message.to_string(),
+            requested_schema: schema,
+            url: None,
+        };
+
+        let value = self
+            .requester
+            .send_request(
+                "elicitation/create",
+                serde_json::to_value(&params).map_err(|_| ClientRequestError::ChannelClosed)?,
+            )
+            .await?;
+
+        let result: ElicitationCreateResult =
+            serde_json::from_value(value).map_err(|_| ClientRequestError::RemoteError {
+                code: -1,
+                message: "Invalid elicitation response".to_string(),
+            })?;
+
+        match result.action.as_str() {
+            "decline" => Err(ClientRequestError::Declined),
+            "cancel" => Err(ClientRequestError::Cancelled),
+            _ => Ok(result),
+        }
+    }
+
+    /// URL-mode elicitation (SEP-1036).
+    ///
+    /// Asks the client to open a URL in the user's browser.
+    /// Only `https://` URLs are allowed for security.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the URL scheme is not `https://` or the client
+    /// doesn't support elicitation.
+    pub async fn elicit_url(
+        &self,
+        message: &str,
+        url: &str,
+    ) -> Result<ElicitationCreateResult, ClientRequestError> {
+        if !self.is_supported() {
+            return Err(ClientRequestError::NotSupported);
+        }
+
+        // Security: only allow https URLs
+        if !url.starts_with("https://") {
+            return Err(ClientRequestError::RemoteError {
+                code: -1,
+                message: "Only https:// URLs are allowed for elicitation".to_string(),
+            });
+        }
+
+        let params = ElicitationCreateParams {
+            message: message.to_string(),
+            requested_schema: None,
+            url: Some(url.to_string()),
+        };
+
+        let value = self
+            .requester
+            .send_request(
+                "elicitation/create",
+                serde_json::to_value(&params).map_err(|_| ClientRequestError::ChannelClosed)?,
+            )
+            .await?;
+
+        let result: ElicitationCreateResult =
+            serde_json::from_value(value).map_err(|_| ClientRequestError::RemoteError {
+                code: -1,
+                message: "Invalid elicitation response".to_string(),
+            })?;
+
+        match result.action.as_str() {
+            "decline" => Err(ClientRequestError::Declined),
+            "cancel" => Err(ClientRequestError::Cancelled),
+            _ => Ok(result),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mcp::pending_requests::PendingRequests;
+    use std::time::Duration;
+    use tokio::sync::mpsc;
+
+    fn create_test_service() -> (
+        ElicitationService,
+        mpsc::Receiver<super::super::protocol::WriterMessage>,
+    ) {
+        let (tx, rx) = mpsc::channel(10);
+        let pending = Arc::new(PendingRequests::new());
+        let requester = Arc::new(ClientRequester::new(tx, pending, Duration::from_secs(5)));
+        (ElicitationService::new(requester), rx)
+    }
+
+    #[tokio::test]
+    async fn test_elicit_not_supported() {
+        let (service, _rx) = create_test_service();
+        // Default: not supported
+        let result = service.elicit("test", None).await;
+        assert!(matches!(result, Err(ClientRequestError::NotSupported)));
+    }
+
+    #[tokio::test]
+    async fn test_elicit_url_rejects_non_https() {
+        let (service, _rx) = create_test_service();
+        service.set_supported(true);
+        let result = service.elicit_url("test", "http://evil.com").await;
+        assert!(matches!(
+            result,
+            Err(ClientRequestError::RemoteError { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_elicit_url_rejects_javascript() {
+        let (service, _rx) = create_test_service();
+        service.set_supported(true);
+        let result = service.elicit_url("test", "javascript:alert(1)").await;
+        assert!(matches!(
+            result,
+            Err(ClientRequestError::RemoteError { .. })
+        ));
+    }
+
+    #[test]
+    fn test_set_supported() {
+        let (service, _rx) = create_test_service();
+        assert!(!service.is_supported());
+        service.set_supported(true);
+        assert!(service.is_supported());
+    }
+}

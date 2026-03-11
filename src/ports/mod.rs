@@ -3,6 +3,7 @@
 //! This module contains the trait definitions (ports) that define
 //! the boundaries between the domain logic and external adapters.
 
+pub mod completions;
 mod connector;
 mod prompts;
 pub mod protocol;
@@ -10,6 +11,7 @@ mod resources;
 mod ssh;
 mod tools;
 
+pub use completions::CompletionProvider;
 pub use connector::{SshClientTrait, SshConnector};
 pub use prompts::PromptHandler;
 pub use protocol::{

@@ -98,6 +98,18 @@ pub enum BridgeError {
     #[error("SFTP error: {reason}")]
     Sftp { reason: String },
 
+    // Client request errors (elicitation/sampling)
+    #[error("Client request error: {reason}")]
+    ClientRequest { reason: String },
+
+    // Elicitation errors
+    #[error("Elicitation error: {reason}")]
+    Elicitation { reason: String },
+
+    // Sampling errors
+    #[error("Sampling error: {reason}")]
+    Sampling { reason: String },
+
     // IO errors
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -452,6 +464,15 @@ mod tests {
             },
             BridgeError::Sftp {
                 reason: "bb".to_string(),
+            },
+            BridgeError::ClientRequest {
+                reason: "timeout".to_string(),
+            },
+            BridgeError::Elicitation {
+                reason: "declined".to_string(),
+            },
+            BridgeError::Sampling {
+                reason: "not supported".to_string(),
             },
         ];
 
