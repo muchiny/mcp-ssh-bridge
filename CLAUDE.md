@@ -101,6 +101,7 @@ RUSTSEC-2023-0071 (Marvin Attack on RSA) ignored — transitive dep from russh, 
 ## Path-Scoped Rules
 
 Detailed guidance is loaded automatically via `.claude/rules/`:
+
 - `tool-handlers.md` — Adding tools, handler pattern, clippy pitfalls
 - `domain-builders.md` — Domain layer purity, builder conventions
 - `security.md` — Security model, blacklist, sanitization
