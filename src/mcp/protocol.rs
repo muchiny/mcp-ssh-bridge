@@ -267,7 +267,9 @@ pub struct TaskRequest {
 }
 
 // Contract types re-exported from ports (canonical location: crate::ports::protocol)
-pub use crate::ports::protocol::{EmbeddedResource, ToolAnnotations, ToolCallResult, ToolContent};
+pub use crate::ports::protocol::{
+    EmbeddedResource, TaskInfo, TaskStatus, ToolAnnotations, ToolCallResult, ToolContent,
+};
 
 // ============================================================================
 // MCP Prompts Types
@@ -341,31 +343,7 @@ pub struct ResourcesCapability {
 // MCP Tasks Types (MCP 2025-11-25+, experimental)
 // ============================================================================
 
-/// Task lifecycle status values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TaskStatus {
-    Working,
-    Completed,
-    Failed,
-    Cancelled,
-}
-
-/// Task metadata returned by task operations.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskInfo {
-    pub task_id: String,
-    pub status: TaskStatus,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status_message: Option<String>,
-    pub created_at: String,
-    pub last_updated_at: String,
-    /// Time-to-live in milliseconds before the task expires.
-    pub ttl: u64,
-    /// Suggested poll interval in milliseconds.
-    pub poll_interval: u64,
-}
+// TaskStatus and TaskInfo re-exported from ports::protocol above.
 
 /// Response for a task-augmented `tools/call` request.
 #[derive(Debug, Clone, Serialize)]

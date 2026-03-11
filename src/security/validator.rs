@@ -44,6 +44,33 @@ impl CompiledPatterns {
 /// Compiled security rules for command validation
 ///
 /// Supports hot-reload of patterns via the `reload()` method.
+///
+/// # Examples
+///
+/// ```
+/// use mcp_ssh_bridge::config::{SecurityConfig, SecurityMode, SanitizeConfig};
+/// use mcp_ssh_bridge::security::CommandValidator;
+///
+/// // Permissive mode: allow everything except blacklisted patterns
+/// let config = SecurityConfig {
+///     mode: SecurityMode::Permissive,
+///     blacklist: vec![r"rm\s+-rf".to_string()],
+///     ..Default::default()
+/// };
+/// let validator = CommandValidator::new(&config);
+/// assert!(validator.validate("ls -la").is_ok());
+/// assert!(validator.validate("rm -rf /").is_err());
+///
+/// // Strict mode: only whitelisted commands are allowed
+/// let strict = SecurityConfig {
+///     mode: SecurityMode::Strict,
+///     whitelist: vec![r"^ls\b".to_string(), r"^pwd$".to_string()],
+///     ..Default::default()
+/// };
+/// let strict_validator = CommandValidator::new(&strict);
+/// assert!(strict_validator.validate("ls -la").is_ok());
+/// assert!(strict_validator.validate("cat /etc/passwd").is_err());
+/// ```
 pub struct CommandValidator {
     patterns: RwLock<CompiledPatterns>,
 }

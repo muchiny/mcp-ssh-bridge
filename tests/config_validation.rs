@@ -9,11 +9,16 @@ use std::path::Path;
 use mcp_ssh_bridge::config::{Config, HostKeyVerification, OsType};
 use mcp_ssh_bridge::error::BridgeError;
 
-/// Load config from a YAML string via a temp file
+/// Load config from a YAML string via a temp file with secure permissions
 fn load_yaml(yaml: &str) -> Result<Config, BridgeError> {
     let mut file = tempfile::NamedTempFile::new().unwrap();
     file.write_all(yaml.as_bytes()).unwrap();
     file.flush().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(file.path(), std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
     mcp_ssh_bridge::config::load_config(file.path())
 }
 

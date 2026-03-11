@@ -560,7 +560,12 @@ impl McpServer {
         };
 
         // Get the initial task info for the response
-        let task_info = self.task_store.get_task(&task_id).await.unwrap();
+        let Some(task_info) = self.task_store.get_task(&task_id).await else {
+            return JsonRpcResponse::error(
+                id,
+                JsonRpcError::internal_error("Task created but expired immediately (TTL too low)"),
+            );
+        };
 
         // Clone dependencies for the background worker
         let task_store = Arc::clone(&self.task_store);

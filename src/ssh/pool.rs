@@ -231,11 +231,20 @@ impl ConnectionPool {
         let max_idle = Duration::from_secs(self.config.max_idle_seconds);
         let max_age = Duration::from_secs(self.config.max_age_seconds);
 
+        // Collect expired connections so we can close them properly
+        let mut expired: Vec<(String, PooledConnection)> = Vec::new();
+
         for (host_name, host_connections) in connections.iter_mut() {
             let before = host_connections.len();
-
-            // Retain only valid connections (expired ones get dropped automatically)
-            host_connections.retain(|conn| conn.idle_time() <= max_idle && conn.age() <= max_age);
+            let mut i = 0;
+            while i < host_connections.len() {
+                if host_connections[i].idle_time() > max_idle || host_connections[i].age() > max_age
+                {
+                    expired.push((host_name.clone(), host_connections.swap_remove(i)));
+                } else {
+                    i += 1;
+                }
+            }
 
             let after = host_connections.len();
             if before != after {
@@ -250,6 +259,14 @@ impl ConnectionPool {
 
         // Remove empty entries
         connections.retain(|_, v| !v.is_empty());
+        drop(connections); // Release lock before closing connections
+
+        // Close SSH connections properly (sends SSH DISCONNECT)
+        for (host_name, conn) in expired {
+            if let Err(e) = conn.client.close().await {
+                warn!(host = %host_name, error = %e, "Failed to close expired connection");
+            }
+        }
     }
 
     /// Actively check all pooled connections and remove dead ones

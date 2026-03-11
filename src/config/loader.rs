@@ -20,20 +20,23 @@ pub fn load_config(path: &Path) -> Result<Config> {
         });
     }
 
-    // Warn if config file has overly permissive permissions (may contain secrets)
+    // Reject config file with overly permissive permissions (may contain secrets)
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
         if let Ok(metadata) = std::fs::metadata(path) {
             let mode = metadata.mode() & 0o777;
             if mode & 0o037 != 0 {
-                warn!(
-                    config_path = %path.display(),
-                    permissions = format!("{mode:04o}"),
-                    "Config file may contain secrets and has permissive permissions. \
-                     Consider: chmod 640 {}",
-                    path.display()
-                );
+                return Err(BridgeError::ConfigInvalid {
+                    field: "file_permissions".to_string(),
+                    reason: format!(
+                        "Config file '{}' has permissions {mode:04o}; \
+                         expected no group-write/other access (max 0640). \
+                         Fix with: chmod 640 {}",
+                        path.display(),
+                        path.display()
+                    ),
+                });
             }
         }
     }
@@ -189,6 +192,22 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    /// Create a `NamedTempFile` with secure permissions (0o600) for config tests.
+    #[cfg(unix)]
+    fn secure_temp_file() -> NamedTempFile {
+        let file = NamedTempFile::new().unwrap();
+        std::fs::set_permissions(file.path(), std::fs::Permissions::from_mode(0o600)).unwrap();
+        file
+    }
+
+    #[cfg(not(unix))]
+    fn secure_temp_file() -> NamedTempFile {
+        NamedTempFile::new().unwrap()
+    }
+
     #[test]
     fn test_config_not_found() {
         let result = load_config(Path::new("/nonexistent/config.yaml"));
@@ -203,13 +222,38 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
+    fn test_permissive_config_permissions_rejected() {
+        let yaml = r#"
+hosts:
+  test:
+    hostname: "10.0.0.1"
+    user: testuser
+    auth:
+      type: agent
+security:
+  mode: permissive
+"#;
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(yaml.as_bytes()).unwrap();
+        // Set world-readable permissions
+        std::fs::set_permissions(file.path(), std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let result = load_config(file.path());
+        assert!(
+            matches!(result, Err(BridgeError::ConfigInvalid { field, .. }) if field == "file_permissions"),
+            "Config with world-readable permissions should be rejected"
+        );
+    }
+
+    #[test]
     fn test_empty_hosts_rejected() {
         let yaml = r#"
 hosts: {}
 security:
   mode: permissive
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -228,7 +272,7 @@ hosts:
     auth:
       type: agent
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -248,7 +292,7 @@ hosts:
     auth:
       type: agent
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -273,7 +317,7 @@ security:
     - "^valid$"
     - "[invalid(regex"
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -297,7 +341,7 @@ security:
   blacklist:
     - "[unclosed"
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -320,7 +364,7 @@ security:
   sanitize_patterns:
     - "(unmatched"
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -341,7 +385,7 @@ hosts:
       type: key
       path: /nonexistent/path/to/key
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -360,7 +404,7 @@ hosts:
 security:
   mode: permissive
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -382,7 +426,7 @@ hosts:
 security:
   mode: permissive
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -408,7 +452,7 @@ security:
   sanitize_patterns:
     - "password=\\S+"
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -433,7 +477,7 @@ limits:
   max_output_bytes: 1048576
   max_concurrent_commands: 10
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -467,7 +511,7 @@ hosts:
     auth:
       type: agent
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -504,7 +548,7 @@ hosts:
     auth:
       type: agent
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -525,7 +569,7 @@ hosts:
     hostname: "192.168.1.1"
     user: [invalid yaml here
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -546,7 +590,7 @@ sessions:
   idle_timeout_seconds: 600
   max_age_seconds: 7200
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -571,7 +615,7 @@ audit:
   max_size_mb: 50
   retain_days: 7
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -603,7 +647,7 @@ security:
         replacement: "[MY_SECRET]"
         description: "Custom secret pattern"
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -632,7 +676,7 @@ hosts:
       port: 1080
       version: socks5
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());
@@ -658,7 +702,7 @@ hosts:
     socks_proxy:
       hostname: proxy.corp.com
 "#;
-        let mut file = NamedTempFile::new().unwrap();
+        let mut file = secure_temp_file();
         file.write_all(yaml.as_bytes()).unwrap();
 
         let result = load_config(file.path());

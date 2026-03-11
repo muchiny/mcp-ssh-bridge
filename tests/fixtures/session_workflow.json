@@ -1,0 +1,37 @@
+[
+  {
+    "command": "echo ready",
+    "stdout": "ready\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 5
+  },
+  {
+    "command": "cd /var/log && pwd",
+    "stdout": "/var/log\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 8
+  },
+  {
+    "command": "ls -1 *.log 2>/dev/null | head -5",
+    "stdout": "auth.log\ndpkg.log\nkern.log\nsyslog\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 15
+  },
+  {
+    "command": "wc -l syslog",
+    "stdout": "14523 syslog\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 20
+  },
+  {
+    "command": "tail -3 syslog",
+    "stdout": "Mar 11 10:14:58 prod-server systemd[1]: Started Session 42 of User deploy.\nMar 11 10:15:00 prod-server CRON[12345]: (root) CMD (/usr/bin/health-check)\nMar 11 10:15:01 prod-server health-check[12346]: OK - all services healthy\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 10
+  }
+]

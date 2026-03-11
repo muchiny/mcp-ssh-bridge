@@ -7,6 +7,24 @@ use tracing::{debug, warn};
 use crate::error::BridgeError;
 
 /// Configuration for retry behavior
+///
+/// # Examples
+///
+/// ```
+/// use mcp_ssh_bridge::ssh::RetryConfig;
+///
+/// // Default: 3 attempts, 100ms initial delay, exponential backoff
+/// let config = RetryConfig::default();
+/// assert_eq!(config.max_attempts, 3);
+///
+/// // No retries (single attempt)
+/// let no_retry = RetryConfig::no_retry();
+/// assert_eq!(no_retry.max_attempts, 1);
+///
+/// // Custom retry count
+/// let custom = RetryConfig::with_max_attempts(5);
+/// assert_eq!(custom.max_attempts, 5);
+/// ```
 #[derive(Debug, Clone)]
 pub struct RetryConfig {
     /// Maximum number of retry attempts

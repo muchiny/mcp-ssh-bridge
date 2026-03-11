@@ -12,7 +12,7 @@ use serde_json::Value;
 use tokio::sync::{Notify, RwLock};
 use tokio_util::sync::CancellationToken;
 
-use crate::mcp::protocol::{TaskInfo, TaskStatus};
+use crate::ports::protocol::{TaskInfo, TaskStatus};
 
 /// Internal task entry stored in the registry.
 struct TaskEntry {

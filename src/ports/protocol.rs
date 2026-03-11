@@ -252,6 +252,36 @@ pub struct ResourceContent {
     pub text: Option<String>,
 }
 
+// ============================================================================
+// Task Contract Types (MCP 2025-11-25+)
+// ============================================================================
+
+/// Task lifecycle status values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskStatus {
+    Working,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+/// Task metadata returned by task operations.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskInfo {
+    pub task_id: String,
+    pub status: TaskStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_message: Option<String>,
+    pub created_at: String,
+    pub last_updated_at: String,
+    /// Time-to-live in milliseconds before the task expires.
+    pub ttl: u64,
+    /// Suggested poll interval in milliseconds.
+    pub poll_interval: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -557,5 +587,68 @@ mod tests {
         let json = serde_json::to_value(&content).unwrap();
         let obj = json.as_object().unwrap();
         assert_eq!(obj.len(), 1); // Only uri
+    }
+
+    // ========================================================================
+    // TaskStatus / TaskInfo tests
+    // ========================================================================
+
+    #[test]
+    fn test_task_status_serializes_lowercase() {
+        assert_eq!(
+            serde_json::to_value(TaskStatus::Working).unwrap(),
+            "working"
+        );
+        assert_eq!(
+            serde_json::to_value(TaskStatus::Completed).unwrap(),
+            "completed"
+        );
+        assert_eq!(serde_json::to_value(TaskStatus::Failed).unwrap(), "failed");
+        assert_eq!(
+            serde_json::to_value(TaskStatus::Cancelled).unwrap(),
+            "cancelled"
+        );
+    }
+
+    #[test]
+    fn test_task_info_serialization_camel_case() {
+        let info = TaskInfo {
+            task_id: "abc-123".to_string(),
+            status: TaskStatus::Working,
+            status_message: Some("In progress".to_string()),
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            last_updated_at: "2025-01-01T00:00:01Z".to_string(),
+            ttl: 60000,
+            poll_interval: 1000,
+        };
+        let json = serde_json::to_value(&info).unwrap();
+
+        assert_eq!(json["taskId"], "abc-123");
+        assert_eq!(json["status"], "working");
+        assert_eq!(json["statusMessage"], "In progress");
+        assert_eq!(json["createdAt"], "2025-01-01T00:00:00Z");
+        assert_eq!(json["lastUpdatedAt"], "2025-01-01T00:00:01Z");
+        assert_eq!(json["ttl"], 60000);
+        assert_eq!(json["pollInterval"], 1000);
+
+        // snake_case keys must NOT be present
+        assert!(json.get("task_id").is_none());
+        assert!(json.get("status_message").is_none());
+        assert!(json.get("created_at").is_none());
+    }
+
+    #[test]
+    fn test_task_info_skip_none_status_message() {
+        let info = TaskInfo {
+            task_id: "x".to_string(),
+            status: TaskStatus::Completed,
+            status_message: None,
+            created_at: "t".to_string(),
+            last_updated_at: "t".to_string(),
+            ttl: 1000,
+            poll_interval: 500,
+        };
+        let json_str = serde_json::to_string(&info).unwrap();
+        assert!(!json_str.contains("statusMessage"));
     }
 }

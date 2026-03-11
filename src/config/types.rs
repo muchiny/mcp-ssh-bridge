@@ -389,7 +389,7 @@ pub struct LimitsConfig {
     #[serde(default = "default_retry_initial_delay_ms")]
     pub retry_initial_delay_ms: u64,
 
-    /// Rate limit: maximum requests per second per host (0 = disabled)
+    /// Rate limit: maximum requests per second per host (0 = disabled, default: 10)
     #[serde(default = "default_rate_limit")]
     pub rate_limit_per_second: u32,
 
@@ -546,7 +546,7 @@ const fn default_retry_initial_delay_ms() -> u64 {
 }
 
 const fn default_rate_limit() -> u32 {
-    0 // Disabled by default
+    10 // 10 requests/second per host
 }
 
 const fn default_max_output_chars() -> usize {
@@ -929,7 +929,7 @@ mod tests {
         assert_eq!(config.keepalive_interval_seconds, 30);
         assert_eq!(config.retry_attempts, 3);
         assert_eq!(config.retry_initial_delay_ms, 100);
-        assert_eq!(config.rate_limit_per_second, 0); // Disabled by default
+        assert_eq!(config.rate_limit_per_second, 10); // 10 req/s per host
         assert_eq!(config.max_output_chars, 20_000);
         assert_eq!(config.output_cache_ttl_seconds, 300);
         assert_eq!(config.output_cache_max_entries, 100);

@@ -1,0 +1,37 @@
+[
+  {
+    "command": "whoami",
+    "stdout": "deploy\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 12
+  },
+  {
+    "command": "pwd",
+    "stdout": "/home/deploy\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 8
+  },
+  {
+    "command": "ls -la /tmp",
+    "stdout": "total 32\ndrwxrwxrwt 8 root root 4096 Mar 11 10:00 .\ndrwxr-xr-x 1 root root 4096 Mar 11 09:00 ..\n-rw-r--r-- 1 deploy deploy  128 Mar 11 10:00 data.txt\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 15
+  },
+  {
+    "command": "uname -a",
+    "stdout": "Linux prod-server 5.15.0-91-generic #101-Ubuntu SMP x86_64 GNU/Linux\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 10
+  },
+  {
+    "command": "cat /nonexistent",
+    "stdout": "",
+    "stderr": "cat: /nonexistent: No such file or directory\n",
+    "exit_code": 1,
+    "duration_ms": 5
+  }
+]

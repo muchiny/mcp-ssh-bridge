@@ -1,6 +1,6 @@
 # MCP SSH Bridge - Development Makefile
 
-.PHONY: all build release check test lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline
+.PHONY: all build release check test lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline careful bench bench-save bench-compare
 
 # Default target
 all: check lint test
@@ -99,6 +99,22 @@ mutants-db:
 # Mutation testing (full project - slow)
 mutants-full:
 	@command -v cargo-mutants >/dev/null 2>&1 && cargo mutants || echo "cargo-mutants not installed, run: cargo install --locked cargo-mutants"
+
+# Extra runtime checks on dependencies (requires cargo-careful + nightly)
+careful:
+	@command -v cargo-careful >/dev/null 2>&1 && cargo +nightly careful test || echo "cargo-careful not installed, run: cargo install cargo-careful"
+
+# Run benchmarks
+bench:
+	cargo bench
+
+# Save benchmark baseline for comparison
+bench-save:
+	cargo bench -- --save-baseline main
+
+# Compare benchmarks against saved baseline
+bench-compare:
+	cargo bench -- --baseline main
 
 # Run adversarial security test suite
 security-tests:
@@ -208,6 +224,10 @@ help:
 	@echo "  mutants-db       - Mutation testing (domain/database)"
 	@echo "  mutants-full     - Mutation testing (full project)"
 	@echo "  semver-checks    - Check for semver-breaking changes"
+	@echo "  careful          - Extra runtime checks (cargo-careful + nightly)"
+	@echo "  bench            - Run benchmarks"
+	@echo "  bench-save       - Save benchmark baseline"
+	@echo "  bench-compare    - Compare against saved baseline"
 	@echo ""
 	@echo "Docker:"
 	@echo "  docker-build     - Build Docker image locally"

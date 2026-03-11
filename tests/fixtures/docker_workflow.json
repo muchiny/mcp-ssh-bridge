@@ -1,0 +1,37 @@
+[
+  {
+    "command": "command -v docker || command -v podman",
+    "stdout": "/usr/bin/docker\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 8
+  },
+  {
+    "command": "docker ps --format '{{.ID}}\\t{{.Names}}\\t{{.Status}}\\t{{.Image}}'",
+    "stdout": "abc123def456\tweb-app\tUp 3 hours\tnginx:latest\n789ghi012jkl\tapi-server\tUp 3 hours\tnode:18-alpine\n345mno678pqr\tredis-cache\tUp 3 hours\tredis:7\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 45
+  },
+  {
+    "command": "docker logs --tail 20 web-app",
+    "stdout": "2024-03-11 10:00:01 [notice] nginx/1.25.3 started\n2024-03-11 10:00:02 [info] Using configuration /etc/nginx/nginx.conf\n2024-03-11 10:15:30 192.168.1.100 - - \"GET / HTTP/1.1\" 200 612\n2024-03-11 10:15:31 192.168.1.100 - - \"GET /favicon.ico HTTP/1.1\" 404 153\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 30
+  },
+  {
+    "command": "docker inspect --format '{{.State.Status}} {{.State.StartedAt}}' web-app",
+    "stdout": "running 2024-03-11T07:00:00.123456789Z\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 20
+  },
+  {
+    "command": "docker stats --no-stream --format '{{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}'",
+    "stdout": "web-app\t0.15%\t32MiB / 512MiB\napi-server\t2.30%\t128MiB / 1GiB\nredis-cache\t0.05%\t8MiB / 256MiB\n",
+    "stderr": "",
+    "exit_code": 0,
+    "duration_ms": 1200
+  }
+]

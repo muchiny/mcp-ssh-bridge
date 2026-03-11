@@ -76,8 +76,14 @@ impl ToolRegistry {
                 Tool {
                     name: schema.name.to_string(),
                     description: schema.description.to_string(),
-                    input_schema: serde_json::from_str(schema.input_schema)
-                        .unwrap_or_else(|_| json!({})),
+                    input_schema: serde_json::from_str(schema.input_schema).unwrap_or_else(|e| {
+                        tracing::error!(
+                            tool = schema.name,
+                            error = %e,
+                            "Invalid tool input schema JSON, falling back to empty schema"
+                        );
+                        json!({})
+                    }),
                     annotations: if annotations.is_empty() {
                         None
                     } else {

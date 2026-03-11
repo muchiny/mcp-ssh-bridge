@@ -15,6 +15,24 @@ const PARALLEL_THRESHOLD: usize = 512 * 1024; // 512 KB
 /// 1. `RegexSet` for O(n) detection of any matches
 /// 2. `Cow<str>` for zero-copy when no matches found
 /// 3. Aho-Corasick for literal pattern matching (future optimization)
+///
+/// # Examples
+///
+/// ```
+/// use mcp_ssh_bridge::config::SanitizeConfig;
+/// use mcp_ssh_bridge::security::Sanitizer;
+///
+/// let sanitizer = Sanitizer::from_config(&SanitizeConfig::default());
+///
+/// // Clean output passes through unchanged
+/// let clean = sanitizer.sanitize("Server started on port 8080");
+/// assert_eq!(clean.as_ref(), "Server started on port 8080");
+///
+/// // Sensitive patterns are masked
+/// let sensitive = sanitizer.sanitize("token: ghp_abc123def456ghi789jkl012mno345pqr678st");
+/// assert!(!sensitive.contains("ghp_abc123"));
+/// assert!(sensitive.contains("[GITHUB_PAT_REDACTED]"));
+/// ```
 pub struct Sanitizer {
     /// Compiled regex patterns with their replacements
     patterns: Vec<SanitizePattern>,

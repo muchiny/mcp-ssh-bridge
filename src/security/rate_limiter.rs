@@ -49,6 +49,25 @@ impl TokenBucket {
 }
 
 /// Rate limiter with per-host token buckets
+///
+/// # Examples
+///
+/// ```
+/// use mcp_ssh_bridge::security::RateLimiter;
+///
+/// // Allow 5 requests per second per host
+/// let limiter = RateLimiter::new(5);
+/// assert!(limiter.is_enabled());
+///
+/// // Each host has its own token bucket
+/// assert!(limiter.check("server-a").is_ok());
+/// assert!(limiter.check("server-b").is_ok());
+///
+/// // Disabled limiter (0 = unlimited)
+/// let unlimited = RateLimiter::new(0);
+/// assert!(!unlimited.is_enabled());
+/// assert!(unlimited.check("any-host").is_ok());
+/// ```
 pub struct RateLimiter {
     buckets: Mutex<HashMap<String, TokenBucket>>,
     tokens_per_second: u32,

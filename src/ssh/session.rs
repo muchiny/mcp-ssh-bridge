@@ -113,42 +113,22 @@ impl SessionManager {
             SshClient::connect(host_name, host_config, limits).await?
         };
 
-        // Open interactive shell channel
-        let mut channel = client.open_shell().await?;
-
-        // Derive the effective shell for this host
-        let shell = host_config.effective_shell();
-
-        // Initialize: disable echo and prompts (shell-aware)
-        let init_marker = format!("{MARKER_PREFIX}INIT_{session_id}---");
-        let init_cmd = Self::build_init_command(shell, &init_marker);
-
-        channel
-            .data(init_cmd.as_bytes())
-            .await
-            .map_err(|e| BridgeError::SshExec {
-                reason: format!("Failed to initialize shell: {e}"),
-            })?;
-
-        // Wait for init marker (consumes MOTD, bashrc output, etc.)
-        Self::read_until_marker(&mut channel, &init_marker, limits.command_timeout_seconds).await?;
-
-        // Get initial working directory (shell-aware)
-        let cwd_marker = format!("{MARKER_PREFIX}CWD_{session_id}---");
-        let cwd_cmd = Self::build_cwd_command(shell, &cwd_marker);
-
-        channel
-            .data(cwd_cmd.as_bytes())
-            .await
-            .map_err(|e| BridgeError::SshExec {
-                reason: format!("Failed to get initial cwd: {e}"),
-            })?;
-
-        let cwd_output =
-            Self::read_until_marker(&mut channel, &cwd_marker, limits.command_timeout_seconds)
-                .await?;
-
-        let cwd = cwd_output.lines().last().unwrap_or("/").trim().to_string();
+        // Initialize the shell session. If anything fails after connect,
+        // close the SSH connection properly (sends SSH DISCONNECT).
+        let (channel, shell, cwd) =
+            match Self::init_shell(&client, host_config, limits, &session_id).await {
+                Ok(result) => result,
+                Err(e) => {
+                    if let Err(close_err) = client.close().await {
+                        warn!(
+                            host = %host_name,
+                            error = %close_err,
+                            "Failed to close client after session init failure"
+                        );
+                    }
+                    return Err(e);
+                }
+            };
 
         let now = Instant::now();
         let info = SessionInfo {
@@ -329,23 +309,88 @@ impl SessionManager {
         let max_idle = Duration::from_secs(self.config.idle_timeout_seconds);
         let max_age = Duration::from_secs(self.config.max_age_seconds);
 
-        let before = sessions.len();
-        sessions.retain(|id, s| {
-            let keep = s.last_used.elapsed() <= max_idle && s.created_at.elapsed() <= max_age;
-            if !keep {
-                debug!(session_id = %id, host = %s.host, "Cleaning up expired session");
-            }
-            keep
-        });
-        let after = sessions.len();
+        // Collect expired session IDs
+        let expired_ids: Vec<String> = sessions
+            .iter()
+            .filter(|(_, s)| s.last_used.elapsed() > max_idle || s.created_at.elapsed() > max_age)
+            .map(|(id, _)| id.clone())
+            .collect();
 
-        if before != after {
-            info!(
-                expired = before - after,
-                remaining = after,
-                "Cleaned up expired sessions"
-            );
+        if expired_ids.is_empty() {
+            return;
         }
+
+        // Remove expired sessions from the map
+        let expired: Vec<_> = expired_ids
+            .iter()
+            .filter_map(|id| {
+                debug!(session_id = %id, "Cleaning up expired session");
+                sessions.remove(id)
+            })
+            .collect();
+
+        let remaining = sessions.len();
+        drop(sessions); // Release lock before closing connections
+
+        // Close SSH connections properly (sends SSH DISCONNECT)
+        for session in expired {
+            if let Err(e) = session.client.close().await {
+                warn!(session_id = %session.id, error = %e, "Failed to close expired session");
+            }
+        }
+
+        info!(
+            expired = expired_ids.len(),
+            remaining = remaining,
+            "Cleaned up expired sessions"
+        );
+    }
+
+    /// Build the shell initialization command that disables echo and prompts.
+    /// Initialize a shell session: open channel, disable echo/prompts, get CWD.
+    ///
+    /// Extracted to allow the caller to close the SSH client on error.
+    async fn init_shell(
+        client: &SshClient,
+        host_config: &HostConfig,
+        limits: &LimitsConfig,
+        session_id: &str,
+    ) -> Result<(russh::Channel<russh::client::Msg>, ShellType, String)> {
+        let mut channel = client.open_shell().await?;
+        let shell = host_config.effective_shell();
+
+        // Initialize: disable echo and prompts (shell-aware)
+        let init_marker = format!("{MARKER_PREFIX}INIT_{session_id}---");
+        let init_cmd = Self::build_init_command(shell, &init_marker);
+
+        channel
+            .data(init_cmd.as_bytes())
+            .await
+            .map_err(|e| BridgeError::SshExec {
+                reason: format!("Failed to initialize shell: {e}"),
+            })?;
+
+        // Wait for init marker (consumes MOTD, bashrc output, etc.)
+        Self::read_until_marker(&mut channel, &init_marker, limits.command_timeout_seconds).await?;
+
+        // Get initial working directory (shell-aware)
+        let cwd_marker = format!("{MARKER_PREFIX}CWD_{session_id}---");
+        let cwd_cmd = Self::build_cwd_command(shell, &cwd_marker);
+
+        channel
+            .data(cwd_cmd.as_bytes())
+            .await
+            .map_err(|e| BridgeError::SshExec {
+                reason: format!("Failed to get initial cwd: {e}"),
+            })?;
+
+        let cwd_output =
+            Self::read_until_marker(&mut channel, &cwd_marker, limits.command_timeout_seconds)
+                .await?;
+
+        let cwd = cwd_output.lines().last().unwrap_or("/").trim().to_string();
+
+        Ok((channel, shell, cwd))
     }
 
     /// Build the shell initialization command that disables echo and prompts.

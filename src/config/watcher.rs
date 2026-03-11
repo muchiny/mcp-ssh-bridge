@@ -348,6 +348,11 @@ mod tests {
         let mut file = fs::File::create(path).unwrap();
         file.write_all(yaml.as_bytes()).unwrap();
         file.flush().unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
     }
 
     #[tokio::test]
