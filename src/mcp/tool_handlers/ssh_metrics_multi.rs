@@ -639,6 +639,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::result_large_err)]
     fn test_parallel_parsing() {
         // Simulate multiple host outputs
         let raw_outputs: Vec<std::result::Result<RawHostOutput, HostMetricsResult>> = (0..10)

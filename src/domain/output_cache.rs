@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::RwLock;
 
+use super::output_truncator::ceil_char_boundary;
+
 /// Cached output entry with creation timestamp for TTL expiration.
 struct CacheEntry {
     output: String,
@@ -151,18 +153,6 @@ impl OutputCache {
     pub async fn is_empty(&self) -> bool {
         self.entries.read().await.is_empty()
     }
-}
-
-/// Find the smallest index >= `index` that is a valid UTF-8 char boundary.
-fn ceil_char_boundary(s: &str, index: usize) -> usize {
-    if index >= s.len() {
-        return s.len();
-    }
-    let mut i = index;
-    while i < s.len() && !s.is_char_boundary(i) {
-        i += 1;
-    }
-    i
 }
 
 #[cfg(test)]
