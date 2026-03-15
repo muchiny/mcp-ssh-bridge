@@ -217,4 +217,68 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    #[tokio::test]
+    async fn test_list_on_empty_registry() {
+        let registry = ResourceRegistry::new();
+        let ctx = create_test_context();
+
+        let resources = registry.list(&ctx).await.unwrap();
+        assert!(resources.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_read_on_empty_registry() {
+        let registry = ResourceRegistry::new();
+        let ctx = create_test_context();
+
+        let result = registry.read("metrics://server1/cpu", &ctx).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(msg) => {
+                assert!(msg.contains("metrics"));
+            }
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
+
+    #[test]
+    fn test_register_multiple_handlers() {
+        use super::super::resources::{FileResourceHandler, LogResourceHandler};
+
+        let mut registry = ResourceRegistry::new();
+        assert!(registry.is_empty());
+
+        registry.register(Arc::new(FileResourceHandler));
+        assert_eq!(registry.len(), 1);
+
+        registry.register(Arc::new(LogResourceHandler));
+        assert_eq!(registry.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_read_history_scheme_works() {
+        let registry = create_default_resource_registry();
+        let ctx = create_test_context();
+
+        let result = registry.read("history://recent", &ctx).await;
+        assert!(result.is_ok());
+        let contents = result.unwrap();
+        assert!(!contents.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_read_unsupported_scheme_error_message_format() {
+        let registry = create_default_resource_registry();
+        let ctx = create_test_context();
+
+        let result = registry.read("custom://data", &ctx).await;
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(msg) => {
+                assert!(msg.contains("Unsupported resource scheme"));
+                assert!(msg.contains("custom"));
+            }
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
 }

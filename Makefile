@@ -1,6 +1,6 @@
 # MCP SSH Bridge - Development Makefile
 
-.PHONY: all build release check test lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline careful bench bench-save bench-compare
+.PHONY: all build release check test lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline careful bench bench-save bench-compare coverage coverage-check
 
 # Default target
 all: check lint test
@@ -87,6 +87,14 @@ setup:
 	@command -v npm >/dev/null 2>&1 && npm install -g markdownlint-cli || echo "npm not found, skipping markdownlint"
 	@echo ""
 	@echo "Setup complete! Run 'make check' to verify."
+
+# Code coverage report (requires cargo-tarpaulin: cargo install cargo-tarpaulin)
+coverage:
+	@command -v cargo-tarpaulin >/dev/null 2>&1 && cargo tarpaulin --engine llvm --all-features --out Html --output-dir coverage && echo "Coverage report: coverage/tarpaulin-report.html" || echo "cargo-tarpaulin not installed, run: cargo install cargo-tarpaulin"
+
+# Code coverage with minimum threshold (fail if below)
+coverage-check:
+	@command -v cargo-tarpaulin >/dev/null 2>&1 && cargo tarpaulin --engine llvm --all-features --out xml --output-dir coverage --fail-under 50 || echo "cargo-tarpaulin not installed, run: cargo install cargo-tarpaulin"
 
 # Mutation testing (security module only - fast)
 mutants:
@@ -220,6 +228,8 @@ help:
 	@echo "  sbom             - Generate SBOM (CycloneDX)"
 	@echo ""
 	@echo "Testing:"
+	@echo "  coverage         - Generate HTML coverage report (cargo-tarpaulin)"
+	@echo "  coverage-check   - Coverage with minimum threshold (--fail-under 50)"
 	@echo "  mutants          - Mutation testing (security module)"
 	@echo "  mutants-db       - Mutation testing (domain/database)"
 	@echo "  mutants-full     - Mutation testing (full project)"

@@ -136,4 +136,196 @@ mod tests {
         service.set_supported(true);
         assert!(service.is_supported());
     }
+
+    #[test]
+    fn test_set_supported_toggle() {
+        let (service, _rx) = create_test_service();
+        service.set_supported(true);
+        assert!(service.is_supported());
+        service.set_supported(false);
+        assert!(!service.is_supported());
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_tools_not_supported() {
+        let (service, _rx) = create_test_service();
+        let tools = vec![SamplingTool {
+            name: "test_tool".to_string(),
+            description: "A test tool".to_string(),
+            input_schema: serde_json::json!({"type": "object"}),
+        }];
+        let result = service
+            .analyze_with_tools("prompt", "content", tools, 100)
+            .await;
+        assert!(matches!(result, Err(ClientRequestError::NotSupported)));
+    }
+
+    #[tokio::test]
+    async fn test_analyze_sends_correct_method() {
+        use crate::mcp::pending_requests::ClientResponse;
+        use crate::mcp::protocol::WriterMessage;
+
+        let (tx, mut rx) = mpsc::channel(10);
+        let pending = Arc::new(PendingRequests::new());
+        let requester = Arc::new(ClientRequester::new(
+            tx,
+            Arc::clone(&pending),
+            Duration::from_secs(5),
+        ));
+        let service = SamplingService::new(requester);
+        service.set_supported(true);
+
+        let pending_clone = Arc::clone(&pending);
+        tokio::spawn(async move {
+            if let Some(WriterMessage::Request(req)) = rx.recv().await {
+                assert_eq!(req.method, "sampling/createMessage");
+                let params = req.params.unwrap();
+                let messages = params["messages"].as_array().unwrap();
+                assert_eq!(messages.len(), 1);
+                let text = messages[0]["content"]["text"].as_str().unwrap();
+                assert!(text.contains("Analyze this"));
+                assert!(text.contains("test data"));
+
+                let id = req.id.as_str().unwrap().to_string();
+                pending_clone.resolve(
+                    &id,
+                    ClientResponse::Success(serde_json::json!({
+                        "role": "assistant",
+                        "content": {"type": "text", "text": "analysis result"},
+                        "model": "test-model"
+                    })),
+                );
+            }
+        });
+
+        let result = service
+            .analyze("Analyze this", "test data", 500)
+            .await
+            .unwrap();
+        assert_eq!(result.role, "assistant");
+        assert_eq!(result.model, "test-model");
+    }
+
+    #[tokio::test]
+    async fn test_analyze_with_tools_includes_tools_in_params() {
+        use crate::mcp::pending_requests::ClientResponse;
+        use crate::mcp::protocol::WriterMessage;
+
+        let (tx, mut rx) = mpsc::channel(10);
+        let pending = Arc::new(PendingRequests::new());
+        let requester = Arc::new(ClientRequester::new(
+            tx,
+            Arc::clone(&pending),
+            Duration::from_secs(5),
+        ));
+        let service = SamplingService::new(requester);
+        service.set_supported(true);
+
+        let pending_clone = Arc::clone(&pending);
+        tokio::spawn(async move {
+            if let Some(WriterMessage::Request(req)) = rx.recv().await {
+                let params = req.params.unwrap();
+                let tools = params["tools"].as_array().unwrap();
+                assert_eq!(tools.len(), 1);
+                assert_eq!(tools[0]["name"], "my_tool");
+
+                let id = req.id.as_str().unwrap().to_string();
+                pending_clone.resolve(
+                    &id,
+                    ClientResponse::Success(serde_json::json!({
+                        "role": "assistant",
+                        "content": {"type": "text", "text": "done"},
+                        "model": "test"
+                    })),
+                );
+            }
+        });
+
+        let tools = vec![SamplingTool {
+            name: "my_tool".to_string(),
+            description: "desc".to_string(),
+            input_schema: serde_json::json!({"type": "object"}),
+        }];
+        let result = service
+            .analyze_with_tools("prompt", "content", tools, 200)
+            .await
+            .unwrap();
+        assert_eq!(result.role, "assistant");
+    }
+
+    #[tokio::test]
+    async fn test_analyze_empty_tools_omitted_from_params() {
+        use crate::mcp::pending_requests::ClientResponse;
+        use crate::mcp::protocol::WriterMessage;
+
+        let (tx, mut rx) = mpsc::channel(10);
+        let pending = Arc::new(PendingRequests::new());
+        let requester = Arc::new(ClientRequester::new(
+            tx,
+            Arc::clone(&pending),
+            Duration::from_secs(5),
+        ));
+        let service = SamplingService::new(requester);
+        service.set_supported(true);
+
+        let pending_clone = Arc::clone(&pending);
+        tokio::spawn(async move {
+            if let Some(WriterMessage::Request(req)) = rx.recv().await {
+                let params = req.params.unwrap();
+                assert!(params.get("tools").is_none() || params["tools"].is_null());
+
+                let id = req.id.as_str().unwrap().to_string();
+                pending_clone.resolve(
+                    &id,
+                    ClientResponse::Success(serde_json::json!({
+                        "role": "assistant",
+                        "content": {"type": "text", "text": "ok"},
+                        "model": "m"
+                    })),
+                );
+            }
+        });
+
+        let result = service
+            .analyze_with_tools("p", "c", Vec::new(), 100)
+            .await
+            .unwrap();
+        assert_eq!(result.role, "assistant");
+    }
+
+    #[tokio::test]
+    async fn test_analyze_invalid_response_returns_remote_error() {
+        use crate::mcp::pending_requests::ClientResponse;
+        use crate::mcp::protocol::WriterMessage;
+
+        let (tx, mut rx) = mpsc::channel(10);
+        let pending = Arc::new(PendingRequests::new());
+        let requester = Arc::new(ClientRequester::new(
+            tx,
+            Arc::clone(&pending),
+            Duration::from_secs(5),
+        ));
+        let service = SamplingService::new(requester);
+        service.set_supported(true);
+
+        let pending_clone = Arc::clone(&pending);
+        tokio::spawn(async move {
+            if let Some(WriterMessage::Request(req)) = rx.recv().await {
+                let id = req.id.as_str().unwrap().to_string();
+                pending_clone.resolve(
+                    &id,
+                    ClientResponse::Success(serde_json::json!("not a valid response")),
+                );
+            }
+        });
+
+        let result = service.analyze("prompt", "content", 100).await;
+        match result {
+            Err(ClientRequestError::RemoteError { code, message }) => {
+                assert_eq!(code, -1);
+                assert!(message.contains("Invalid sampling response"));
+            }
+            other => panic!("Expected RemoteError, got: {other:?}"),
+        }
+    }
 }

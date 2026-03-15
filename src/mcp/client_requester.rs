@@ -186,4 +186,106 @@ mod tests {
             _ => panic!("Expected RemoteError"),
         }
     }
+
+    // ============== Display trait ==============
+
+    #[test]
+    fn test_display_not_supported() {
+        let err = ClientRequestError::NotSupported;
+        assert_eq!(err.to_string(), "Client does not support this capability");
+    }
+
+    #[test]
+    fn test_display_channel_closed() {
+        let err = ClientRequestError::ChannelClosed;
+        assert_eq!(err.to_string(), "Writer channel closed");
+    }
+
+    #[test]
+    fn test_display_timeout() {
+        let err = ClientRequestError::Timeout;
+        assert_eq!(err.to_string(), "Client request timed out");
+    }
+
+    #[test]
+    fn test_display_declined() {
+        let err = ClientRequestError::Declined;
+        assert_eq!(err.to_string(), "Client declined the request");
+    }
+
+    #[test]
+    fn test_display_cancelled() {
+        let err = ClientRequestError::Cancelled;
+        assert_eq!(err.to_string(), "Client cancelled the request");
+    }
+
+    #[test]
+    fn test_display_remote_error() {
+        let err = ClientRequestError::RemoteError {
+            code: -32600,
+            message: "Invalid Request".to_string(),
+        };
+        assert_eq!(err.to_string(), "Client error (-32600): Invalid Request");
+    }
+
+    #[test]
+    fn test_error_trait() {
+        use std::error::Error;
+        let err = ClientRequestError::Timeout;
+        let _: &dyn Error = &err;
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn test_debug_format() {
+        let err = ClientRequestError::NotSupported;
+        let debug = format!("{err:?}");
+        assert!(debug.contains("NotSupported"));
+    }
+
+    // ============== Request routing ==============
+
+    #[tokio::test]
+    async fn test_send_request_passes_method_and_params() {
+        let (tx, mut rx) = mpsc::channel(10);
+        let pending = Arc::new(PendingRequests::new());
+        let requester = ClientRequester::new(tx, Arc::clone(&pending), Duration::from_secs(5));
+
+        let pending_clone = Arc::clone(&pending);
+        tokio::spawn(async move {
+            if let Some(WriterMessage::Request(req)) = rx.recv().await {
+                // Verify the request carries the correct method
+                assert_eq!(req.method, "elicitation/create");
+                let id = req.id.as_str().unwrap().to_string();
+                pending_clone.resolve(
+                    &id,
+                    ClientResponse::Success(serde_json::json!({"ok": true})),
+                );
+            }
+        });
+
+        let result = requester
+            .send_request("elicitation/create", serde_json::json!({"field": "value"}))
+            .await
+            .unwrap();
+        assert_eq!(result, serde_json::json!({"ok": true}));
+    }
+
+    #[tokio::test]
+    async fn test_send_request_receiver_dropped_before_resolve() {
+        let (tx, mut rx) = mpsc::channel(10);
+        let pending = Arc::new(PendingRequests::new());
+        let requester = ClientRequester::new(tx, Arc::clone(&pending), Duration::from_millis(50));
+
+        // Spawn a "client" that reads but never resolves
+        tokio::spawn(async move {
+            let _ = rx.recv().await;
+            // Don't resolve — let the timeout fire
+        });
+
+        let result = requester
+            .send_request("test/method", serde_json::json!({}))
+            .await;
+        assert!(matches!(result, Err(ClientRequestError::Timeout)));
+    }
 }

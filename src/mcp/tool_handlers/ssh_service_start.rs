@@ -162,4 +162,93 @@ mod tests {
         let result = serde_json::from_value::<SshServiceStartArgs>(json);
         assert!(result.is_err());
     }
+
+    // ============== Validation & OS guard ==============
+
+    #[tokio::test]
+    async fn test_invalid_service_name_rejected() {
+        use crate::ports::mock::create_test_context_with_host;
+
+        let handler = SshServiceStartHandler::new();
+        let ctx = create_test_context_with_host();
+        let args = json!({"host": "server1", "service": "../etc/passwd"});
+        let result = handler.execute(Some(args), &ctx).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_service_name_with_semicolon_rejected() {
+        use crate::ports::mock::create_test_context_with_host;
+
+        let handler = SshServiceStartHandler::new();
+        let ctx = create_test_context_with_host();
+        let args = json!({"host": "server1", "service": "nginx; rm -rf /"});
+        let result = handler.execute(Some(args), &ctx).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_os_guard_rejects_windows_host() {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
+        use crate::ports::mock::create_test_context_with_hosts;
+        use crate::ports::protocol::ToolContent;
+        use std::collections::HashMap;
+
+        let mut hosts = HashMap::new();
+        hosts.insert(
+            "win-server".to_string(),
+            HostConfig {
+                hostname: "192.168.1.200".to_string(),
+                port: 22,
+                user: "admin".to_string(),
+                auth: AuthConfig::Key {
+                    path: "~/.ssh/id_rsa".to_string(),
+                    passphrase: None,
+                },
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                os_type: OsType::Windows,
+                shell: None,
+            },
+        );
+
+        let handler = SshServiceStartHandler::new();
+        let ctx = create_test_context_with_hosts(hosts);
+        let args = json!({"host": "win-server", "service": "nginx"});
+        let result = handler.execute(Some(args), &ctx).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+        match &result.content[0] {
+            ToolContent::Text { text } => {
+                assert!(text.contains("not available on Windows"));
+            }
+            _ => panic!("Expected Text content"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_returns_error_result() {
+        use crate::ports::mock::create_test_context_with_host;
+        use crate::ports::protocol::ToolContent;
+        use crate::security::RateLimiter;
+        use std::sync::Arc;
+
+        let handler = SshServiceStartHandler::new();
+        let mut ctx = create_test_context_with_host();
+        ctx.rate_limiter = Arc::new(RateLimiter::new(1));
+
+        assert!(ctx.rate_limiter.check("server1").is_ok());
+
+        let args = json!({"host": "server1", "service": "nginx"});
+        let result = handler.execute(Some(args), &ctx).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+        match &result.content[0] {
+            ToolContent::Text { text } => {
+                assert!(text.contains("Rate limit exceeded"));
+            }
+            _ => panic!("Expected Text content"),
+        }
+    }
 }
