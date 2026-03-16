@@ -267,4 +267,87 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshHelmRollbackArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            revision: None,
+            namespace: None,
+            dry_run: None,
+            wait: None,
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmRollbackTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("helm rollback"));
+        assert!(cmd.contains("'my-app'"));
+    }
+
+    #[test]
+    fn test_build_command_with_revision() {
+        let args = SshHelmRollbackArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            revision: Some(3),
+            namespace: None,
+            dry_run: None,
+            wait: None,
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmRollbackTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains(" 3"));
+    }
+
+    #[test]
+    fn test_build_command_all_opts() {
+        let args = SshHelmRollbackArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            revision: Some(5),
+            namespace: Some("production".to_string()),
+            dry_run: Some("server".to_string()),
+            wait: Some(true),
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmRollbackTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-n 'production'"));
+        assert!(cmd.contains("--dry-run='server'"));
+        assert!(cmd.contains("--wait"));
+    }
 }

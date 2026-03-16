@@ -402,4 +402,118 @@ mod tests {
             e => panic!("Expected McpInvalidRequest error, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_mysql_defaults() {
+        let args = SshDbQueryArgs {
+            host: "server1".to_string(),
+            db_type: "mysql".to_string(),
+            query: "SELECT 1".to_string(),
+            database: "mydb".to_string(),
+            db_host: None,
+            db_port: None,
+            db_user: None,
+            db_password: None,
+            format: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = DbQueryTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("mysql"));
+        assert!(cmd.contains("-h 'localhost'"));
+        assert!(cmd.contains("-P 3306"));
+        assert!(cmd.contains("-u 'root'"));
+        assert!(cmd.contains("'mydb'"));
+        assert!(cmd.contains("SELECT 1"));
+    }
+
+    #[test]
+    fn test_build_command_postgres_with_password() {
+        let args = SshDbQueryArgs {
+            host: "server1".to_string(),
+            db_type: "postgresql".to_string(),
+            query: "SELECT * FROM users".to_string(),
+            database: "testdb".to_string(),
+            db_host: Some("dbhost".to_string()),
+            db_port: Some(5433),
+            db_user: Some("admin".to_string()),
+            db_password: Some("secret".to_string()),
+            format: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = DbQueryTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("PGPASSWORD="));
+        assert!(cmd.contains("psql"));
+        assert!(cmd.contains("-h 'dbhost'"));
+        assert!(cmd.contains("-p 5433"));
+        assert!(cmd.contains("-U 'admin'"));
+        assert!(cmd.contains("-d 'testdb'"));
+    }
+
+    #[test]
+    fn test_build_command_with_format() {
+        let args = SshDbQueryArgs {
+            host: "server1".to_string(),
+            db_type: "mysql".to_string(),
+            query: "SELECT 1".to_string(),
+            database: "mydb".to_string(),
+            db_host: None,
+            db_port: None,
+            db_user: None,
+            db_password: None,
+            format: Some("csv".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = DbQueryTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-B"));
+    }
+
+    #[test]
+    fn test_build_command_error_invalid_type() {
+        let args = SshDbQueryArgs {
+            host: "server1".to_string(),
+            db_type: "sqlite".to_string(),
+            query: "SELECT 1".to_string(),
+            database: "mydb".to_string(),
+            db_host: None,
+            db_port: None,
+            db_user: None,
+            db_password: None,
+            format: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let result = DbQueryTool::build_command(&args, &test_host_config());
+        assert!(result.is_err());
+    }
 }

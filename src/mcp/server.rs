@@ -12,6 +12,7 @@ use tracing::{debug, error, info, warn};
 use crate::config::{Config, ConfigWatcher};
 use crate::domain::{ExecuteCommandUseCase, OutputCache, TaskStore, TunnelManager};
 use crate::error::Result;
+use crate::mcp::instructions;
 use crate::ports::ToolContext;
 use crate::security::{AuditLogger, AuditWriterTask, CommandValidator, RateLimiter, Sanitizer};
 use crate::ssh::{ConnectionPool, SessionManager};
@@ -529,6 +530,11 @@ impl McpServer {
 
         self.initialized.store(true, Ordering::SeqCst);
 
+        let instructions = {
+            let config = self.config.read().await;
+            instructions::build_instructions(&config, self.registry.len())
+        };
+
         let result = InitializeResult {
             protocol_version: negotiated_version,
             capabilities: ServerCapabilities {
@@ -554,39 +560,7 @@ impl McpServer {
                 ),
                 website_url: Some("https://github.com/petermachini/mcp-ssh-bridge".to_string()),
             },
-            instructions: Some(
-                "MCP SSH Bridge: remote server management via SSH (197 tools, 38 groups).\n\
-                 \n\
-                 WORKFLOW: Call ssh_status first to discover hosts, their OS type \
-                 (Linux/Windows), and connection state.\n\
-                 \n\
-                 TOOL NAMING: Tools follow ssh_<group>_<action> patterns.\n\
-                 - Linux groups: docker, k8s, helm, systemd (ssh_service_*), \
-                 network (ssh_net_*), process, package (ssh_pkg_*), firewall, cron, \
-                 git, ansible, terraform, vault, nginx, redis, certificates \
-                 (ssh_cert_*), esxi, database (ssh_db_*), backup, monitoring \
-                 (ssh_metrics*), sessions, tunnels, file_transfer \
-                 (ssh_upload/download/sync), config, directory (ssh_ls/find).\n\
-                 - Windows groups: ssh_win_service_*, ssh_win_event_*, ssh_ad_*, \
-                 ssh_schtask_*, ssh_win_firewall_*, ssh_iis_*, ssh_win_update_*, \
-                 ssh_win_perf_*, ssh_hyperv_*, ssh_reg_*, ssh_win_feature_*, \
-                 ssh_win_net_*, ssh_win_process_*.\n\
-                 \n\
-                 PREFER SPECIALIZED TOOLS over ssh_exec — they validate inputs, \
-                 structure output, auto-detect binaries, and enforce safety. \
-                 Use ssh_exec only for ad-hoc commands.\n\
-                 \n\
-                 ANNOTATIONS: Tools declare readOnlyHint or destructiveHint. \
-                 Prefer read-only tools for investigation before mutating ones.\n\
-                 \n\
-                 OUTPUT: Truncated output includes an output_id — call \
-                 ssh_output_fetch to get the rest.\n\
-                 \n\
-                 SESSIONS: For multi-step workflows needing shared state (cd, env \
-                 vars), use ssh_session_create + ssh_session_exec. Close with \
-                 ssh_session_close when done."
-                    .to_string(),
-            ),
+            instructions: Some(instructions),
         };
 
         JsonRpcResponse::success_or_serialize_error(id, &result)

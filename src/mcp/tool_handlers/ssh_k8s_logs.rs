@@ -131,6 +131,7 @@ pub type SshK8sLogsHandler = StandardToolHandler<K8sLogsTool>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{HostKeyVerification, OsType};
     use crate::error::BridgeError;
     use crate::ports::ToolHandler;
     use crate::ports::mock::create_test_context;
@@ -278,5 +279,118 @@ mod tests {
             BridgeError::McpInvalidRequest(_) => {}
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
+    }
+
+    // ============== build_command Tests ==============
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshK8sLogsArgs {
+            host: "server1".to_string(),
+            pod: "my-pod".to_string(),
+            namespace: None,
+            container: None,
+            tail: None,
+            since: None,
+            previous: None,
+            timestamps: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sLogsTool::build_command(&args, &host_config).unwrap();
+        assert_eq!(cmd, "kubectl logs 'my-pod'");
+    }
+
+    #[test]
+    fn test_build_command_with_container_tail() {
+        let args = SshK8sLogsArgs {
+            host: "server1".to_string(),
+            pod: "my-pod".to_string(),
+            namespace: Some("production".to_string()),
+            container: Some("app".to_string()),
+            tail: Some(50),
+            since: None,
+            previous: None,
+            timestamps: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sLogsTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("kubectl logs 'my-pod'"));
+        assert!(cmd.contains("-n 'production'"));
+        assert!(cmd.contains("-c 'app'"));
+        assert!(cmd.contains("--tail=50"));
+    }
+
+    #[test]
+    fn test_build_command_with_previous_timestamps() {
+        let args = SshK8sLogsArgs {
+            host: "server1".to_string(),
+            pod: "my-pod".to_string(),
+            namespace: None,
+            container: None,
+            tail: None,
+            since: Some("1h".to_string()),
+            previous: Some(true),
+            timestamps: Some(true),
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sLogsTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("--since='1h'"));
+        assert!(cmd.contains("-p"));
+        assert!(cmd.contains("--timestamps"));
+    }
+
+    #[test]
+    fn test_build_command_all_opts() {
+        let args = SshK8sLogsArgs {
+            host: "server1".to_string(),
+            pod: "my-pod".to_string(),
+            namespace: Some("kube-system".to_string()),
+            container: Some("sidecar".to_string()),
+            tail: Some(100),
+            since: Some("30m".to_string()),
+            previous: Some(true),
+            timestamps: Some(true),
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sLogsTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.starts_with("kubectl logs"));
+        assert!(cmd.contains("-n 'kube-system'"));
+        assert!(cmd.contains("-c 'sidecar'"));
+        assert!(cmd.contains("--tail=100"));
+        assert!(cmd.contains("--since='30m'"));
+        assert!(cmd.contains("-p"));
+        assert!(cmd.contains("--timestamps"));
     }
 }

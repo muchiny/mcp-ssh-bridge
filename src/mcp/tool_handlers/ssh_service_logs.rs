@@ -227,4 +227,89 @@ mod tests {
         let result = serde_json::from_value::<SshServiceLogsArgs>(json);
         assert!(result.is_err());
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshServiceLogsArgs {
+            host: "server1".to_string(),
+            service: "nginx".to_string(),
+            lines: None,
+            since: None,
+            until: None,
+            priority: None,
+            output_format: None,
+            reverse: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = ServiceLogsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("journalctl -u 'nginx'"));
+        assert!(cmd.contains("--no-pager"));
+    }
+
+    #[test]
+    fn test_build_command_with_lines_since() {
+        let args = SshServiceLogsArgs {
+            host: "server1".to_string(),
+            service: "nginx".to_string(),
+            lines: Some(100),
+            since: Some("1 hour ago".to_string()),
+            until: None,
+            priority: None,
+            output_format: None,
+            reverse: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = ServiceLogsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("--lines=100"));
+        assert!(cmd.contains("--since '1 hour ago'"));
+    }
+
+    #[test]
+    fn test_build_command_with_priority_format() {
+        let args = SshServiceLogsArgs {
+            host: "server1".to_string(),
+            service: "docker".to_string(),
+            lines: None,
+            since: None,
+            until: Some("now".to_string()),
+            priority: Some("err".to_string()),
+            output_format: Some("json".to_string()),
+            reverse: Some(true),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = ServiceLogsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("--until 'now'"));
+        assert!(cmd.contains("--priority='err'"));
+        assert!(cmd.contains("--output='json'"));
+        assert!(cmd.contains("--reverse"));
+    }
 }

@@ -358,4 +358,97 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshAnsibleAdhocArgs {
+            host: "server1".to_string(),
+            pattern: "all".to_string(),
+            module: "ping".to_string(),
+            args: None,
+            inventory: None,
+            use_become: None,
+            become_user: None,
+            user: None,
+            forks: None,
+            verbose: None,
+            check: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsibleAdhocTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("ansible 'all' -m 'ping'"));
+    }
+
+    #[test]
+    fn test_build_command_with_module_args() {
+        let args = SshAnsibleAdhocArgs {
+            host: "server1".to_string(),
+            pattern: "webservers".to_string(),
+            module: "shell".to_string(),
+            args: Some("uptime".to_string()),
+            inventory: Some("hosts.ini".to_string()),
+            use_become: None,
+            become_user: None,
+            user: None,
+            forks: None,
+            verbose: None,
+            check: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsibleAdhocTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-a 'uptime'"));
+        assert!(cmd.contains("-i 'hosts.ini'"));
+    }
+
+    #[test]
+    fn test_build_command_with_become() {
+        let args = SshAnsibleAdhocArgs {
+            host: "server1".to_string(),
+            pattern: "all".to_string(),
+            module: "service".to_string(),
+            args: Some("name=nginx state=restarted".to_string()),
+            inventory: None,
+            use_become: Some(true),
+            become_user: Some("root".to_string()),
+            user: Some("deploy".to_string()),
+            forks: Some(5),
+            verbose: None,
+            check: Some(true),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsibleAdhocTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains(" -b"));
+        assert!(cmd.contains("--become-user 'root'"));
+        assert!(cmd.contains("-u 'deploy'"));
+        assert!(cmd.contains(" -C"));
+    }
 }

@@ -111,10 +111,27 @@ pub type SshK8sApplyHandler = StandardToolHandler<K8sApplyTool>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{HostKeyVerification, OsType};
     use crate::error::BridgeError;
     use crate::ports::ToolHandler;
     use crate::ports::mock::create_test_context;
     use serde_json::json;
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
 
     #[tokio::test]
     async fn test_missing_arguments() {
@@ -271,5 +288,68 @@ mod tests {
             BridgeError::McpInvalidRequest(_) => {}
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
+    }
+
+    // ============== build_command Tests ==============
+
+    #[test]
+    fn test_build_command_from_file() {
+        let args = SshK8sApplyArgs {
+            host: "server1".to_string(),
+            manifest: "/tmp/deployment.yaml".to_string(),
+            namespace: None,
+            dry_run: None,
+            force: None,
+            server_side: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sApplyTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.starts_with("kubectl apply -f '/tmp/deployment.yaml'"));
+    }
+
+    #[test]
+    fn test_build_command_with_namespace() {
+        let args = SshK8sApplyArgs {
+            host: "server1".to_string(),
+            manifest: "/tmp/service.yaml".to_string(),
+            namespace: Some("production".to_string()),
+            dry_run: None,
+            force: None,
+            server_side: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sApplyTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("kubectl apply -f"));
+        assert!(cmd.contains("-n 'production'"));
+    }
+
+    #[test]
+    fn test_build_command_dry_run() {
+        let args = SshK8sApplyArgs {
+            host: "server1".to_string(),
+            manifest: "/tmp/deployment.yaml".to_string(),
+            namespace: Some("staging".to_string()),
+            dry_run: Some("server".to_string()),
+            force: Some(true),
+            server_side: Some(true),
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sApplyTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("-n 'staging'"));
+        assert!(cmd.contains("--dry-run='server'"));
+        assert!(cmd.contains("--force"));
+        assert!(cmd.contains("--server-side"));
     }
 }

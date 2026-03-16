@@ -228,4 +228,58 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshFirewallAllowArgs {
+            host: "s".to_string(),
+            port: "80".to_string(),
+            protocol: None,
+            source: None,
+            firewall_tool: Some("ufw".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = FirewallAllowTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("80"));
+        assert!(cmd.contains("allow"));
+    }
+
+    #[test]
+    fn test_build_command_all_opts() {
+        let args = SshFirewallAllowArgs {
+            host: "s".to_string(),
+            port: "443".to_string(),
+            protocol: Some("tcp".to_string()),
+            source: Some("10.0.0.0/8".to_string()),
+            firewall_tool: Some("ufw".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = FirewallAllowTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("443"));
+        assert!(cmd.contains("tcp"));
+    }
 }

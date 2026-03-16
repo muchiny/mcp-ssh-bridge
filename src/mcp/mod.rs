@@ -2,6 +2,7 @@ pub mod client_requester;
 pub mod completion_provider;
 pub mod elicitation;
 pub mod history;
+mod instructions;
 pub mod logger;
 pub mod pending_requests;
 pub mod progress;

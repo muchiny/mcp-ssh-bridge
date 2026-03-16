@@ -270,4 +270,111 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_create_basic() {
+        let args = SshEsxiSnapshotArgs {
+            host: "esxi1".to_string(),
+            vm_id: "42".to_string(),
+            action: "create".to_string(),
+            name: Some("before-upgrade".to_string()),
+            description: None,
+            include_memory: None,
+            quiesce: None,
+            snapshot_id: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = EsxiSnapshotTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("vim-cmd vmsvc/snapshot.create"));
+        assert!(cmd.contains("'42'"));
+        assert!(cmd.contains("'before-upgrade'"));
+        assert!(cmd.contains(" 0 0"));
+    }
+
+    #[test]
+    fn test_build_command_create_with_memory() {
+        let args = SshEsxiSnapshotArgs {
+            host: "esxi1".to_string(),
+            vm_id: "42".to_string(),
+            action: "create".to_string(),
+            name: Some("mem-snap".to_string()),
+            description: Some("With memory".to_string()),
+            include_memory: Some(true),
+            quiesce: Some(true),
+            snapshot_id: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = EsxiSnapshotTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("vim-cmd vmsvc/snapshot.create"));
+        assert!(cmd.contains("'mem-snap'"));
+        assert!(cmd.contains(" 1 1"));
+    }
+
+    #[test]
+    fn test_build_command_list() {
+        let args = SshEsxiSnapshotArgs {
+            host: "esxi1".to_string(),
+            vm_id: "42".to_string(),
+            action: "list".to_string(),
+            name: None,
+            description: None,
+            include_memory: None,
+            quiesce: None,
+            snapshot_id: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = EsxiSnapshotTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("vim-cmd vmsvc/snapshot.get"));
+        assert!(cmd.contains("'42'"));
+    }
+
+    #[test]
+    fn test_build_command_delete() {
+        let args = SshEsxiSnapshotArgs {
+            host: "esxi1".to_string(),
+            vm_id: "42".to_string(),
+            action: "remove_all".to_string(),
+            name: None,
+            description: None,
+            include_memory: None,
+            quiesce: None,
+            snapshot_id: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = EsxiSnapshotTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("vim-cmd vmsvc/snapshot.removeall"));
+        assert!(cmd.contains("'42'"));
+    }
 }

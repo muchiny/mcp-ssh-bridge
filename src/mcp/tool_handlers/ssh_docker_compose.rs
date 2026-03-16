@@ -314,4 +314,111 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshDockerComposeArgs {
+            host: "server1".to_string(),
+            action: "up".to_string(),
+            project_dir: "/app".to_string(),
+            file: None,
+            services: None,
+            detach: None,
+            build: None,
+            timeout: None,
+            compose_bin: Some("docker compose".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerComposeTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("docker compose"));
+        assert!(cmd.contains("up"));
+        assert!(cmd.contains("/app"));
+    }
+
+    #[test]
+    fn test_build_command_with_file() {
+        let args = SshDockerComposeArgs {
+            host: "server1".to_string(),
+            action: "up".to_string(),
+            project_dir: "/app".to_string(),
+            file: Some("prod.yml".to_string()),
+            services: None,
+            detach: None,
+            build: None,
+            timeout: None,
+            compose_bin: Some("docker compose".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerComposeTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("prod.yml"));
+    }
+
+    #[test]
+    fn test_build_command_with_services() {
+        let args = SshDockerComposeArgs {
+            host: "server1".to_string(),
+            action: "up".to_string(),
+            project_dir: "/app".to_string(),
+            file: None,
+            services: Some(vec!["web".to_string(), "db".to_string()]),
+            detach: None,
+            build: None,
+            timeout: None,
+            compose_bin: Some("docker compose".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerComposeTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("web"));
+        assert!(cmd.contains("db"));
+    }
+
+    #[test]
+    fn test_build_command_all_options() {
+        let args = SshDockerComposeArgs {
+            host: "server1".to_string(),
+            action: "up".to_string(),
+            project_dir: "/app".to_string(),
+            file: Some("prod.yml".to_string()),
+            services: Some(vec!["web".to_string(), "db".to_string()]),
+            detach: Some(false),
+            build: Some(true),
+            timeout: Some(30),
+            compose_bin: Some("docker compose".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerComposeTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("docker compose"));
+        assert!(cmd.contains("prod.yml"));
+        assert!(cmd.contains("web"));
+        assert!(cmd.contains("db"));
+        assert!(cmd.contains("--build"));
+    }
 }

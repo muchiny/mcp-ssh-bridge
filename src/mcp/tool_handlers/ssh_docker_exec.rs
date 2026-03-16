@@ -250,4 +250,99 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshDockerExecArgs {
+            host: "server1".to_string(),
+            container: "nginx".to_string(),
+            command: "ls".to_string(),
+            user: None,
+            workdir: None,
+            env: None,
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerExecTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("docker exec"));
+        assert!(cmd.contains("nginx"));
+        assert!(cmd.contains("ls"));
+    }
+
+    #[test]
+    fn test_build_command_with_user_workdir() {
+        let args = SshDockerExecArgs {
+            host: "server1".to_string(),
+            container: "nginx".to_string(),
+            command: "ls".to_string(),
+            user: Some("root".to_string()),
+            workdir: Some("/app".to_string()),
+            env: None,
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerExecTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("root"));
+        assert!(cmd.contains("/app"));
+    }
+
+    #[test]
+    fn test_build_command_with_env() {
+        let args = SshDockerExecArgs {
+            host: "server1".to_string(),
+            container: "nginx".to_string(),
+            command: "ls".to_string(),
+            user: None,
+            workdir: None,
+            env: Some(vec!["FOO=bar".to_string()]),
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerExecTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("FOO=bar"));
+    }
+
+    #[test]
+    fn test_build_command_custom_bin() {
+        let args = SshDockerExecArgs {
+            host: "server1".to_string(),
+            container: "nginx".to_string(),
+            command: "ls".to_string(),
+            user: None,
+            workdir: None,
+            env: None,
+            docker_bin: Some("podman".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerExecTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("podman"));
+    }
 }

@@ -202,4 +202,58 @@ mod tests {
         let result = serde_json::from_value::<SshNetPingArgs>(json);
         assert!(result.is_err());
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshNetPingArgs {
+            host: "s".to_string(),
+            target: "8.8.8.8".to_string(),
+            count: None,
+            timeout: None,
+            interface: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = NetPingTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("ping"));
+        assert!(cmd.contains("8.8.8.8"));
+    }
+
+    #[test]
+    fn test_build_command_with_count_interface() {
+        let args = SshNetPingArgs {
+            host: "s".to_string(),
+            target: "10.0.0.1".to_string(),
+            count: Some(10),
+            timeout: Some(5),
+            interface: Some("eth0".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = NetPingTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("10.0.0.1"));
+        assert!(cmd.contains("10"));
+    }
 }

@@ -344,4 +344,129 @@ mod tests {
             e => panic!("Expected McpInvalidRequest error, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_mysql_defaults() {
+        let args = SshDbDumpArgs {
+            host: "server1".to_string(),
+            db_type: "mysql".to_string(),
+            database: "mydb".to_string(),
+            output_file: "/tmp/dump.sql".to_string(),
+            db_host: None,
+            db_port: None,
+            db_user: None,
+            db_password: None,
+            tables: None,
+            compress: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = DbDumpTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("mysqldump"));
+        assert!(cmd.contains("-h 'localhost'"));
+        assert!(cmd.contains("-P 3306"));
+        assert!(cmd.contains("-u 'root'"));
+        assert!(cmd.contains("'mydb'"));
+        assert!(cmd.contains("> '/tmp/dump.sql'"));
+    }
+
+    #[test]
+    fn test_build_command_with_tables_compress() {
+        let args = SshDbDumpArgs {
+            host: "server1".to_string(),
+            db_type: "mysql".to_string(),
+            database: "mydb".to_string(),
+            output_file: "/tmp/dump.sql.gz".to_string(),
+            db_host: None,
+            db_port: None,
+            db_user: None,
+            db_password: None,
+            tables: Some(vec!["users".to_string(), "orders".to_string()]),
+            compress: Some("gzip".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = DbDumpTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("'users'"));
+        assert!(cmd.contains("'orders'"));
+        assert!(cmd.contains("| gzip >"));
+    }
+
+    #[test]
+    fn test_build_command_postgres() {
+        let args = SshDbDumpArgs {
+            host: "server1".to_string(),
+            db_type: "postgresql".to_string(),
+            database: "testdb".to_string(),
+            output_file: "/tmp/dump.sql".to_string(),
+            db_host: None,
+            db_port: None,
+            db_user: None,
+            db_password: None,
+            tables: None,
+            compress: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = DbDumpTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("pg_dump"));
+        assert!(cmd.contains("-h 'localhost'"));
+        assert!(cmd.contains("-p 5432"));
+        assert!(cmd.contains("-U 'postgres'"));
+        assert!(cmd.contains("'testdb'"));
+    }
+
+    #[test]
+    fn test_build_command_all_opts() {
+        let args = SshDbDumpArgs {
+            host: "server1".to_string(),
+            db_type: "postgresql".to_string(),
+            database: "proddb".to_string(),
+            output_file: "/tmp/dump.sql.xz".to_string(),
+            db_host: Some("dbhost".to_string()),
+            db_port: Some(5433),
+            db_user: Some("admin".to_string()),
+            db_password: Some("secret".to_string()),
+            tables: Some(vec!["users".to_string()]),
+            compress: Some("xz".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = DbDumpTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("PGPASSWORD="));
+        assert!(cmd.contains("pg_dump"));
+        assert!(cmd.contains("-h 'dbhost'"));
+        assert!(cmd.contains("-p 5433"));
+        assert!(cmd.contains("-U 'admin'"));
+        assert!(cmd.contains("-t 'users'"));
+        assert!(cmd.contains("| xz >"));
+    }
 }

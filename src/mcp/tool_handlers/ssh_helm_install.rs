@@ -332,4 +332,135 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshHelmInstallArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            chart: "stable/nginx".to_string(),
+            namespace: None,
+            set_values: None,
+            values_files: None,
+            dry_run: None,
+            wait: None,
+            create_namespace: None,
+            version: None,
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmInstallTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("helm install"));
+        assert!(cmd.contains("'my-app'"));
+        assert!(cmd.contains("'stable/nginx'"));
+    }
+
+    #[test]
+    fn test_build_command_with_set_values() {
+        let mut set_values = HashMap::new();
+        set_values.insert("replicaCount".to_string(), "3".to_string());
+
+        let args = SshHelmInstallArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            chart: "stable/nginx".to_string(),
+            namespace: None,
+            set_values: Some(set_values),
+            values_files: None,
+            dry_run: None,
+            wait: None,
+            create_namespace: None,
+            version: None,
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmInstallTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("--set 'replicaCount'='3'"));
+    }
+
+    #[test]
+    fn test_build_command_with_values_wait() {
+        let args = SshHelmInstallArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            chart: "stable/nginx".to_string(),
+            namespace: None,
+            set_values: None,
+            values_files: Some(vec!["/tmp/values.yaml".to_string()]),
+            dry_run: None,
+            wait: Some(true),
+            create_namespace: None,
+            version: None,
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmInstallTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-f '/tmp/values.yaml'"));
+        assert!(cmd.contains("--wait"));
+    }
+
+    #[test]
+    fn test_build_command_all_opts() {
+        let mut set_values = HashMap::new();
+        set_values.insert("image.tag".to_string(), "v2.0".to_string());
+
+        let args = SshHelmInstallArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            chart: "stable/nginx".to_string(),
+            namespace: Some("production".to_string()),
+            set_values: Some(set_values),
+            values_files: Some(vec!["/tmp/values.yaml".to_string()]),
+            dry_run: Some("client".to_string()),
+            wait: Some(true),
+            create_namespace: Some(true),
+            version: Some("1.2.3".to_string()),
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmInstallTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-n 'production'"));
+        assert!(cmd.contains("--set 'image.tag'='v2.0'"));
+        assert!(cmd.contains("-f '/tmp/values.yaml'"));
+        assert!(cmd.contains("--dry-run='client'"));
+        assert!(cmd.contains("--wait"));
+        assert!(cmd.contains("--create-namespace"));
+        assert!(cmd.contains("--version '1.2.3'"));
+    }
 }

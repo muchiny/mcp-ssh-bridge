@@ -203,4 +203,75 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshDockerStatsArgs {
+            host: "server1".to_string(),
+            containers: None,
+            no_stream: None,
+            format: None,
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerStatsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("docker stats"));
+        assert!(cmd.contains("--no-stream"));
+    }
+
+    #[test]
+    fn test_build_command_with_containers() {
+        let args = SshDockerStatsArgs {
+            host: "server1".to_string(),
+            containers: Some(vec!["web".to_string(), "db".to_string()]),
+            no_stream: None,
+            format: None,
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerStatsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("web"));
+        assert!(cmd.contains("db"));
+    }
+
+    #[test]
+    fn test_build_command_no_stream_format() {
+        let args = SshDockerStatsArgs {
+            host: "server1".to_string(),
+            containers: None,
+            no_stream: Some(false),
+            format: Some("json".to_string()),
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerStatsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(!cmd.contains("--no-stream"));
+        assert!(cmd.contains("json"));
+    }
 }

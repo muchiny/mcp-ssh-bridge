@@ -96,10 +96,27 @@ pub type SshK8sScaleHandler = StandardToolHandler<K8sScaleTool>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{HostKeyVerification, OsType};
     use crate::error::BridgeError;
     use crate::ports::ToolHandler;
     use crate::ports::mock::create_test_context;
     use serde_json::json;
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
 
     #[tokio::test]
     async fn test_missing_arguments() {
@@ -259,5 +276,61 @@ mod tests {
             BridgeError::McpInvalidRequest(_) => {}
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
+    }
+
+    // ============== build_command Tests ==============
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshK8sScaleArgs {
+            host: "server1".to_string(),
+            resource: "deployment/myapp".to_string(),
+            replicas: 3,
+            namespace: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sScaleTool::build_command(&args, &host_config).unwrap();
+        assert_eq!(cmd, "kubectl scale 'deployment/myapp' --replicas=3");
+    }
+
+    #[test]
+    fn test_build_command_with_namespace() {
+        let args = SshK8sScaleArgs {
+            host: "server1".to_string(),
+            resource: "deployment/myapp".to_string(),
+            replicas: 5,
+            namespace: Some("production".to_string()),
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sScaleTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("--replicas=5"));
+        assert!(cmd.contains("-n 'production'"));
+    }
+
+    #[test]
+    fn test_build_command_custom_bin() {
+        let args = SshK8sScaleArgs {
+            host: "server1".to_string(),
+            resource: "statefulset/redis".to_string(),
+            replicas: 0,
+            namespace: None,
+            kubectl_bin: Some("k3s kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sScaleTool::build_command(&args, &host_config).unwrap();
+        // "k3s kubectl" has a space so is_valid_binary_path rejects it; falls back to auto-detect
+        assert!(cmd.contains("scale 'statefulset/redis'"));
+        assert!(cmd.contains("--replicas=0"));
     }
 }

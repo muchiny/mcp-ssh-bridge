@@ -263,4 +263,87 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshHelmListArgs {
+            host: "server1".to_string(),
+            namespace: None,
+            all_namespaces: None,
+            all: None,
+            filter: None,
+            output: None,
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmListTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("helm list"));
+    }
+
+    #[test]
+    fn test_build_command_with_namespace() {
+        let args = SshHelmListArgs {
+            host: "server1".to_string(),
+            namespace: Some("production".to_string()),
+            all_namespaces: None,
+            all: None,
+            filter: None,
+            output: None,
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmListTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-n 'production'"));
+    }
+
+    #[test]
+    fn test_build_command_all_namespaces() {
+        let args = SshHelmListArgs {
+            host: "server1".to_string(),
+            namespace: None,
+            all_namespaces: Some(true),
+            all: Some(true),
+            filter: Some("my-app.*".to_string()),
+            output: Some("json".to_string()),
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmListTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains(" -A"));
+        assert!(cmd.contains(" -a"));
+        assert!(cmd.contains("--filter 'my-app.*'"));
+        assert!(cmd.contains("-o 'json'"));
+    }
 }

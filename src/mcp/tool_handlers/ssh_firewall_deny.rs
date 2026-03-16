@@ -228,4 +228,58 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshFirewallDenyArgs {
+            host: "s".to_string(),
+            port: "22".to_string(),
+            protocol: None,
+            source: None,
+            firewall_tool: Some("ufw".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = FirewallDenyTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("22"));
+        assert!(cmd.contains("deny"));
+    }
+
+    #[test]
+    fn test_build_command_all_opts() {
+        let args = SshFirewallDenyArgs {
+            host: "s".to_string(),
+            port: "8080".to_string(),
+            protocol: Some("udp".to_string()),
+            source: Some("192.168.1.0/24".to_string()),
+            firewall_tool: Some("ufw".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = FirewallDenyTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("8080"));
+        assert!(cmd.contains("udp"));
+    }
 }

@@ -612,6 +612,87 @@ mod tests {
         }));
     }
 
+    #[test]
+    fn test_not_retryable_host_key_mismatch() {
+        assert!(!is_retryable_error(&BridgeError::SshHostKeyMismatch {
+            host: "server1".to_string(),
+            expected: "SHA256:abc".to_string(),
+            actual: "SHA256:xyz".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_not_retryable_host_key_unknown() {
+        assert!(!is_retryable_error(&BridgeError::SshHostKeyUnknown {
+            host: "server1".to_string(),
+            fingerprint: "SHA256:abc".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_not_retryable_auth() {
+        assert!(!is_retryable_error(&BridgeError::SshAuth {
+            user: "admin".to_string(),
+            host: "server1".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_not_retryable_key_invalid() {
+        assert!(!is_retryable_error(&BridgeError::SshKeyInvalid {
+            path: "/path/to/key".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_not_retryable_output_too_large() {
+        assert!(!is_retryable_error(&BridgeError::SshOutputTooLarge {
+            limit_bytes: 10_485_760,
+        }));
+    }
+
+    #[test]
+    fn test_not_retryable_unknown_host() {
+        assert!(!is_retryable_error(&BridgeError::UnknownHost {
+            host: "nonexistent".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_not_retryable_mcp_protocol() {
+        assert!(!is_retryable_error(&BridgeError::McpProtocol(
+            "invalid".to_string(),
+        )));
+    }
+
+    #[test]
+    fn test_not_retryable_tunnel() {
+        assert!(!is_retryable_error(&BridgeError::Tunnel {
+            reason: "port in use".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_not_retryable_database_command() {
+        assert!(!is_retryable_error(&BridgeError::DatabaseCommand {
+            reason: "query failed".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_not_retryable_sftp() {
+        assert!(!is_retryable_error(&BridgeError::Sftp {
+            reason: "no such file".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_is_retryable_ssh_exec_timeout_keyword() {
+        assert!(is_retryable_error(&BridgeError::SshExec {
+            reason: "connection timeout".to_string(),
+        }));
+    }
+
     // ============== Single Attempt Tests ==============
 
     #[tokio::test]

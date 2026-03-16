@@ -237,4 +237,58 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshCronAddArgs {
+            host: "s".to_string(),
+            schedule: "0 2 * * *".to_string(),
+            command: "/usr/bin/backup.sh".to_string(),
+            user: None,
+            comment: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = CronAddTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("0 2 * * *"));
+        assert!(cmd.contains("/usr/bin/backup.sh"));
+    }
+
+    #[test]
+    fn test_build_command_with_user() {
+        let args = SshCronAddArgs {
+            host: "s".to_string(),
+            schedule: "*/5 * * * *".to_string(),
+            command: "echo hello".to_string(),
+            user: Some("www-data".to_string()),
+            comment: Some("health check".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = CronAddTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("*/5 * * * *"));
+        assert!(cmd.contains("echo hello"));
+    }
 }

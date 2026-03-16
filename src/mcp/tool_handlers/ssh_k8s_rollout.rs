@@ -108,6 +108,7 @@ pub type SshK8sRolloutHandler = StandardToolHandler<K8sRolloutTool>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{HostKeyVerification, OsType};
     use crate::error::BridgeError;
     use crate::ports::ToolHandler;
     use crate::ports::mock::{create_test_context, create_test_context_with_host};
@@ -296,5 +297,80 @@ mod tests {
             BridgeError::McpInvalidRequest(_) => {}
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
+    }
+
+    // ============== build_command Tests ==============
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_status() {
+        let args = SshK8sRolloutArgs {
+            host: "server1".to_string(),
+            action: "status".to_string(),
+            resource: "deployment/myapp".to_string(),
+            namespace: None,
+            to_revision: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sRolloutTool::build_command(&args, &host_config).unwrap();
+        assert_eq!(cmd, "kubectl rollout 'status' 'deployment/myapp'");
+    }
+
+    #[test]
+    fn test_build_command_restart() {
+        let args = SshK8sRolloutArgs {
+            host: "server1".to_string(),
+            action: "restart".to_string(),
+            resource: "deployment/myapp".to_string(),
+            namespace: Some("production".to_string()),
+            to_revision: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sRolloutTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("kubectl rollout 'restart'"));
+        assert!(cmd.contains("-n 'production'"));
+    }
+
+    #[test]
+    fn test_build_command_undo_with_revision() {
+        let args = SshK8sRolloutArgs {
+            host: "server1".to_string(),
+            action: "undo".to_string(),
+            resource: "deployment/myapp".to_string(),
+            namespace: Some("staging".to_string()),
+            to_revision: Some(3),
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sRolloutTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("kubectl rollout 'undo'"));
+        assert!(cmd.contains("-n 'staging'"));
+        assert!(cmd.contains("--to-revision=3"));
     }
 }

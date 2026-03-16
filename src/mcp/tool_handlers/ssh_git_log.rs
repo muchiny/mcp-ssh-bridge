@@ -234,4 +234,66 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshGitLogArgs {
+            host: "s".to_string(),
+            path: "/opt/repo".to_string(),
+            max_count: None,
+            oneline: None,
+            branch: None,
+            author: None,
+            since: None,
+            log_format: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = GitLogTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("git"));
+        assert!(cmd.contains("log"));
+        assert!(cmd.contains("/opt/repo"));
+    }
+
+    #[test]
+    fn test_build_command_with_count_format() {
+        let args = SshGitLogArgs {
+            host: "s".to_string(),
+            path: "/opt/repo".to_string(),
+            max_count: Some(20),
+            oneline: Some(true),
+            branch: Some("main".to_string()),
+            author: Some("dev@example.com".to_string()),
+            since: Some("2024-01-01".to_string()),
+            log_format: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = GitLogTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("log"));
+        assert!(cmd.contains("20"));
+        assert!(cmd.contains("main"));
+    }
 }

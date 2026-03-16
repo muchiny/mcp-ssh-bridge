@@ -281,4 +281,87 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshAnsibleInventoryArgs {
+            host: "server1".to_string(),
+            inventory: None,
+            list: None,
+            graph: None,
+            host_pattern: None,
+            group: None,
+            yaml: None,
+            vars: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsibleInventoryTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("ansible-inventory"));
+    }
+
+    #[test]
+    fn test_build_command_with_inventory() {
+        let args = SshAnsibleInventoryArgs {
+            host: "server1".to_string(),
+            inventory: Some("/etc/ansible/hosts".to_string()),
+            list: Some(true),
+            graph: None,
+            host_pattern: None,
+            group: None,
+            yaml: None,
+            vars: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsibleInventoryTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-i '/etc/ansible/hosts'"));
+        assert!(cmd.contains("--list"));
+    }
+
+    #[test]
+    fn test_build_command_with_host_limit() {
+        let args = SshAnsibleInventoryArgs {
+            host: "server1".to_string(),
+            inventory: None,
+            list: None,
+            graph: Some(true),
+            host_pattern: None,
+            group: Some("webservers".to_string()),
+            yaml: Some(true),
+            vars: Some(true),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsibleInventoryTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("--graph 'webservers'"));
+        assert!(cmd.contains("--yaml"));
+        assert!(cmd.contains("--vars"));
+    }
 }

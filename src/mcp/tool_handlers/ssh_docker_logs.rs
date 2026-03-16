@@ -239,4 +239,101 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshDockerLogsArgs {
+            host: "server1".to_string(),
+            container: "nginx".to_string(),
+            tail: None,
+            since: None,
+            until: None,
+            timestamps: None,
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerLogsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("docker logs"));
+        assert!(cmd.contains("nginx"));
+    }
+
+    #[test]
+    fn test_build_command_with_tail_since() {
+        let args = SshDockerLogsArgs {
+            host: "server1".to_string(),
+            container: "nginx".to_string(),
+            tail: Some(100),
+            since: Some("1h".to_string()),
+            until: None,
+            timestamps: None,
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerLogsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("100"));
+        assert!(cmd.contains("1h"));
+    }
+
+    #[test]
+    fn test_build_command_with_timestamps() {
+        let args = SshDockerLogsArgs {
+            host: "server1".to_string(),
+            container: "nginx".to_string(),
+            tail: None,
+            since: None,
+            until: None,
+            timestamps: Some(true),
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerLogsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("--timestamps"));
+    }
+
+    #[test]
+    fn test_build_command_all_flags() {
+        let args = SshDockerLogsArgs {
+            host: "server1".to_string(),
+            container: "nginx".to_string(),
+            tail: Some(50),
+            since: Some("2h".to_string()),
+            until: Some("1h".to_string()),
+            timestamps: Some(true),
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerLogsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("50"));
+        assert!(cmd.contains("2h"));
+        assert!(cmd.contains("1h"));
+        assert!(cmd.contains("--timestamps"));
+    }
 }

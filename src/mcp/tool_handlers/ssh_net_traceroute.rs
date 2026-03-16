@@ -187,4 +187,56 @@ mod tests {
         let result = serde_json::from_value::<SshNetTracerouteArgs>(json);
         assert!(result.is_err());
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshNetTracerouteArgs {
+            host: "s".to_string(),
+            target: "example.com".to_string(),
+            max_hops: None,
+            wait: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = NetTracerouteTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("traceroute"));
+        assert!(cmd.contains("example.com"));
+    }
+
+    #[test]
+    fn test_build_command_with_max_hops() {
+        let args = SshNetTracerouteArgs {
+            host: "s".to_string(),
+            target: "10.0.0.1".to_string(),
+            max_hops: Some(15),
+            wait: Some(3),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = NetTracerouteTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("10.0.0.1"));
+        assert!(cmd.contains("15"));
+    }
 }

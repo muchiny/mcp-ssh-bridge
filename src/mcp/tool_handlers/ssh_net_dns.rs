@@ -200,4 +200,57 @@ mod tests {
         let result = serde_json::from_value::<SshNetDnsArgs>(json);
         assert!(result.is_err());
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshNetDnsArgs {
+            host: "s".to_string(),
+            domain: "example.com".to_string(),
+            record_type: None,
+            server: None,
+            short: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = NetDnsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("example.com"));
+    }
+
+    #[test]
+    fn test_build_command_with_type_server() {
+        let args = SshNetDnsArgs {
+            host: "s".to_string(),
+            domain: "example.com".to_string(),
+            record_type: Some("MX".to_string()),
+            server: Some("8.8.8.8".to_string()),
+            short: Some(true),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = NetDnsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("example.com"));
+        assert!(cmd.contains("MX"));
+    }
 }

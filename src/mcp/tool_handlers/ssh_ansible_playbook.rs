@@ -393,4 +393,146 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshAnsiblePlaybookArgs {
+            host: "server1".to_string(),
+            playbook: "site.yml".to_string(),
+            inventory: None,
+            limit: None,
+            tags: None,
+            skip_tags: None,
+            extra_vars: None,
+            check: None,
+            diff: None,
+            verbose: None,
+            forks: None,
+            use_become: None,
+            become_user: None,
+            working_dir: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsiblePlaybookTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("ansible-playbook"));
+        assert!(cmd.contains("'site.yml'"));
+    }
+
+    #[test]
+    fn test_build_command_with_inventory_limit() {
+        let args = SshAnsiblePlaybookArgs {
+            host: "server1".to_string(),
+            playbook: "site.yml".to_string(),
+            inventory: Some("hosts.ini".to_string()),
+            limit: Some("webservers".to_string()),
+            tags: None,
+            skip_tags: None,
+            extra_vars: None,
+            check: None,
+            diff: None,
+            verbose: None,
+            forks: None,
+            use_become: None,
+            become_user: None,
+            working_dir: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsiblePlaybookTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-i 'hosts.ini'"));
+        assert!(cmd.contains("--limit 'webservers'"));
+    }
+
+    #[test]
+    fn test_build_command_with_extra_vars() {
+        let mut extra_vars = HashMap::new();
+        extra_vars.insert("env".to_string(), "production".to_string());
+
+        let args = SshAnsiblePlaybookArgs {
+            host: "server1".to_string(),
+            playbook: "site.yml".to_string(),
+            inventory: None,
+            limit: None,
+            tags: None,
+            skip_tags: None,
+            extra_vars: Some(extra_vars),
+            check: Some(true),
+            diff: None,
+            verbose: None,
+            forks: None,
+            use_become: None,
+            become_user: None,
+            working_dir: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsiblePlaybookTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-e 'env'='production'"));
+        assert!(cmd.contains("--check"));
+    }
+
+    #[test]
+    fn test_build_command_all_opts() {
+        let mut extra_vars = HashMap::new();
+        extra_vars.insert("version".to_string(), "1.2.3".to_string());
+
+        let args = SshAnsiblePlaybookArgs {
+            host: "server1".to_string(),
+            playbook: "deploy.yml".to_string(),
+            inventory: Some("hosts.ini".to_string()),
+            limit: Some("webservers".to_string()),
+            tags: Some("deploy".to_string()),
+            skip_tags: Some("debug".to_string()),
+            extra_vars: Some(extra_vars),
+            check: Some(true),
+            diff: Some(true),
+            verbose: Some(2),
+            forks: Some(10),
+            use_become: Some(true),
+            become_user: Some("root".to_string()),
+            working_dir: Some("/opt/ansible".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = AnsiblePlaybookTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("cd '/opt/ansible' &&"));
+        assert!(cmd.contains("ansible-playbook"));
+        assert!(cmd.contains("-i 'hosts.ini'"));
+        assert!(cmd.contains("--limit 'webservers'"));
+        assert!(cmd.contains("--tags 'deploy'"));
+        assert!(cmd.contains("--skip-tags 'debug'"));
+        assert!(cmd.contains("--check"));
+        assert!(cmd.contains("--diff"));
+        assert!(cmd.contains("-b"));
+        assert!(cmd.contains("--become-user 'root'"));
+    }
 }

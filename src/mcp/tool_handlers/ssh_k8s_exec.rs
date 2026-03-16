@@ -103,6 +103,7 @@ pub type SshK8sExecHandler = StandardToolHandler<K8sExecTool>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{HostKeyVerification, OsType};
     use crate::error::BridgeError;
     use crate::ports::ToolHandler;
     use crate::ports::mock::create_test_context;
@@ -268,5 +269,102 @@ mod tests {
             BridgeError::McpInvalidRequest(_) => {}
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
+    }
+
+    // ============== build_command Tests ==============
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshK8sExecArgs {
+            host: "server1".to_string(),
+            pod: "my-pod".to_string(),
+            command: "ls -la".to_string(),
+            namespace: None,
+            container: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sExecTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.starts_with("kubectl exec 'my-pod'"));
+        assert!(cmd.contains("-- sh -c 'ls -la'"));
+    }
+
+    #[test]
+    fn test_build_command_with_namespace_container() {
+        let args = SshK8sExecArgs {
+            host: "server1".to_string(),
+            pod: "my-pod".to_string(),
+            command: "cat /etc/hostname".to_string(),
+            namespace: Some("production".to_string()),
+            container: Some("app".to_string()),
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sExecTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("-n 'production'"));
+        assert!(cmd.contains("-c 'app'"));
+        assert!(cmd.contains("-- sh -c"));
+    }
+
+    #[test]
+    fn test_build_command_custom_bin() {
+        let args = SshK8sExecArgs {
+            host: "server1".to_string(),
+            pod: "my-pod".to_string(),
+            command: "env".to_string(),
+            namespace: None,
+            container: None,
+            kubectl_bin: Some("k3s kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sExecTool::build_command(&args, &host_config).unwrap();
+        // "k3s kubectl" has a space so is_valid_binary_path rejects it; falls back to auto-detect
+        assert!(cmd.contains("exec 'my-pod'"));
+    }
+
+    #[test]
+    fn test_build_command_all_opts() {
+        let args = SshK8sExecArgs {
+            host: "server1".to_string(),
+            pod: "web-pod".to_string(),
+            command: "cat /var/log/app.log".to_string(),
+            namespace: Some("staging".to_string()),
+            container: Some("nginx".to_string()),
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sExecTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.starts_with("kubectl exec 'web-pod'"));
+        assert!(cmd.contains("-n 'staging'"));
+        assert!(cmd.contains("-c 'nginx'"));
+        assert!(cmd.contains("-- sh -c 'cat /var/log/app.log'"));
     }
 }

@@ -110,10 +110,27 @@ pub type SshK8sTopHandler = StandardToolHandler<K8sTopTool>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{HostKeyVerification, OsType};
     use crate::error::BridgeError;
     use crate::ports::ToolHandler;
     use crate::ports::mock::{create_test_context, create_test_context_with_host};
     use serde_json::json;
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
 
     #[tokio::test]
     async fn test_missing_arguments() {
@@ -286,5 +303,64 @@ mod tests {
             BridgeError::McpInvalidRequest(_) => {}
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
+    }
+
+    // ============== build_command Tests ==============
+
+    #[test]
+    fn test_build_command_pods() {
+        let args = SshK8sTopArgs {
+            host: "server1".to_string(),
+            resource_type: "pods".to_string(),
+            namespace: None,
+            sort_by: None,
+            containers: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sTopTool::build_command(&args, &host_config).unwrap();
+        assert_eq!(cmd, "kubectl top 'pods'");
+    }
+
+    #[test]
+    fn test_build_command_nodes() {
+        let args = SshK8sTopArgs {
+            host: "server1".to_string(),
+            resource_type: "nodes".to_string(),
+            namespace: None,
+            sort_by: Some("cpu".to_string()),
+            containers: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sTopTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("kubectl top 'nodes'"));
+        assert!(cmd.contains("--sort-by='cpu'"));
+    }
+
+    #[test]
+    fn test_build_command_with_namespace() {
+        let args = SshK8sTopArgs {
+            host: "server1".to_string(),
+            resource_type: "pods".to_string(),
+            namespace: Some("production".to_string()),
+            sort_by: Some("memory".to_string()),
+            containers: Some(true),
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sTopTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("-n 'production'"));
+        assert!(cmd.contains("--sort-by='memory'"));
+        assert!(cmd.contains("--containers"));
     }
 }

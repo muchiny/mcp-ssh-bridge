@@ -232,4 +232,64 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshTerraformPlanArgs {
+            host: "s".to_string(),
+            dir: "/opt/infra".to_string(),
+            vars: None,
+            var_file: None,
+            targets: None,
+            out: None,
+            destroy: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = TerraformPlanTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("terraform"));
+        assert!(cmd.contains("plan"));
+        assert!(cmd.contains("/opt/infra"));
+    }
+
+    #[test]
+    fn test_build_command_with_var_target() {
+        let args = SshTerraformPlanArgs {
+            host: "s".to_string(),
+            dir: "/opt/infra".to_string(),
+            vars: Some(vec!["env=prod".to_string()]),
+            var_file: Some("prod.tfvars".to_string()),
+            targets: Some(vec!["aws_instance.web".to_string()]),
+            out: Some("plan.out".to_string()),
+            destroy: Some(true),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = TerraformPlanTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("plan"));
+        assert!(cmd.contains("env=prod"));
+        assert!(cmd.contains("-destroy"));
+    }
 }

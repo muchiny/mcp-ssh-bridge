@@ -233,4 +233,63 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshTerraformApplyArgs {
+            host: "s".to_string(),
+            dir: "/opt/infra".to_string(),
+            auto_approve: None,
+            vars: None,
+            var_file: None,
+            targets: None,
+            plan_file: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = TerraformApplyTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("terraform"));
+        assert!(cmd.contains("apply"));
+        assert!(cmd.contains("/opt/infra"));
+    }
+
+    #[test]
+    fn test_build_command_auto_approve() {
+        let args = SshTerraformApplyArgs {
+            host: "s".to_string(),
+            dir: "/opt/infra".to_string(),
+            auto_approve: Some(true),
+            vars: Some(vec!["env=staging".to_string()]),
+            var_file: None,
+            targets: None,
+            plan_file: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = TerraformApplyTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("apply"));
+        assert!(cmd.contains("-auto-approve"));
+    }
 }

@@ -210,6 +210,91 @@ mod tests {
         }
     }
 
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshDockerPsArgs {
+            host: "server1".to_string(),
+            all: None,
+            filter: None,
+            format: None,
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerPsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("docker ps"));
+    }
+
+    #[test]
+    fn test_build_command_all_flag() {
+        let args = SshDockerPsArgs {
+            host: "server1".to_string(),
+            all: Some(true),
+            filter: None,
+            format: None,
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerPsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-a"));
+    }
+
+    #[test]
+    fn test_build_command_with_filter_format() {
+        let args = SshDockerPsArgs {
+            host: "server1".to_string(),
+            all: None,
+            filter: Some("status=running".to_string()),
+            format: Some("json".to_string()),
+            docker_bin: Some("docker".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerPsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("status=running"));
+        assert!(cmd.contains("json"));
+    }
+
+    #[test]
+    fn test_build_command_custom_bin() {
+        let args = SshDockerPsArgs {
+            host: "server1".to_string(),
+            all: None,
+            filter: None,
+            format: None,
+            docker_bin: Some("podman".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = DockerPsTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.starts_with("podman"));
+    }
+
     #[tokio::test]
     async fn test_rate_limit_returns_error_result() {
         use crate::ports::mock::create_test_context_with_host;

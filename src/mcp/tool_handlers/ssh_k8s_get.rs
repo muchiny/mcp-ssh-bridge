@@ -136,6 +136,7 @@ pub type SshK8sGetHandler = StandardToolHandler<K8sGetTool>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{HostKeyVerification, OsType};
     use crate::error::BridgeError;
     use crate::ports::ToolHandler;
     use crate::ports::mock::create_test_context;
@@ -276,6 +277,121 @@ mod tests {
             BridgeError::McpInvalidRequest(_) => {}
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
+    }
+
+    // ============== build_command Tests ==============
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshK8sGetArgs {
+            host: "server1".to_string(),
+            resource: "pods".to_string(),
+            name: None,
+            namespace: None,
+            all_namespaces: None,
+            label_selector: None,
+            field_selector: None,
+            output: None,
+            sort_by: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sGetTool::build_command(&args, &host_config).unwrap();
+        assert_eq!(cmd, "kubectl get 'pods'");
+    }
+
+    #[test]
+    fn test_build_command_with_namespace() {
+        let args = SshK8sGetArgs {
+            host: "server1".to_string(),
+            resource: "deployments".to_string(),
+            name: Some("my-app".to_string()),
+            namespace: Some("production".to_string()),
+            all_namespaces: None,
+            label_selector: None,
+            field_selector: None,
+            output: None,
+            sort_by: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sGetTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("kubectl get"));
+        assert!(cmd.contains("'my-app'"));
+        assert!(cmd.contains("-n 'production'"));
+    }
+
+    #[test]
+    fn test_build_command_all_namespaces_labels() {
+        let args = SshK8sGetArgs {
+            host: "server1".to_string(),
+            resource: "pods".to_string(),
+            name: None,
+            namespace: None,
+            all_namespaces: Some(true),
+            label_selector: Some("app=nginx".to_string()),
+            field_selector: None,
+            output: None,
+            sort_by: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sGetTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("-A"));
+        assert!(cmd.contains("-l 'app=nginx'"));
+    }
+
+    #[test]
+    fn test_build_command_all_options() {
+        let args = SshK8sGetArgs {
+            host: "server1".to_string(),
+            resource: "services".to_string(),
+            name: Some("my-svc".to_string()),
+            namespace: Some("default".to_string()),
+            all_namespaces: Some(false),
+            label_selector: Some("tier=frontend".to_string()),
+            field_selector: Some("status.phase=Running".to_string()),
+            output: Some("json".to_string()),
+            sort_by: Some(".metadata.creationTimestamp".to_string()),
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sGetTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.starts_with("kubectl get"));
+        assert!(cmd.contains("'my-svc'"));
+        assert!(cmd.contains("-n 'default'"));
+        assert!(cmd.contains("-l 'tier=frontend'"));
+        assert!(cmd.contains("--field-selector 'status.phase=Running'"));
+        assert!(cmd.contains("-o 'json'"));
+        assert!(cmd.contains("--sort-by='"));
     }
 
     #[tokio::test]

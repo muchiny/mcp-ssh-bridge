@@ -256,4 +256,83 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshHelmUninstallArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            namespace: None,
+            dry_run: None,
+            keep_history: None,
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmUninstallTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("helm uninstall"));
+        assert!(cmd.contains("'my-app'"));
+    }
+
+    #[test]
+    fn test_build_command_with_namespace() {
+        let args = SshHelmUninstallArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            namespace: Some("production".to_string()),
+            dry_run: None,
+            keep_history: None,
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmUninstallTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("-n 'production'"));
+    }
+
+    #[test]
+    fn test_build_command_dry_run() {
+        let args = SshHelmUninstallArgs {
+            host: "server1".to_string(),
+            release: "my-app".to_string(),
+            namespace: None,
+            dry_run: Some(true),
+            keep_history: Some(true),
+            helm_bin: Some("helm".to_string()),
+            kubeconfig: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+
+        let cmd = HelmUninstallTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("--dry-run"));
+        assert!(cmd.contains("--keep-history"));
+    }
 }

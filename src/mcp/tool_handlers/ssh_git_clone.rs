@@ -215,4 +215,61 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            os_type: OsType::default(),
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args = SshGitCloneArgs {
+            host: "s".to_string(),
+            url: "https://github.com/user/repo.git".to_string(),
+            destination: None,
+            branch: None,
+            depth: None,
+            single_branch: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = GitCloneTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("git clone"));
+        assert!(cmd.contains("https://github.com/user/repo.git"));
+    }
+
+    #[test]
+    fn test_build_command_with_branch_depth() {
+        let args = SshGitCloneArgs {
+            host: "s".to_string(),
+            url: "git@github.com:user/repo.git".to_string(),
+            destination: Some("/opt/repo".to_string()),
+            branch: Some("develop".to_string()),
+            depth: Some(1),
+            single_branch: Some(true),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = GitCloneTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("git clone"));
+        assert!(cmd.contains("develop"));
+        assert!(cmd.contains("--depth"));
+    }
 }
