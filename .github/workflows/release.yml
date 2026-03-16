@@ -13,7 +13,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: mcp-ssh-bridge
-  MSRV: "1.94.0"
 
 jobs:
   build:
@@ -48,13 +47,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ env.MSRV }}
           targets: ${{ matrix.target }}
-
-      - name: Ensure target is installed
-        run: rustup target add ${{ matrix.target }} --toolchain ${{ env.MSRV }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -72,7 +67,7 @@ jobs:
 
       - name: Build (native)
         if: ${{ !matrix.cross }}
-        run: cargo +${{ env.MSRV }} build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package (unix)
         if: matrix.archive == 'tar.gz'
