@@ -13,7 +13,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  MSRV: "1.93.0"
+  MSRV: "1.94.0"
 
 jobs:
   format:
