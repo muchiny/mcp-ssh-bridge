@@ -32,7 +32,7 @@ jobs:
             archive: tar.gz
             cross: true
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
             name: macos-x86_64
             archive: tar.gz
           - target: aarch64-apple-darwin
@@ -50,6 +50,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Ensure target is installed
+        run: rustup target add ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
