@@ -113,8 +113,8 @@ pub fn create_default_resource_registry() -> ResourceRegistry {
 mod tests {
     use super::*;
     use crate::config::{
-        AuditConfig, Config, LimitsConfig, SecurityConfig, SessionConfig, SshConfigDiscovery,
-        ToolGroupsConfig,
+        AuditConfig, Config, HttpTransportConfig, LimitsConfig, SecurityConfig, SessionConfig,
+        SshConfigDiscovery, ToolGroupsConfig,
     };
     use crate::domain::{ExecuteCommandUseCase, TunnelManager};
     use crate::mcp::CommandHistory;
@@ -132,6 +132,7 @@ mod tests {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         };
 
         let validator = Arc::new(CommandValidator::new(&SecurityConfig::default()));

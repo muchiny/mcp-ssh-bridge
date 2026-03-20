@@ -7,9 +7,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use mcp_ssh_bridge::config::{
-    AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, LimitsConfig, OsType,
-    SanitizeConfig, SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery,
-    ToolGroupsConfig,
+    AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
+    LimitsConfig, OsType, SanitizeConfig, SecurityConfig, SecurityMode, SessionConfig,
+    SshConfigDiscovery, ToolGroupsConfig,
 };
 use mcp_ssh_bridge::domain::ExecuteCommandUseCase;
 use mcp_ssh_bridge::mcp::CommandHistory;
@@ -78,6 +78,7 @@ fn create_test_config() -> Config {
         sessions: SessionConfig::default(),
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
+        http: HttpTransportConfig::default(),
     }
 }
 
@@ -491,6 +492,7 @@ fn test_proxy_jump_config() {
         sessions: SessionConfig::default(),
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
+        http: HttpTransportConfig::default(),
     };
 
     // Verify bastion has no proxy_jump
@@ -549,6 +551,7 @@ fn test_proxy_jump_resolution() {
         sessions: SessionConfig::default(),
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
+        http: HttpTransportConfig::default(),
     };
 
     // Simulate resolving jump host

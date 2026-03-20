@@ -209,8 +209,8 @@ impl ToolHandler for SshSessionExecHandler {
 mod tests {
     use super::*;
     use crate::config::{
-        AuditConfig, Config, LimitsConfig, SecurityConfig, SecurityMode, SessionConfig,
-        SshConfigDiscovery, ToolGroupsConfig,
+        AuditConfig, Config, HttpTransportConfig, LimitsConfig, SecurityConfig, SecurityMode,
+        SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
     };
     use crate::domain::{ExecuteCommandUseCase, TunnelManager};
     use crate::mcp::CommandHistory;
@@ -238,6 +238,7 @@ mod tests {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         };
 
         let validator = Arc::new(CommandValidator::new(&security));

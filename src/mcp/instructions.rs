@@ -107,8 +107,8 @@ mod tests {
 
     use super::*;
     use crate::config::{
-        AuditConfig, AuthConfig, HostConfig, HostKeyVerification, LimitsConfig, SecurityConfig,
-        SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
+        AuditConfig, AuthConfig, HostConfig, HostKeyVerification, HttpTransportConfig,
+        LimitsConfig, SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
     };
 
     fn default_config() -> Config {
@@ -120,6 +120,7 @@ mod tests {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         }
     }
 

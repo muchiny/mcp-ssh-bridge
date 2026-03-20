@@ -137,6 +137,49 @@ pub enum ToolContent {
     Resource {
         resource: EmbeddedResource,
     },
+    /// Interactive app component (MCP Apps, early 2026).
+    #[serde(rename = "app")]
+    App {
+        app: AppContent,
+    },
+}
+
+// ============================================================================
+// MCP Apps Types (Interactive UI Components, early 2026)
+// ============================================================================
+
+/// Interactive UI component returned by tools.
+///
+/// Clients that support MCP Apps render these as rich UI elements
+/// (dashboards, tables, forms, charts) directly in the conversation.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppContent {
+    /// App type: `"dashboard"`, `"table"`, `"form"`, `"chart"`.
+    pub app_type: String,
+    /// Human-readable title for the component.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// App-specific structured data.
+    pub data: serde_json::Value,
+    /// Optional interactive actions (buttons that invoke tools).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Vec<AppAction>>,
+}
+
+/// An interactive action button within an MCP App component.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppAction {
+    /// Unique action identifier.
+    pub id: String,
+    /// Human-readable label for the button.
+    pub label: String,
+    /// Tool name to invoke when the action is triggered.
+    pub tool: String,
+    /// Pre-filled arguments for the tool invocation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub args: Option<serde_json::Value>,
 }
 
 /// Embedded resource content within a tool result (MCP 2025-06-18+).
@@ -169,6 +212,13 @@ impl ToolCallResult {
             is_error: Some(true),
             structured_content: None,
         }
+    }
+
+    /// Add an MCP App component alongside text content.
+    #[must_use]
+    pub fn with_app(mut self, app: AppContent) -> Self {
+        self.content.push(ToolContent::App { app });
+        self
     }
 }
 

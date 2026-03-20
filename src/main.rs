@@ -12,12 +12,18 @@ use mcp_ssh_bridge::cli::{
 use mcp_ssh_bridge::config::{default_config_path, load_config};
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
     // Parse command line arguments
     let cli = Cli::parse();
 
     // Determine if we're in MCP mode (no command or serve command)
-    let is_mcp_mode = matches!(cli.command, None | Some(Commands::Serve));
+    #[allow(unused_mut)]
+    let mut is_mcp_mode = matches!(cli.command, None | Some(Commands::Serve));
+    #[cfg(feature = "http")]
+    {
+        is_mcp_mode = is_mcp_mode || matches!(cli.command, Some(Commands::ServeHttp { .. }));
+    }
 
     // Initialize logging to stderr (stdout is used for MCP protocol in MCP mode)
     tracing_subscriber::fmt()
@@ -54,6 +60,35 @@ async fn main() -> Result<()> {
             let (server, audit_task) = McpServer::new((*config).clone());
             let server = Arc::new(server);
             server.run(audit_task, Some(&config_path)).await?;
+        }
+        #[cfg(feature = "http")]
+        Some(Commands::ServeHttp { bind }) => {
+            use mcp_ssh_bridge::mcp::transport::http as http_transport;
+            use mcp_ssh_bridge::mcp::transport::oauth::OAuthConfig as TransportOAuthConfig;
+
+            let (server, _audit_task) = McpServer::new((*config).clone());
+            let server = Arc::new(server);
+
+            let oauth = TransportOAuthConfig {
+                enabled: config.http.oauth.enabled,
+                issuer: config.http.oauth.issuer.clone(),
+                audience: config.http.oauth.audience.clone(),
+                jwks_uri: config.http.oauth.jwks_uri.clone(),
+                client_id: config.http.oauth.client_id.clone(),
+                required_scopes: config.http.oauth.required_scopes.clone(),
+            };
+
+            let http_config = http_transport::HttpTransportConfig {
+                bind: bind.unwrap_or_else(|| config.http.bind.clone()),
+                max_body_size: config.http.max_body_size,
+                session_timeout: std::time::Duration::from_secs(
+                    config.http.session_timeout_seconds,
+                ),
+                max_sessions: config.http.max_sessions,
+                oauth,
+            };
+
+            http_transport::serve(server, http_config).await?;
         }
         Some(Commands::Exec {
             host,

@@ -520,8 +520,9 @@ mod tests {
     #[tokio::test]
     async fn test_rate_limit_returns_error_result() {
         use crate::config::{
-            AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, LimitsConfig, OsType,
-            SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
+            AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
+            LimitsConfig, OsType, SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery,
+            ToolGroupsConfig,
         };
         use crate::domain::history::HistoryConfig;
         use crate::domain::{ExecuteCommandUseCase, TunnelManager};
@@ -568,6 +569,7 @@ mod tests {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         };
 
         let validator = Arc::new(CommandValidator::new(&security));

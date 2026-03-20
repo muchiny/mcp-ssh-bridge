@@ -52,6 +52,14 @@ pub enum Commands {
     /// Start MCP server (JSON-RPC over stdio) - same as running without arguments
     Serve,
 
+    /// Start MCP server over Streamable HTTP transport
+    #[cfg(feature = "http")]
+    ServeHttp {
+        /// Bind address (overrides config, e.g. "0.0.0.0:3000")
+        #[arg(short, long)]
+        bind: Option<String>,
+    },
+
     /// Execute a command on a remote host
     Exec {
         /// SSH host alias from configuration

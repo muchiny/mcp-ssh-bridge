@@ -108,8 +108,8 @@ pub trait ToolHandler: Send + Sync {
 pub mod mock {
     use super::*;
     use crate::config::{
-        AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, LimitsConfig, OsType,
-        SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
+        AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
+        LimitsConfig, OsType, SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
     };
     use crate::domain::history::HistoryConfig;
     use crate::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
@@ -127,6 +127,7 @@ pub mod mock {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         })
     }
 
@@ -162,6 +163,7 @@ pub mod mock {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         })
     }
 
@@ -177,6 +179,7 @@ pub mod mock {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         })
     }
 
@@ -191,6 +194,7 @@ pub mod mock {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         };
 
         let validator = Arc::new(CommandValidator::new(&SecurityConfig::default()));

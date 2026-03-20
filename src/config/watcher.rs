@@ -309,8 +309,9 @@ mod tests {
     use std::time::Duration;
 
     use crate::config::{
-        AuditConfig, AuthConfig, HostConfig, HostKeyVerification, LimitsConfig, OsType,
-        SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
+        AuditConfig, AuthConfig, HostConfig, HostKeyVerification, HttpTransportConfig,
+        LimitsConfig, OsType, SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery,
+        ToolGroupsConfig,
     };
 
     fn create_test_config() -> Config {
@@ -340,6 +341,7 @@ mod tests {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         }
     }
 
