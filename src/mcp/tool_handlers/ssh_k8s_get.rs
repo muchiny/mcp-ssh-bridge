@@ -5,11 +5,14 @@
 //! Auto-detects kubectl binary (k8s, k3s, `microk8s`).
 
 use serde::Deserialize;
+use serde_json::{Value, json};
 
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::KubernetesCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshK8sGetArgs {
@@ -127,6 +130,34 @@ impl StandardTool for K8sGetTool {
             args.output.as_deref(),
             args.sort_by.as_deref(),
         ))
+    }
+
+    fn post_process(result: ToolCallResult, args: &SshK8sGetArgs, output: &str) -> ToolCallResult {
+        let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.len() < 2 {
+            return result;
+        }
+        // Parse kubectl tabular output (header + rows)
+        let headers: Vec<&str> = lines[0].split_whitespace().collect();
+        let mut tbl = table(format!("Kubernetes {}", args.resource));
+        for h in &headers {
+            tbl = tbl.column(h.to_lowercase(), *h);
+        }
+        for line in &lines[1..] {
+            let values: Vec<&str> = line.split_whitespace().collect();
+            let mut row = serde_json::Map::new();
+            for (i, h) in headers.iter().enumerate() {
+                row.insert(h.to_lowercase(), json!(values.get(i).unwrap_or(&"")));
+            }
+            tbl = tbl.row(Value::Object(row));
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_k8s_get",
+            Some(json!({"host": args.host, "resource": args.resource})),
+        );
+        result.with_app(tbl.build())
     }
 }
 

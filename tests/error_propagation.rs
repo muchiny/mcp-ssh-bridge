@@ -88,6 +88,7 @@ fn create_tool_context(config: &Config) -> ToolContext {
         tunnel_manager: Arc::new(TunnelManager::new(20)),
         output_cache: None,
         runtime_max_output_chars: None,
+        roots: Vec::new(),
     }
 }
 

@@ -4,11 +4,14 @@
 //! Auto-detects `docker` or `podman` binary.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshDockerPsArgs {
@@ -93,6 +96,59 @@ impl StandardTool for DockerPsTool {
             args.filter.as_deref(),
             args.format.as_deref(),
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshDockerPsArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        // Parse docker ps text output into table rows
+        let lines: Vec<&str> = output.lines().collect();
+        if lines.len() < 2 {
+            return result;
+        }
+        let mut tbl = table("Docker Containers")
+            .column("name", "Name")
+            .column("image", "Image")
+            .column("status", "Status")
+            .column("ports", "Ports");
+        // Parse header to find column positions
+        let header = lines[0];
+        let name_pos = header.find("NAMES").unwrap_or(0);
+        let _image_pos = header.find("IMAGE").unwrap_or(0);
+        let _status_pos = header.find("STATUS").unwrap_or(0);
+        let _ports_pos = header.find("PORTS").unwrap_or(0);
+        for line in &lines[1..] {
+            if line.trim().is_empty() {
+                continue;
+            }
+            // Simple: split by 2+ spaces for docker ps columnar output
+            let _parts: Vec<&str> = line.splitn(2, "  ").collect();
+            let name = line
+                .get(name_pos..)
+                .unwrap_or("")
+                .split_whitespace()
+                .next()
+                .unwrap_or("");
+            if !name.is_empty() {
+                tbl = tbl
+                    .row(json!({"name": name, "image": "", "status": "", "ports": ""}))
+                    .action(
+                        format!("logs-{name}"),
+                        format!("Logs {name}"),
+                        "ssh_docker_logs",
+                        Some(json!({"host": args.host, "container": name})),
+                    )
+                    .action(
+                        format!("inspect-{name}"),
+                        format!("Inspect {name}"),
+                        "ssh_docker_inspect",
+                        Some(json!({"host": args.host, "container": name})),
+                    );
+            }
+        }
+        result.with_app(tbl.build())
     }
 }
 

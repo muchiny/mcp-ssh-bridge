@@ -173,6 +173,7 @@ fn build_ctx(host_config: HostConfig) -> ToolContext {
         tunnel_manager: Arc::new(TunnelManager::new(20)),
         output_cache: None,
         runtime_max_output_chars: None,
+        roots: Vec::new(),
     }
 }
 
@@ -1016,6 +1017,7 @@ async fn test_security_command_denied() {
         tunnel_manager: Arc::new(TunnelManager::new(20)),
         output_cache: None,
         runtime_max_output_chars: None,
+        roots: Vec::new(),
     };
 
     let handler = SshExecHandler;

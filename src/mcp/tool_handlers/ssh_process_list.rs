@@ -3,11 +3,14 @@
 //! Lists running processes on a remote host with optional filtering and sorting.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::config::HostConfig;
 use crate::domain::use_cases::process::ProcessCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshProcessListArgs {
@@ -84,6 +87,43 @@ impl StandardTool for ProcessListTool {
             args.sort_by.as_deref(),
             args.filter.as_deref(),
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshProcessListArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.len() < 2 {
+            return result;
+        }
+        let mut tbl = table("Processes")
+            .column("user", "User")
+            .column("pid", "PID")
+            .column("cpu", "%CPU")
+            .column("mem", "%MEM")
+            .column("command", "Command");
+        for line in &lines[1..] {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 11 {
+                let pid = parts[1];
+                tbl = tbl.row(json!({
+                    "user": parts[0],
+                    "pid": pid,
+                    "cpu": parts[2],
+                    "mem": parts[3],
+                    "command": parts[10..].join(" "),
+                }));
+            }
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_process_list",
+            Some(json!({"host": args.host})),
+        );
+        result.with_app(tbl.build())
     }
 }
 

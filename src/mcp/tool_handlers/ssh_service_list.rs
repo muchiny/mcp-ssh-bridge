@@ -3,12 +3,15 @@
 //! Lists systemd services on a remote host.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::systemd::SystemdCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshServiceListArgs {
@@ -78,6 +81,41 @@ impl StandardTool for ServiceListTool {
             args.all.unwrap_or(false),
             args.unit_type.as_deref(),
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshServiceListArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.len() < 2 {
+            return result;
+        }
+        let mut tbl = table("Systemd Services")
+            .column("unit", "Unit")
+            .column("load", "Load")
+            .column("active", "Active")
+            .column("sub", "Sub");
+        for line in &lines[1..] {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 4 {
+                let unit = parts[0];
+                tbl = tbl.row(json!({
+                    "unit": unit,
+                    "load": parts[1],
+                    "active": parts[2],
+                    "sub": parts[3],
+                }));
+            }
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_service_list",
+            Some(json!({"host": args.host})),
+        );
+        result.with_app(tbl.build())
     }
 }
 

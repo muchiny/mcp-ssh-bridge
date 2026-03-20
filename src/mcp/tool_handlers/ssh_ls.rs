@@ -104,6 +104,9 @@ impl ToolHandler for SshLsHandler {
         // Validate path for traversal attacks
         validate_path(&args.path)?;
 
+        // Validate path is within declared workspace roots
+        ctx.validate_root_scope(&args.path)?;
+
         // Get host config
         let host_config =
             ctx.config

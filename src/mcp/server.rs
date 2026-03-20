@@ -214,6 +214,7 @@ impl McpServer {
         ctx.tunnel_manager = Arc::clone(&self.tunnel_manager);
         ctx.output_cache = Some(Arc::clone(&self.output_cache));
         ctx.runtime_max_output_chars = Some(Arc::clone(&self.runtime_max_output_chars));
+        ctx.roots = self.roots.read().await.to_vec();
         ctx
     }
 

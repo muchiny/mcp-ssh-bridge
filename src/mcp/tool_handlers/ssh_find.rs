@@ -137,6 +137,9 @@ impl ToolHandler for SshFindHandler {
         let args: SshFindArgs =
             serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))?;
 
+        // Validate path is within declared workspace roots
+        ctx.validate_root_scope(&args.path)?;
+
         let host_config =
             ctx.config
                 .hosts
