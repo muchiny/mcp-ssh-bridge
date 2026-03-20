@@ -43,21 +43,23 @@ impl ToolHandler for SshDiskUsageHandler {
     }
 
     fn description(&self) -> &'static str {
-        "Show disk usage and filesystem space on a remote host. Without a path, shows all \
-         mounted filesystems (df -h). With a path, shows both the directory size (du -sh) \
-         and the filesystem it resides on (df -h)."
+        "Show disk usage and filesystem space on a remote host. Prefer this over ssh_exec \
+         for disk checks. Without a path, shows all mounted filesystems (df -h). With a path, \
+         shows both the directory size (du -sh) and the filesystem it resides on (df -h). \
+         Returns human-readable text output. For structured JSON disk metrics as part of a \
+         broader system health check, use ssh_metrics with metrics=['disk'] instead."
     }
 
     fn schema(&self) -> ToolSchema {
         ToolSchema {
             name: "ssh_disk_usage",
-            description: "Show disk usage and filesystem space on a remote host. Without a path, shows all mounted filesystems (df -h). With a path, shows both the directory size (du -sh) and the filesystem it resides on (df -h).",
+            description: "Show disk usage and filesystem space on a remote host. Prefer this over ssh_exec for disk checks. Without a path, shows all mounted filesystems (df -h). With a path, shows both the directory size (du -sh) and the filesystem it resides on (df -h). Returns human-readable text output. For structured JSON disk metrics as part of a broader system health check, use ssh_metrics with metrics=['disk'] instead.",
             input_schema: r#"{
                 "type": "object",
                 "properties": {
                     "host": {
                         "type": "string",
-                        "description": "Target host name from configuration"
+                        "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
                     },
                     "path": {
                         "type": "string",

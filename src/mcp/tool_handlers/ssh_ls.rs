@@ -38,7 +38,7 @@ impl SshLsHandler {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "The host alias as defined in the configuration"
+                "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
             },
             "path": {
                 "type": "string",
@@ -78,9 +78,10 @@ impl ToolHandler for SshLsHandler {
 
     fn description(&self) -> &'static str {
         "List files and directories on a remote host via SFTP. Prefer this over ssh_exec \
-         as it returns structured entries with name, size, type, and permissions via \
-         native SFTP (not shell). Supports recursive listing with configurable depth. \
-         For reading file contents, use ssh_tail or ssh_download instead."
+         as it returns structured JSON entries with name, size, type, permissions, and \
+         modified timestamp via native SFTP (not shell). Supports recursive listing with \
+         configurable depth. For searching files by pattern, use ssh_find. For reading \
+         file contents, use ssh_tail or ssh_download instead."
     }
 
     fn schema(&self) -> ToolSchema {

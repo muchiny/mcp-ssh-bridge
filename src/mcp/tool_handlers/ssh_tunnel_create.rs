@@ -35,7 +35,7 @@ impl SshTunnelCreateHandler {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "The SSH host alias to tunnel through"
+                "description": "Host alias from config.yaml — the SSH host to tunnel through (use ssh_status to list hosts)"
             },
             "local_port": {
                 "type": "integer",

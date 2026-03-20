@@ -46,7 +46,7 @@ impl StandardTool for K8sScaleTool {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "The SSH host alias as defined in the configuration"
+                "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
             },
             "resource": {
                 "type": "string",

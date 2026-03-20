@@ -41,7 +41,7 @@ impl SshExecHandler {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "The host alias as defined in the configuration"
+                "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
             },
             "command": {
                 "type": "string",
@@ -87,11 +87,16 @@ impl ToolHandler for SshExecHandler {
     }
 
     fn description(&self) -> &'static str {
-        "Execute a command on a remote host via SSH. Returns stdout, stderr, and exit code. \
-         Use ssh_status first to discover available host aliases. Best for single, independent \
-         commands. For multi-step workflows that need shared state (cd, environment variables), \
-         use ssh_session_create + ssh_session_exec instead. For the same command on many hosts, \
-         use ssh_exec_multi. If a command is denied, the security whitelist may need updating."
+        "Execute an arbitrary command on a remote host via SSH. Returns plain text with stdout, \
+         stderr, and exit code. Use ssh_status first to discover available host aliases. \
+         IMPORTANT: Prefer specialized tools over ssh_exec when available — they provide \
+         structured output, safe parameter handling, and better error reporting: ssh_ls (list \
+         files), ssh_find (search files), ssh_tail (read logs), ssh_process_list (ps), \
+         ssh_service_status (systemd), ssh_docker_ps (containers), ssh_k8s_get (kubernetes), \
+         ssh_metrics (system stats), ssh_git_status (git). Use ssh_exec only for ad-hoc \
+         commands not covered by a specific tool. For multi-step workflows with shared state, \
+         use ssh_session_create + ssh_session_exec. For parallel execution across hosts, \
+         use ssh_exec_multi."
     }
 
     fn schema(&self) -> ToolSchema {

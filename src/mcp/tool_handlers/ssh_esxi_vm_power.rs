@@ -41,7 +41,7 @@ impl StandardTool for EsxiVmPowerTool {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "The SSH host alias as defined in the configuration (must be an ESXi host)"
+                "description": "Host alias from config.yaml — must be an ESXi host (use ssh_status to list hosts)"
             },
             "vm_id": {
                 "type": "string",

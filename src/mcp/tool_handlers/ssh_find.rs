@@ -74,21 +74,23 @@ impl ToolHandler for SshFindHandler {
     }
 
     fn description(&self) -> &'static str {
-        "Find files and directories on a remote host. Wraps the find command with safe \
-         escaping and a default max depth of 5 to prevent excessive traversal. Use name \
-         for glob patterns (e.g., '*.log') and type for filtering (f=files, d=directories)."
+        "Find files and directories on a remote host. Prefer this over ssh_exec for file \
+         searches as it provides safe escaping, path validation, and a default max depth of 5 \
+         to prevent excessive traversal. Use name for glob patterns (e.g., '*.log') and type \
+         for filtering (f=files, d=directories). Returns one file path per line (plain text). \
+         For listing directory contents, use ssh_ls instead."
     }
 
     fn schema(&self) -> ToolSchema {
         ToolSchema {
             name: "ssh_find",
-            description: "Find files and directories on a remote host. Wraps the find command with safe escaping and a default max depth of 5 to prevent excessive traversal. Use name for glob patterns (e.g., '*.log') and type for filtering (f=files, d=directories).",
+            description: "Find files and directories on a remote host. Prefer this over ssh_exec for file searches as it provides safe escaping, path validation, and a default max depth of 5 to prevent excessive traversal. Use name for glob patterns (e.g., '*.log') and type for filtering (f=files, d=directories). Returns one file path per line (plain text). For listing directory contents, use ssh_ls instead.",
             input_schema: r#"{
                 "type": "object",
                 "properties": {
                     "host": {
                         "type": "string",
-                        "description": "Target host name from configuration"
+                        "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
                     },
                     "path": {
                         "type": "string",
