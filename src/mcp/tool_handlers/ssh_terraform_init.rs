@@ -34,7 +34,7 @@ impl StandardTool for TerraformInitTool {
                 "properties": {
                     "host": {
                         "type": "string",
-                        "description": "SSH host to connect through"
+                        "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
                     },
                     "dir": {
                         "type": "string",

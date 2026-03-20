@@ -48,7 +48,7 @@ impl StandardTool for NetPingTool {
     "properties": {
         "host": {
             "type": "string",
-            "description": "Target host name as defined in config"
+            "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
         },
         "target": {
             "type": "string",

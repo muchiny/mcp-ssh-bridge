@@ -37,7 +37,7 @@ impl StandardTool for ServiceDaemonReloadTool {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "Target host name (must match a configured host)"
+                "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
             },
             "timeout_seconds": {
                 "type": "integer",

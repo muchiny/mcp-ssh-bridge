@@ -21,7 +21,7 @@ use super::completion_provider::DefaultCompletionProvider;
 use super::logger::McpLogger;
 use super::pending_requests::{ClientResponse, PendingRequests};
 use super::progress::ProgressReporter;
-use super::protocol::JsonRpcMessage;
+use super::protocol::{IncomingMessage, JsonRpcMessage, RootEntry, RootsListResult};
 
 use super::history::CommandHistory;
 use super::prompt_registry::{PromptRegistry, create_default_prompt_registry};
@@ -72,6 +72,10 @@ pub struct McpServer {
     completion_provider: DefaultCompletionProvider,
     /// Pending server-to-client requests (elicitation, sampling).
     pending_requests: Arc<PendingRequests>,
+    /// Client-declared roots (MCP Roots capability).
+    roots: Arc<RwLock<Vec<RootEntry>>>,
+    /// Whether the client supports `roots/list`.
+    client_supports_roots: AtomicBool,
 }
 
 impl McpServer {
@@ -173,6 +177,8 @@ impl McpServer {
             mcp_logger: Arc::new(RwLock::new(None)),
             completion_provider: DefaultCompletionProvider,
             pending_requests: Arc::new(PendingRequests::new()),
+            roots: Arc::new(RwLock::new(Vec::new())),
+            client_supports_roots: AtomicBool::new(false),
         };
 
         (server, audit_task)
@@ -208,6 +214,7 @@ impl McpServer {
         ctx.tunnel_manager = Arc::clone(&self.tunnel_manager);
         ctx.output_cache = Some(Arc::clone(&self.output_cache));
         ctx.runtime_max_output_chars = Some(Arc::clone(&self.runtime_max_output_chars));
+        ctx.roots = self.roots.read().await.to_vec();
         ctx
     }
 
@@ -302,6 +309,7 @@ impl McpServer {
                     WriterMessage::Response(r) => serde_json::to_string(r),
                     WriterMessage::Notification(n) => serde_json::to_string(n),
                     WriterMessage::Request(r) => serde_json::to_string(&r),
+                    WriterMessage::BatchResponse(responses) => serde_json::to_string(responses),
                 };
                 let json_str = match json_str {
                     Ok(s) => s,
@@ -351,8 +359,9 @@ impl McpServer {
 
             debug!(request = %trimmed, "Received message");
 
-            // Parse as flexible JsonRpcMessage to handle both requests and responses
-            let message = match serde_json::from_str::<JsonRpcMessage>(trimmed) {
+            // Parse as single message or batch (JSON-RPC 2.0)
+            let incoming = Self::parse_incoming(trimmed);
+            let incoming = match incoming {
                 Ok(msg) => msg,
                 Err(e) => {
                     error!(error = %e, "Failed to parse message");
@@ -365,54 +374,91 @@ impl McpServer {
                 }
             };
 
-            // Route: if message has a method, it's a client request.
-            // If it has result/error (no method), it's a response to a server-initiated request.
-            if message.method.is_none() {
-                // Client response to a server-initiated request (elicitation/sampling)
-                if let Some(id) = &message.id {
-                    let id_str = match id {
-                        Value::String(s) => s.clone(),
-                        other => other.to_string(),
+            match incoming {
+                IncomingMessage::Single(message) => {
+                    let Some(request) = self.route_incoming_message(message, &tx).await else {
+                        continue;
                     };
-                    let response = if let Some(error) = message.error {
-                        ClientResponse::Error {
-                            code: error.code,
-                            message: error.message,
-                            data: error.data,
-                        }
-                    } else {
-                        ClientResponse::Success(message.result.unwrap_or(Value::Null))
+
+                    // Acquire permit (blocks if at concurrency limit)
+                    let Ok(permit) = self.concurrent_limit.clone().acquire_owned().await else {
+                        error!("Semaphore closed unexpectedly");
+                        break;
                     };
-                    if !self.pending_requests.resolve(&id_str, response) {
-                        debug!(id = %id_str, "Received response for unknown request ID");
-                    }
+
+                    let server = Arc::clone(&self);
+                    let tx = tx.clone();
+
+                    // Spawn worker task for this request
+                    tokio::spawn(async move {
+                        let response = server.handle_request(request).await;
+                        let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
+                        drop(permit);
+                    });
                 }
-                continue;
+                IncomingMessage::Batch(messages) => {
+                    if messages.is_empty() {
+                        let response = JsonRpcResponse::error(
+                            None,
+                            JsonRpcError::invalid_request("Empty batch"),
+                        );
+                        let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
+                        continue;
+                    }
+
+                    // Reject batches containing `initialize` (MCP spec)
+                    let has_initialize = messages
+                        .iter()
+                        .any(|m| m.method.as_deref() == Some("initialize"));
+                    if has_initialize {
+                        let response = JsonRpcResponse::error(
+                            None,
+                            JsonRpcError::invalid_request(
+                                "initialize must not be part of a batch request",
+                            ),
+                        );
+                        let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
+                        continue;
+                    }
+
+                    // Execute batch requests in parallel
+                    let server = Arc::clone(&self);
+                    let tx_batch = tx.clone();
+                    tokio::spawn(async move {
+                        let mut handles = Vec::with_capacity(messages.len());
+                        for message in messages {
+                            let server = Arc::clone(&server);
+                            handles.push(tokio::spawn(async move {
+                                // Notifications (no method) don't produce responses
+                                let method = message.method?;
+                                let request = JsonRpcRequest {
+                                    jsonrpc: message.jsonrpc,
+                                    id: message.id,
+                                    method,
+                                    params: message.params,
+                                };
+                                // Notifications (no id) don't produce responses per JSON-RPC 2.0
+                                let is_notification = request.id.is_none();
+                                let response = server.handle_request(request).await;
+                                if is_notification {
+                                    None
+                                } else {
+                                    Some(response)
+                                }
+                            }));
+                        }
+                        let mut responses = Vec::new();
+                        for handle in handles {
+                            if let Ok(Some(response)) = handle.await {
+                                responses.push(response);
+                            }
+                        }
+                        if !responses.is_empty() {
+                            let _ = tx_batch.send(WriterMessage::BatchResponse(responses)).await;
+                        }
+                    });
+                }
             }
-
-            // It's a client request — convert to JsonRpcRequest
-            let request = JsonRpcRequest {
-                jsonrpc: message.jsonrpc,
-                id: message.id,
-                method: message.method.unwrap_or_default(),
-                params: message.params,
-            };
-
-            // Acquire permit (blocks if at concurrency limit)
-            let Ok(permit) = self.concurrent_limit.clone().acquire_owned().await else {
-                error!("Semaphore closed unexpectedly");
-                break;
-            };
-
-            let server = Arc::clone(&self);
-            let tx = tx.clone();
-
-            // Spawn worker task for this request
-            tokio::spawn(async move {
-                let response = server.handle_request(request).await;
-                let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
-                drop(permit); // Release the permit
-            });
         }
 
         // Shutdown: stop cleanup tasks, close all tunnels and sessions
@@ -428,13 +474,139 @@ impl McpServer {
         Ok(())
     }
 
-    async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
+    /// Parse an incoming line as a single JSON-RPC message or a batch.
+    pub fn parse_incoming(
+        trimmed: &str,
+    ) -> std::result::Result<IncomingMessage, serde_json::Error> {
+        let trimmed = trimmed.trim_start();
+        if trimmed.starts_with('[') {
+            let batch: Vec<JsonRpcMessage> = serde_json::from_str(trimmed)?;
+            Ok(IncomingMessage::Batch(batch))
+        } else {
+            let msg: JsonRpcMessage = serde_json::from_str(trimmed)?;
+            Ok(IncomingMessage::Single(msg))
+        }
+    }
+
+    /// Route a single incoming message: client response or client request.
+    ///
+    /// Returns `Some(JsonRpcRequest)` if it's a request to be dispatched,
+    /// or `None` if it was handled inline (e.g., a client response or notification).
+    async fn route_incoming_message(
+        &self,
+        message: JsonRpcMessage,
+        tx: &mpsc::Sender<WriterMessage>,
+    ) -> Option<JsonRpcRequest> {
+        // If no method, it's a response to a server-initiated request (elicitation/sampling)
+        if message.method.is_none() {
+            if let Some(id) = &message.id {
+                let id_str = match id {
+                    Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                let response = if let Some(error) = message.error {
+                    ClientResponse::Error {
+                        code: error.code,
+                        message: error.message,
+                        data: error.data,
+                    }
+                } else {
+                    ClientResponse::Success(message.result.unwrap_or(Value::Null))
+                };
+                if !self.pending_requests.resolve(&id_str, response) {
+                    debug!(id = %id_str, "Received response for unknown request ID");
+                }
+            }
+            return None;
+        }
+
+        // Handle roots/list_changed notification (no response needed)
+        if message.method.as_deref() == Some("notifications/roots/list_changed") {
+            self.handle_roots_changed(tx).await;
+            return None;
+        }
+
+        // It's a client request — convert to JsonRpcRequest
+        Some(JsonRpcRequest {
+            jsonrpc: message.jsonrpc,
+            id: message.id,
+            method: message.method.unwrap_or_default(),
+            params: message.params,
+        })
+    }
+
+    /// Fetch roots from the client after initialization.
+    async fn fetch_roots(&self, tx: &mpsc::Sender<WriterMessage>) {
+        if !self.client_supports_roots.load(Ordering::Relaxed) {
+            return;
+        }
+
+        let requester = super::client_requester::ClientRequester::new(
+            tx.clone(),
+            Arc::clone(&self.pending_requests),
+            std::time::Duration::from_secs(10),
+        );
+
+        match requester.send_request("roots/list", json!({})).await {
+            Ok(value) => {
+                if let Ok(result) = serde_json::from_value::<RootsListResult>(value) {
+                    info!(count = result.roots.len(), "Received client roots");
+                    *self.roots.write().await = result.roots;
+                }
+            }
+            Err(e) => {
+                debug!(error = %e, "Failed to fetch roots from client");
+            }
+        }
+    }
+
+    /// Handle `notifications/roots/list_changed` — re-fetch roots.
+    async fn handle_roots_changed(&self, tx: &mpsc::Sender<WriterMessage>) {
+        info!("Client roots changed, re-fetching");
+        self.fetch_roots(tx).await;
+    }
+
+    /// Get the current client roots (for path validation).
+    pub async fn get_roots(&self) -> Vec<RootEntry> {
+        self.roots.read().await.clone()
+    }
+
+    /// Handle a single JSON-RPC request and return the response.
+    pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
         let id = request.id.clone();
 
         match request.method.as_str() {
             "initialize" => self.handle_initialize(id, request.params).await,
             "initialized" => {
-                // Notification, no response needed but we return empty success
+                // After handshake, fetch roots if client supports them.
+                // Spawn as background task since we can't block the response.
+                if self.client_supports_roots.load(Ordering::Relaxed) {
+                    let notification_tx = self.notification_tx.read().await.clone();
+                    if let Some(tx) = notification_tx {
+                        let roots = Arc::clone(&self.roots);
+                        let pending = Arc::clone(&self.pending_requests);
+                        tokio::spawn(async move {
+                            let requester = super::client_requester::ClientRequester::new(
+                                tx,
+                                pending,
+                                std::time::Duration::from_secs(10),
+                            );
+                            match requester.send_request("roots/list", json!({})).await {
+                                Ok(value) => {
+                                    if let Ok(result) =
+                                        serde_json::from_value::<RootsListResult>(value)
+                                    {
+                                        info!(count = result.roots.len(), "Fetched client roots");
+                                        *roots.write().await = result.roots;
+                                    }
+                                }
+                                Err(e) => {
+                                    debug!(error = %e, "Failed to fetch roots");
+                                }
+                            }
+                        });
+                    }
+                }
                 JsonRpcResponse::success(id, json!({}))
             }
             "tools/list" => self.handle_tools_list(id),
@@ -518,6 +690,12 @@ impl McpServer {
                             "Applied client-specific max_output_chars override"
                         );
                         *self.runtime_max_output_chars.write().await = Some(effective);
+                    }
+
+                    // Check if client supports roots capability
+                    if init_params.capabilities.roots.is_some() {
+                        self.client_supports_roots.store(true, Ordering::Relaxed);
+                        info!("Client supports roots capability");
                     }
 
                     *self.client_info.write().await = Some(init_params.client_info);
@@ -1118,8 +1296,8 @@ impl McpServer {
 mod tests {
     use super::*;
     use crate::config::{
-        AuditConfig, LimitsConfig, SecurityConfig, SessionConfig, SshConfigDiscovery,
-        ToolGroupsConfig,
+        AuditConfig, HttpTransportConfig, LimitsConfig, SecurityConfig, SessionConfig,
+        SshConfigDiscovery, ToolGroupsConfig,
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -1133,6 +1311,7 @@ mod tests {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         };
         let (server, _audit_task) = McpServer::new(config);
         server
@@ -1805,6 +1984,7 @@ mod tests {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         };
 
         let (server, audit_task) = McpServer::new(config);

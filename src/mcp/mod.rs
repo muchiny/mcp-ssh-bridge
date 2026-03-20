@@ -1,3 +1,4 @@
+pub mod apps;
 pub mod client_requester;
 pub mod completion_provider;
 pub mod elicitation;
@@ -16,6 +17,7 @@ pub mod sampling;
 mod server;
 pub mod standard_tool;
 pub mod tool_handlers;
+pub mod transport;
 
 pub use history::{CommandHistory, HistoryConfig, HistoryEntry};
 pub use logger::McpLogger;

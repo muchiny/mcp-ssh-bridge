@@ -9,6 +9,7 @@ use tracing::info;
 
 use crate::domain::use_cases::parse_metrics::{self, SECTION_SEPARATOR, SystemMetrics};
 use crate::error::{BridgeError, Result};
+use crate::mcp::apps::dashboard;
 use crate::mcp::protocol::ToolCallResult;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::ssh::{is_retryable_error, with_retry_if};
@@ -41,7 +42,7 @@ impl SshMetricsHandler {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "The host alias as defined in the configuration"
+                "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
             },
             "metrics": {
                 "type": "array",
@@ -83,6 +84,7 @@ impl SshMetricsHandler {
 }
 
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl ToolHandler for SshMetricsHandler {
     fn name(&self) -> &'static str {
         "ssh_metrics"
@@ -209,7 +211,39 @@ impl ToolHandler for SshMetricsHandler {
             .unwrap_or_else(|e| format!("Error serializing metrics: {e}"));
         let json_output = ctx.sanitizer.sanitize(&json_output).into_owned();
 
-        Ok(ToolCallResult::text(json_output))
+        // Build dashboard app from metrics
+        let mut dash = dashboard("System Metrics");
+        if let Some(cpu) = &system_metrics.cpu {
+            let usage = 100.0 - cpu.idle_percent;
+            dash = dash.metric("CPU Usage", format!("{usage:.1}% ({} cores)", cpu.cores));
+        }
+        if let Some(mem) = &system_metrics.memory {
+            #[allow(clippy::cast_precision_loss)]
+            let used_gb = mem.used_bytes as f64 / 1_073_741_824.0;
+            #[allow(clippy::cast_precision_loss)]
+            let total_gb = mem.total_bytes as f64 / 1_073_741_824.0;
+            dash = dash.metric(
+                "Memory",
+                format!(
+                    "{used_gb:.1} / {total_gb:.1} GB ({:.1}%)",
+                    mem.usage_percent
+                ),
+            );
+        }
+        if let Some(load) = &system_metrics.load {
+            dash = dash.metric(
+                "Load Average",
+                format!(
+                    "{:.2}, {:.2}, {:.2}",
+                    load.load_1min, load.load_5min, load.load_15min
+                ),
+            );
+        }
+        dash = dash.refresh_action("ssh_metrics", serde_json::json!({"host": args.host}));
+        let app = dash.build();
+
+        let result = ToolCallResult::text(json_output).with_app(app);
+        Ok(result)
     }
 }
 

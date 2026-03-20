@@ -31,8 +31,10 @@ impl ToolHandler for SshStatusHandler {
 
     fn description(&self) -> &'static str {
         "Get the list of configured SSH hosts and their connection status. Call this first \
-         to discover available host aliases before using any other tool. Returns host names, \
-         hostnames, ports, users, and the security mode (strict/permissive)."
+         to discover available host aliases before using any other tool. Returns plain text \
+         with host names, hostnames, ports, users, auth type, and the security mode \
+         (strict/permissive). The host aliases shown here are the values to pass as the \
+         'host' parameter to all other ssh_* tools."
     }
 
     fn schema(&self) -> ToolSchema {

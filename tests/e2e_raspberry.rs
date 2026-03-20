@@ -17,8 +17,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use mcp_ssh_bridge::config::{
-    AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, LimitsConfig, OsType,
-    SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
+    AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
+    LimitsConfig, OsType, SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
 };
 use mcp_ssh_bridge::domain::history::HistoryConfig;
 use mcp_ssh_bridge::domain::{CommandHistory, ExecuteCommandUseCase, TunnelManager};
@@ -145,6 +145,7 @@ fn build_ctx(host_config: HostConfig) -> ToolContext {
         sessions: SessionConfig::default(),
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
+        http: HttpTransportConfig::default(),
     };
 
     let validator = Arc::new(CommandValidator::new(&config.security));
@@ -172,6 +173,7 @@ fn build_ctx(host_config: HostConfig) -> ToolContext {
         tunnel_manager: Arc::new(TunnelManager::new(20)),
         output_cache: None,
         runtime_max_output_chars: None,
+        roots: Vec::new(),
     }
 }
 
@@ -988,6 +990,7 @@ async fn test_security_command_denied() {
         sessions: SessionConfig::default(),
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
+        http: HttpTransportConfig::default(),
     };
 
     let validator = Arc::new(CommandValidator::new(&security));
@@ -1014,6 +1017,7 @@ async fn test_security_command_denied() {
         tunnel_manager: Arc::new(TunnelManager::new(20)),
         output_cache: None,
         runtime_max_output_chars: None,
+        roots: Vec::new(),
     };
 
     let handler = SshExecHandler;

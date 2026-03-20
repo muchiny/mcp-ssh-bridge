@@ -294,7 +294,8 @@ pub struct TaskRequest {
 
 // Contract types re-exported from ports (canonical location: crate::ports::protocol)
 pub use crate::ports::protocol::{
-    EmbeddedResource, TaskInfo, TaskStatus, ToolAnnotations, ToolCallResult, ToolContent,
+    AppAction, AppContent, EmbeddedResource, TaskInfo, TaskStatus, ToolAnnotations, ToolCallResult,
+    ToolContent,
 };
 
 // ============================================================================
@@ -784,6 +785,38 @@ pub enum WriterMessage {
     Notification(JsonRpcNotification),
     /// A server-initiated JSON-RPC request (elicitation, sampling).
     Request(JsonRpcOutboundRequest),
+    /// A batch of JSON-RPC responses (JSON-RPC 2.0 batch support).
+    BatchResponse(Vec<JsonRpcResponse>),
+}
+
+// ============================================================================
+// JSON-RPC Batch Support
+// ============================================================================
+
+/// Parsed incoming message: either a single JSON-RPC message or a batch.
+pub enum IncomingMessage {
+    /// A single JSON-RPC message (request or response).
+    Single(JsonRpcMessage),
+    /// A batch of JSON-RPC messages (`[{...}, {...}]`).
+    Batch(Vec<JsonRpcMessage>),
+}
+
+// ============================================================================
+// MCP Roots Types
+// ============================================================================
+
+/// A root entry returned by `roots/list`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RootEntry {
+    pub uri: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// Response for `roots/list`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RootsListResult {
+    pub roots: Vec<RootEntry>,
 }
 
 // ============================================================================

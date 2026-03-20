@@ -15,8 +15,8 @@ pub use completions::CompletionProvider;
 pub use connector::{SshClientTrait, SshConnector};
 pub use prompts::PromptHandler;
 pub use protocol::{
-    EmbeddedResource, PromptArgument, PromptContent, PromptMessage, ResourceContent,
-    ResourceDefinition, ToolAnnotations, ToolCallResult, ToolContent,
+    AppAction, AppContent, EmbeddedResource, PromptArgument, PromptContent, PromptMessage,
+    ResourceContent, ResourceDefinition, ToolAnnotations, ToolCallResult, ToolContent,
 };
 pub use resources::ResourceHandler;
 pub use ssh::{CommandOutput, SshExecutor};

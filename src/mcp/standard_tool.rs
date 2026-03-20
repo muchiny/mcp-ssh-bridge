@@ -88,6 +88,15 @@ pub trait StandardTool: Send + Sync + 'static {
     fn validate(_args: &Self::Args, _host_config: &HostConfig) -> Result<()> {
         Ok(())
     }
+
+    /// Optional post-processing to enrich the result with App content.
+    ///
+    /// Override this to add dashboard, table, or chart components
+    /// to the tool result. The default is a no-op (returns result as-is).
+    /// `output` is the raw (unsanitized) command output text.
+    fn post_process(result: ToolCallResult, _args: &Self::Args, _output: &str) -> ToolCallResult {
+        result
+    }
 }
 
 /// Generic handler that wraps a [`StandardTool`] and implements [`ToolHandler`].
@@ -276,7 +285,8 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
             }
         }
 
-        Ok(ToolCallResult::text(output_text))
+        let result = ToolCallResult::text(output_text);
+        Ok(T::post_process(result, &args, &response.output))
     }
 }
 

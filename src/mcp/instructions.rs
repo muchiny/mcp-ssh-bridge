@@ -79,6 +79,23 @@ pub fn build_instructions(config: &Config, tool_count: usize) -> String {
         config.limits.command_timeout_seconds, config.limits.max_output_chars
     );
 
+    // --- Apps ---
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "APPS: Some tools return interactive components (dashboard, table, chart) \
+         alongside text. These provide structured views of metrics, containers, \
+         services, and processes with action buttons to invoke related tools."
+    );
+
+    // --- Roots ---
+    let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "ROOTS: If you declared workspace roots, file operations (ssh_ls, ssh_find, \
+         ssh_upload, ssh_download) are scoped to those directories for safety."
+    );
+
     // --- Static Guidance ---
     let _ = write!(
         out,
@@ -107,8 +124,8 @@ mod tests {
 
     use super::*;
     use crate::config::{
-        AuditConfig, AuthConfig, HostConfig, HostKeyVerification, LimitsConfig, SecurityConfig,
-        SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
+        AuditConfig, AuthConfig, HostConfig, HostKeyVerification, HttpTransportConfig,
+        LimitsConfig, SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
     };
 
     fn default_config() -> Config {
@@ -120,6 +137,7 @@ mod tests {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         }
     }
 
@@ -238,5 +256,7 @@ mod tests {
         assert!(out.contains("ANNOTATIONS:"));
         assert!(out.contains("OUTPUT: Truncated output"));
         assert!(out.contains("SESSIONS:"));
+        assert!(out.contains("APPS:"));
+        assert!(out.contains("ROOTS:"));
     }
 }

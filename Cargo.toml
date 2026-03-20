@@ -20,8 +20,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["cli"]
 cli = ["dep:clap"]
+http = ["dep:axum", "dep:tower", "dep:tower-http", "dep:hyper-util", "dep:tokio-stream"]
 mimalloc = ["dep:mimalloc"]
-full = ["cli", "mimalloc"]
+full = ["cli", "mimalloc", "http"]
 
 [dependencies]
 # Async runtime (explicit features instead of "full" for smaller binary)
@@ -68,6 +69,13 @@ notify = "8.2"
 
 # Data parallelism for multi-host metrics parsing
 rayon = "1"
+
+# HTTP transport (optional, for Streamable HTTP + OAuth)
+axum = { version = "0.8", features = ["json"], optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6", features = ["cors", "limit"], optional = true }
+hyper-util = { version = "0.1", features = ["tokio"], optional = true }
+tokio-stream = { version = "0.1", optional = true }
 
 # Alternative allocator (optional, recommended for musl builds)
 mimalloc = { version = "0.1", default-features = false, optional = true }

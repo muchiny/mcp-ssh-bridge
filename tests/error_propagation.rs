@@ -8,8 +8,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use mcp_ssh_bridge::config::{
-    AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, LimitsConfig, OsType,
-    SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
+    AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
+    LimitsConfig, OsType, SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery,
+    ToolGroupsConfig,
 };
 use mcp_ssh_bridge::domain::history::HistoryConfig;
 use mcp_ssh_bridge::domain::{ExecuteCommandUseCase, TunnelManager};
@@ -48,6 +49,7 @@ fn create_config_with_host() -> Config {
         sessions: SessionConfig::default(),
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
+        http: HttpTransportConfig::default(),
     }
 }
 
@@ -86,6 +88,7 @@ fn create_tool_context(config: &Config) -> ToolContext {
         tunnel_manager: Arc::new(TunnelManager::new(20)),
         output_cache: None,
         runtime_max_output_chars: None,
+        roots: Vec::new(),
     }
 }
 
@@ -321,6 +324,7 @@ async fn test_ssh_status_with_no_hosts_returns_content() {
         sessions: SessionConfig::default(),
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
+        http: HttpTransportConfig::default(),
     };
     let registry = create_filtered_registry(&config.tool_groups);
     let ctx = create_tool_context(&config);

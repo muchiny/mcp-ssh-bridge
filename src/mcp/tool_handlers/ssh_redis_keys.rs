@@ -40,7 +40,7 @@ impl StandardTool for RedisKeysTool {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "SSH host to connect through"
+                "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
             },
             "pattern": {
                 "type": "string",

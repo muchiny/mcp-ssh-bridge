@@ -40,7 +40,7 @@ impl StandardTool for HypervHostInfoTool {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "Target Windows host alias (must match a configured host)"
+                "description": "Host alias from config.yaml — must be a Windows host (use ssh_status to list hosts)"
             },
             "timeout_seconds": {
                 "type": "integer",

@@ -44,7 +44,7 @@ impl StandardTool for PkgInstallTool {
                 "properties": {
                     "host": {
                         "type": "string",
-                        "description": "Target host name from configuration"
+                        "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
                     },
                     "package": {
                         "type": "string",

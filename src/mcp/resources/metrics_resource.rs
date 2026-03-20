@@ -152,8 +152,8 @@ impl ResourceHandler for MetricsResourceHandler {
 mod tests {
     use super::*;
     use crate::config::{
-        AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, LimitsConfig, OsType,
-        SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
+        AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
+        LimitsConfig, OsType, SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
     };
     use crate::domain::{ExecuteCommandUseCase, TunnelManager};
     use crate::mcp::CommandHistory;
@@ -212,6 +212,7 @@ mod tests {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         };
 
         let validator = Arc::new(CommandValidator::new(&SecurityConfig::default()));
@@ -239,6 +240,7 @@ mod tests {
             tunnel_manager: Arc::new(TunnelManager::new(20)),
             output_cache: None,
             runtime_max_output_chars: None,
+            roots: Vec::new(),
         }
     }
 

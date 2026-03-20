@@ -37,7 +37,7 @@ impl StandardTool for IisStatusTool {
         "properties": {
             "host": {
                 "type": "string",
-                "description": "Target host name (must match a configured Windows host)"
+                "description": "Host alias from config.yaml — must be a Windows host (use ssh_status to list hosts)"
             },
             "timeout_seconds": {
                 "type": "integer",

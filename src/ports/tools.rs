@@ -45,6 +45,8 @@ pub struct ToolContext {
     /// Runtime override for `max_output_chars`, shared with `McpServer`.
     /// Written by `ssh_config_set` or auto-detected from MCP client info.
     pub runtime_max_output_chars: Option<Arc<RwLock<Option<usize>>>>,
+    /// Client-declared workspace roots for path scoping.
+    pub roots: Vec<crate::mcp::protocol::RootEntry>,
 }
 
 impl ToolContext {
@@ -73,7 +75,26 @@ impl ToolContext {
             tunnel_manager: Arc::new(TunnelManager::new(20)),
             output_cache: None,
             runtime_max_output_chars: None,
+            roots: Vec::new(),
         }
+    }
+
+    /// Check if a path is within the declared client roots.
+    /// Returns Ok if no roots are declared (backward compatible) or if the path matches a root.
+    pub fn validate_root_scope(&self, path: &str) -> Result<()> {
+        if self.roots.is_empty() {
+            return Ok(());
+        }
+        // Extract path from file:// URIs in roots
+        for root in &self.roots {
+            let root_path = root.uri.strip_prefix("file://").unwrap_or(&root.uri);
+            if path.starts_with(root_path) || root_path == "/" {
+                return Ok(());
+            }
+        }
+        Err(crate::error::BridgeError::McpInvalidRequest(format!(
+            "Path '{path}' is outside declared workspace roots"
+        )))
     }
 }
 
@@ -108,8 +129,8 @@ pub trait ToolHandler: Send + Sync {
 pub mod mock {
     use super::*;
     use crate::config::{
-        AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, LimitsConfig, OsType,
-        SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
+        AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
+        LimitsConfig, OsType, SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
     };
     use crate::domain::history::HistoryConfig;
     use crate::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
@@ -127,6 +148,7 @@ pub mod mock {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         })
     }
 
@@ -162,6 +184,7 @@ pub mod mock {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         })
     }
 
@@ -177,6 +200,7 @@ pub mod mock {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         })
     }
 
@@ -191,6 +215,7 @@ pub mod mock {
             sessions: SessionConfig::default(),
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
         };
 
         let validator = Arc::new(CommandValidator::new(&SecurityConfig::default()));
@@ -217,6 +242,7 @@ pub mod mock {
             tunnel_manager: Arc::new(TunnelManager::new(20)),
             output_cache: None,
             runtime_max_output_chars: None,
+            roots: Vec::new(),
         }
     }
 
@@ -248,6 +274,7 @@ pub mod mock {
             tunnel_manager: Arc::new(TunnelManager::new(20)),
             output_cache: None,
             runtime_max_output_chars: None,
+            roots: Vec::new(),
         }
     }
 }

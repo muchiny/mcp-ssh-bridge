@@ -25,6 +25,91 @@ pub struct Config {
 
     #[serde(default)]
     pub ssh_config: SshConfigDiscovery,
+
+    /// HTTP transport configuration (used with `--http` flag).
+    #[serde(default)]
+    pub http: HttpTransportConfig,
+}
+
+/// HTTP transport configuration for the YAML config.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct HttpTransportConfig {
+    /// Bind address (default: `"0.0.0.0:3000"`).
+    #[serde(default = "default_http_bind")]
+    pub bind: String,
+
+    /// Maximum request body size in bytes (default: 1MB).
+    #[serde(default = "default_http_max_body_size")]
+    pub max_body_size: usize,
+
+    /// Session timeout in seconds (default: 1800 = 30 minutes).
+    #[serde(default = "default_http_session_timeout")]
+    pub session_timeout_seconds: u64,
+
+    /// Maximum concurrent sessions (default: 100).
+    #[serde(default = "default_http_max_sessions")]
+    pub max_sessions: usize,
+
+    /// OAuth 2.0 configuration.
+    #[serde(default)]
+    pub oauth: HttpOAuthConfig,
+}
+
+impl Default for HttpTransportConfig {
+    fn default() -> Self {
+        Self {
+            bind: default_http_bind(),
+            max_body_size: default_http_max_body_size(),
+            session_timeout_seconds: default_http_session_timeout(),
+            max_sessions: default_http_max_sessions(),
+            oauth: HttpOAuthConfig::default(),
+        }
+    }
+}
+
+fn default_http_bind() -> String {
+    "0.0.0.0:3000".to_string()
+}
+
+const fn default_http_max_body_size() -> usize {
+    1_048_576
+}
+
+const fn default_http_session_timeout() -> u64 {
+    1800
+}
+
+const fn default_http_max_sessions() -> usize {
+    100
+}
+
+/// OAuth configuration for the HTTP transport (YAML-serializable).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HttpOAuthConfig {
+    /// Enable OAuth authentication (default: false).
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Expected issuer (e.g., `"https://auth.example.com"`).
+    #[serde(default)]
+    pub issuer: String,
+
+    /// Expected audience.
+    #[serde(default)]
+    pub audience: String,
+
+    /// JWKS endpoint for key validation.
+    #[serde(default)]
+    pub jwks_uri: Option<String>,
+
+    /// OAuth client ID for this server.
+    #[serde(default)]
+    pub client_id: String,
+
+    /// Required scopes for access.
+    #[serde(default)]
+    pub required_scopes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

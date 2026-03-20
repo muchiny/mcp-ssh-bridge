@@ -15,6 +15,7 @@ use tracing::{info, warn};
 use crate::config::Config;
 use crate::domain::use_cases::parse_metrics::{self, SECTION_SEPARATOR, SystemMetrics};
 use crate::error::{BridgeError, Result};
+use crate::mcp::apps::dashboard;
 use crate::mcp::protocol::ToolCallResult;
 use crate::ports::CommandOutput;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
@@ -293,7 +294,38 @@ impl ToolHandler for SshMetricsMultiHandler {
             .unwrap_or_else(|e| format!("Error serializing results: {e}"));
         let json_output = ctx.sanitizer.sanitize(&json_output).into_owned();
 
-        Ok(ToolCallResult::text(json_output))
+        // Build multi-host dashboard
+        let mut dash = dashboard("Multi-Host Metrics");
+        let hosts_status = if multi_result.failed > 0 {
+            format!(
+                "{}/{} succeeded (warning)",
+                multi_result.succeeded, multi_result.total_hosts
+            )
+        } else {
+            format!(
+                "{}/{} succeeded",
+                multi_result.succeeded, multi_result.total_hosts
+            )
+        };
+        dash = dash.metric("Hosts", &hosts_status);
+        for hr in &multi_result.results {
+            if hr.success {
+                if let Some(ref m) = hr.metrics {
+                    let cpu_info = m.cpu.as_ref().map_or("N/A".to_string(), |c| {
+                        format!("{:.0}%", 100.0 - c.idle_percent)
+                    });
+                    let mem_info = m.memory.as_ref().map_or("N/A".to_string(), |mem| {
+                        format!("{:.0}%", mem.usage_percent)
+                    });
+                    dash = dash.metric(&hr.host, format!("CPU: {cpu_info}, Mem: {mem_info}"));
+                }
+            } else {
+                dash = dash.metric(&hr.host, "FAILED");
+            }
+        }
+        let app = dash.build();
+
+        Ok(ToolCallResult::text(json_output).with_app(app))
     }
 }
 
