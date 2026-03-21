@@ -1,6 +1,6 @@
 # MCP SSH Bridge - Development Makefile
 
-.PHONY: all build release check test lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline careful bench bench-save bench-compare coverage coverage-check
+.PHONY: all build release check test lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline careful bench bench-save bench-compare coverage coverage-check e2e-mock e2e-docker e2e-docker-up e2e-docker-down
 
 # Default target
 all: check lint test
@@ -187,6 +187,24 @@ deps-update:
 	@echo "Updated Cargo.lock with compatible versions."
 	@echo "Run 'make outdated' to see remaining major updates."
 
+# Mock-based E2E tests (no SSH required, fast)
+e2e-mock:
+	cargo test --test e2e_mock -- --nocapture
+
+# Docker-based E2E tests (real SSH, requires docker)
+e2e-docker: e2e-docker-up
+	cargo test --test e2e_docker -- --ignored --test-threads=1 --nocapture
+	$(MAKE) e2e-docker-down
+
+# Start Docker SSH test server
+e2e-docker-up:
+	docker compose -f docker-compose.test.yml up -d --wait
+	@echo "Docker SSH test server ready on port 2222."
+
+# Stop Docker SSH test server
+e2e-docker-down:
+	docker compose -f docker-compose.test.yml down -v
+
 # Full release pipeline (CI + cross-compile + Docker)
 release-pipeline: ci-full release-all docker-scan
 	@echo "Release pipeline complete."
@@ -238,6 +256,10 @@ help:
 	@echo "  bench            - Run benchmarks"
 	@echo "  bench-save       - Save benchmark baseline"
 	@echo "  bench-compare    - Compare against saved baseline"
+	@echo "  e2e-mock         - Mock-based E2E pipeline tests (fast, no SSH)"
+	@echo "  e2e-docker       - Docker-based E2E tests (real SSH, requires docker)"
+	@echo "  e2e-docker-up    - Start Docker SSH test server"
+	@echo "  e2e-docker-down  - Stop Docker SSH test server"
 	@echo ""
 	@echo "Docker:"
 	@echo "  docker-build     - Build Docker image locally"
