@@ -27,6 +27,33 @@ pub struct ExecuteCommandResponse {
     pub output: String,
     pub exit_code: u32,
     pub duration_ms: u64,
+    /// Sanitized stdout (separate from the formatted `output` text).
+    pub stdout: String,
+    /// Sanitized stderr (separate from the formatted `output` text).
+    pub stderr: String,
+    /// The host that executed the command.
+    pub host: String,
+    /// The command that was executed.
+    pub command: String,
+}
+
+impl ExecuteCommandResponse {
+    /// Build machine-readable structured content for AI consumption.
+    ///
+    /// Returns a JSON value with separated metadata and output fields,
+    /// allowing AI models to parse results without text extraction.
+    #[must_use]
+    pub fn to_structured(&self) -> serde_json::Value {
+        serde_json::json!({
+            "host": self.host,
+            "command": self.command,
+            "exit_code": self.exit_code,
+            "success": self.exit_code == 0,
+            "duration_ms": self.duration_ms,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+        })
+    }
 }
 
 /// Use case for executing SSH commands
@@ -113,10 +140,18 @@ impl ExecuteCommandUseCase {
         let result = Self::format_output(host, command, output);
         let sanitized = self.sanitizer.sanitize(&result).into_owned();
 
+        // Also sanitize stdout/stderr separately for structured content
+        let sanitized_stdout = self.sanitizer.sanitize(&output.stdout).into_owned();
+        let sanitized_stderr = self.sanitizer.sanitize(&output.stderr).into_owned();
+
         ExecuteCommandResponse {
             output: sanitized,
             exit_code: output.exit_code,
             duration_ms: output.duration_ms,
+            stdout: sanitized_stdout,
+            stderr: sanitized_stderr,
+            host: host.to_string(),
+            command: command.to_string(),
         }
     }
 
@@ -381,12 +416,20 @@ mod tests {
             output: "result".to_string(),
             exit_code: 0,
             duration_ms: 100,
+            stdout: "result".to_string(),
+            stderr: String::new(),
+            host: "host".to_string(),
+            command: "ls".to_string(),
         };
 
         let cloned = resp.clone();
         assert_eq!(resp.output, cloned.output);
         assert_eq!(resp.exit_code, cloned.exit_code);
         assert_eq!(resp.duration_ms, cloned.duration_ms);
+        assert_eq!(resp.stdout, cloned.stdout);
+        assert_eq!(resp.stderr, cloned.stderr);
+        assert_eq!(resp.host, cloned.host);
+        assert_eq!(resp.command, cloned.command);
     }
 
     #[test]
@@ -395,11 +438,55 @@ mod tests {
             output: "result".to_string(),
             exit_code: 42,
             duration_ms: 100,
+            stdout: "result".to_string(),
+            stderr: String::new(),
+            host: "host".to_string(),
+            command: "cmd".to_string(),
         };
 
         let debug_str = format!("{resp:?}");
         assert!(debug_str.contains("ExecuteCommandResponse"));
         assert!(debug_str.contains("42"));
+    }
+
+    #[test]
+    fn test_to_structured() {
+        let resp = ExecuteCommandResponse {
+            output: "formatted".to_string(),
+            exit_code: 0,
+            duration_ms: 42,
+            stdout: "hello world".to_string(),
+            stderr: String::new(),
+            host: "server1".to_string(),
+            command: "echo hello".to_string(),
+        };
+
+        let structured = resp.to_structured();
+        assert_eq!(structured["host"], "server1");
+        assert_eq!(structured["command"], "echo hello");
+        assert_eq!(structured["exit_code"], 0);
+        assert_eq!(structured["success"], true);
+        assert_eq!(structured["duration_ms"], 42);
+        assert_eq!(structured["stdout"], "hello world");
+        assert_eq!(structured["stderr"], "");
+    }
+
+    #[test]
+    fn test_to_structured_failure() {
+        let resp = ExecuteCommandResponse {
+            output: "formatted".to_string(),
+            exit_code: 127,
+            duration_ms: 5,
+            stdout: String::new(),
+            stderr: "command not found".to_string(),
+            host: "server2".to_string(),
+            command: "nonexistent".to_string(),
+        };
+
+        let structured = resp.to_structured();
+        assert_eq!(structured["success"], false);
+        assert_eq!(structured["exit_code"], 127);
+        assert_eq!(structured["stderr"], "command not found");
     }
 
     #[test]

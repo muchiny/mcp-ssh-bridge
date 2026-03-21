@@ -68,7 +68,8 @@ impl ToolHandler for SshSessionCloseHandler {
         Ok(ToolCallResult::text(format!(
             "Session '{}' closed successfully.",
             args.session_id
-        )))
+        ))
+        .with_structured(serde_json::json!({"status": "closed", "session_id": args.session_id})))
     }
 }
 

@@ -50,7 +50,8 @@ impl ToolHandler for SshSessionListHandler {
         let json = serde_json::to_string_pretty(&sessions)
             .unwrap_or_else(|e| format!("Error serializing sessions: {e}"));
 
-        Ok(ToolCallResult::text(json))
+        Ok(ToolCallResult::text(json)
+            .with_structured(serde_json::to_value(&sessions).unwrap_or_default()))
     }
 }
 

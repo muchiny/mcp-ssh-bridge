@@ -194,7 +194,8 @@ impl ToolHandler for SshTunnelCreateHandler {
         let json = serde_json::to_string_pretty(&tunnel_info)
             .unwrap_or_else(|e| format!("Error serializing tunnel info: {e}"));
 
-        Ok(ToolCallResult::text(json))
+        Ok(ToolCallResult::text(json)
+            .with_structured(serde_json::to_value(&tunnel_info).unwrap_or_default()))
     }
 }
 

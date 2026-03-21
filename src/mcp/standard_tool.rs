@@ -285,7 +285,7 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
             }
         }
 
-        let result = ToolCallResult::text(output_text);
+        let result = ToolCallResult::text(output_text).with_structured(response.to_structured());
         Ok(T::post_process(result, &args, &response.output))
     }
 }

@@ -219,7 +219,8 @@ impl ToolHandler for SshLsHandler {
                 let json_output =
                     serde_json::to_string_pretty(&entries).unwrap_or_else(|_| "[]".to_string());
 
-                Ok(ToolCallResult::text(json_output))
+                Ok(ToolCallResult::text(json_output)
+                    .with_structured(serde_json::to_value(&entries).unwrap_or_default()))
             }
             Err(e) => {
                 ctx.audit_logger.log(AuditEvent::new(

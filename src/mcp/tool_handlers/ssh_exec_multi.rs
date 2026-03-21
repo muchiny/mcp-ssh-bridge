@@ -264,7 +264,8 @@ impl ToolHandler for SshExecMultiHandler {
             }
         }
 
-        Ok(ToolCallResult::text(json_output))
+        Ok(ToolCallResult::text(json_output)
+            .with_structured(serde_json::to_value(&multi_result).unwrap_or_default()))
     }
 }
 

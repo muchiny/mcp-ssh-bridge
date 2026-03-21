@@ -255,7 +255,7 @@ impl ToolHandler for SshExecHandler {
             }
         }
 
-        Ok(ToolCallResult::text(output_text))
+        Ok(ToolCallResult::text(output_text).with_structured(response.to_structured()))
     }
 }
 
