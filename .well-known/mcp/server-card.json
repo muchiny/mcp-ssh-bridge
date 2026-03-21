@@ -1,0 +1,25 @@
+{
+  "name": "mcp-ssh-bridge",
+  "version": "1.4.0",
+  "description": "Secure SSH bridge for AI-powered remote server management. 270+ tools across 50+ groups covering Linux, Windows, Docker, Kubernetes, and more.",
+  "capabilities": {
+    "tools": true,
+    "resources": true,
+    "prompts": true,
+    "sampling": true,
+    "elicitation": true,
+    "tasks": true,
+    "structured_output": true,
+    "completions": true,
+    "logging": true,
+    "progress": true
+  },
+  "transports": ["stdio", "streamable-http"],
+  "authentication": ["oauth2", "jwt"],
+  "tool_count": 272,
+  "tool_groups": 53,
+  "homepage": "https://github.com/muchiny/mcp-ssh-bridge",
+  "repository": "https://github.com/muchiny/mcp-ssh-bridge",
+  "license": "MIT",
+  "mcp_version": "2025-11-25"
+}

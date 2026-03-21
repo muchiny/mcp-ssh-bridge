@@ -1,0 +1,30 @@
+name: service_restart
+description: "Safely restart a systemd service with pre/post health checks and automatic rollback on failure"
+version: "1.0"
+params:
+  service_name:
+    type: string
+    description: "Name of the systemd service to restart"
+  health_check:
+    type: string
+    default: ""
+    description: "Optional health check command to run after restart"
+
+steps:
+  - name: check_service_exists
+    command: "systemctl cat {{ service_name }} >/dev/null 2>&1 && echo 'exists' || echo 'not_found'"
+    save_as: service_status
+
+  - name: capture_pre_state
+    command: "systemctl status {{ service_name }} --no-pager 2>&1 | head -20"
+
+  - name: restart_service
+    command: "systemctl restart {{ service_name }}"
+    confirm: true
+    rollback: "systemctl start {{ service_name }}"
+
+  - name: wait_for_startup
+    command: "sleep 3 && systemctl is-active {{ service_name }}"
+
+  - name: verify_service_active
+    command: "systemctl status {{ service_name }} --no-pager 2>&1 | head -15"

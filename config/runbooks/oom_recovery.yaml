@@ -1,0 +1,29 @@
+name: oom_recovery
+description: "Investigate and recover from Out-Of-Memory conditions by identifying memory-hungry processes and clearing caches"
+version: "1.0"
+params:
+  top_count:
+    type: integer
+    default: "10"
+    description: "Number of top memory consumers to show"
+
+steps:
+  - name: check_memory
+    command: "free -m"
+
+  - name: check_oom_kills
+    command: "dmesg 2>/dev/null | grep -i 'oom\\|killed process' | tail -20 || journalctl -k -g 'oom' --no-pager -n 20 2>/dev/null || echo 'No OOM events found'"
+
+  - name: top_memory_consumers
+    command: "ps aux --sort=-%mem 2>/dev/null | head -{{ top_count }} || ps aux | sort -k4 -rn | head -{{ top_count }}"
+
+  - name: check_swap
+    command: "swapon --show 2>/dev/null || cat /proc/swaps"
+
+  - name: clear_caches
+    command: "sync && echo 3 > /proc/sys/vm/drop_caches && echo 'Caches cleared'"
+    confirm: true
+    rollback: "echo 'Caches will rebuild automatically'"
+
+  - name: verify_memory
+    command: "free -m"

@@ -1,6 +1,6 @@
 # MCP SSH Bridge - Development Makefile
 
-.PHONY: all build release check test lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline careful bench bench-save bench-compare coverage coverage-check e2e-mock e2e-docker e2e-docker-up e2e-docker-down
+.PHONY: all build release check test lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline careful bench bench-save bench-compare coverage coverage-check e2e-mock e2e-docker e2e-docker-up e2e-docker-down dxt
 
 # Default target
 all: check lint test
@@ -209,6 +209,14 @@ e2e-docker-down:
 release-pipeline: ci-full release-all docker-scan
 	@echo "Release pipeline complete."
 
+# Build DXT package (Desktop Extension for Claude Desktop)
+dxt: release
+	@mkdir -p dist/dxt
+	cp target/release/mcp-ssh-bridge dist/dxt/
+	cp dxt/manifest.json dxt/icon.svg dist/dxt/
+	cd dist && zip -r mcp-ssh-bridge.dxt dxt/
+	@echo "DXT package: dist/mcp-ssh-bridge.dxt"
+
 # Show help
 help:
 	@echo "MCP SSH Bridge - Available targets:"
@@ -264,6 +272,9 @@ help:
 	@echo "Docker:"
 	@echo "  docker-build     - Build Docker image locally"
 	@echo "  docker-scan      - Build + Trivy security scan"
+	@echo ""
+	@echo "Packaging:"
+	@echo "  dxt              - Build DXT package for Claude Desktop"
 	@echo ""
 	@echo "Pipelines:"
 	@echo "  ci               - Quick CI (fmt+lint+test+audit+typos)"

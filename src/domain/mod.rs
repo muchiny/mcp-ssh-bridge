@@ -5,6 +5,7 @@
 
 pub mod history;
 pub mod output_cache;
+pub mod runbook;
 pub mod output_truncator;
 pub mod task_store;
 pub mod use_cases;

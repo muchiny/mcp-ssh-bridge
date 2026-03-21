@@ -1,0 +1,31 @@
+name: log_rotation
+description: "Force log rotation and clean up old log files to reclaim disk space"
+version: "1.0"
+params:
+  log_dir:
+    type: string
+    default: "/var/log"
+    description: "Base log directory to analyze"
+  days_to_keep:
+    type: integer
+    default: "7"
+    description: "Number of days to retain compressed logs"
+
+steps:
+  - name: check_log_disk_usage
+    command: "du -sh {{ log_dir }} 2>/dev/null && echo '---' && df -h {{ log_dir }}"
+
+  - name: find_large_logs
+    command: "find {{ log_dir }} -type f -name '*.log' -size +10M -exec ls -lh {} + 2>/dev/null | sort -k5 -rh | head -20"
+
+  - name: force_logrotate
+    command: "logrotate -f /etc/logrotate.conf 2>&1 || echo 'logrotate not available'"
+    confirm: true
+    rollback: "echo 'Log files were already rotated, no rollback needed'"
+
+  - name: clean_old_rotated_logs
+    command: "find {{ log_dir }} -name '*.gz' -mtime +{{ days_to_keep }} -delete 2>/dev/null && find {{ log_dir }} -name '*.old' -mtime +{{ days_to_keep }} -delete 2>/dev/null && echo 'Old logs cleaned'"
+    confirm: true
+
+  - name: verify_disk_freed
+    command: "du -sh {{ log_dir }} 2>/dev/null && echo '---' && df -h {{ log_dir }}"
