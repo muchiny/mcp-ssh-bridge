@@ -1,0 +1,19 @@
+{
+  "dxt_version": "0.1",
+  "name": "mcp-ssh-bridge",
+  "display_name": "MCP SSH Bridge",
+  "version": "1.4.0",
+  "description": "Execute commands securely on remote servers via SSH. 270+ tools for Linux, Windows, Docker, Kubernetes, and more.",
+  "author": {
+    "name": "muchiny"
+  },
+  "mcp": {
+    "command": {
+      "type": "binary",
+      "path": "mcp-ssh-bridge"
+    },
+    "transport": "stdio"
+  },
+  "platforms": ["linux-x64", "linux-arm64", "macos-x64", "macos-arm64", "windows-x64"],
+  "icon": "icon.svg"
+}

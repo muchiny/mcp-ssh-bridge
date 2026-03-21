@@ -123,6 +123,23 @@ jobs:
           cargo cyclonedx --format json
           find . -maxdepth 1 -name '*.cdx.json' -o -name 'bom.json' | head -1 | xargs -I{} cp {} artifacts/${{ env.BINARY_NAME }}-sbom.cdx.json
 
+      - name: Build DXT packages
+        run: |
+          for arch in linux-x86_64 linux-arm64 macos-x86_64 macos-arm64; do
+            mkdir -p dist/dxt-${arch}
+            if [ -f "artifacts/${{ env.BINARY_NAME }}-${arch}.tar.gz" ]; then
+              tar xzf "artifacts/${{ env.BINARY_NAME }}-${arch}.tar.gz" -C dist/dxt-${arch}/
+              cp dxt/manifest.json dxt/icon.svg dist/dxt-${arch}/
+              cd dist && zip -r "../artifacts/${{ env.BINARY_NAME }}-${arch}.dxt" dxt-${arch}/ && cd ..
+            fi
+          done
+          mkdir -p dist/dxt-windows-x86_64
+          if [ -f "artifacts/${{ env.BINARY_NAME }}-windows-x86_64.zip" ]; then
+            unzip "artifacts/${{ env.BINARY_NAME }}-windows-x86_64.zip" -d dist/dxt-windows-x86_64/
+            cp dxt/manifest.json dxt/icon.svg dist/dxt-windows-x86_64/
+            cd dist && zip -r "../artifacts/${{ env.BINARY_NAME }}-windows-x86_64.dxt" dxt-windows-x86_64/ && cd ..
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
