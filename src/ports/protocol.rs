@@ -220,6 +220,16 @@ impl ToolCallResult {
         self.content.push(ToolContent::App { app });
         self
     }
+
+    /// Set machine-readable structured content for AI consumption.
+    ///
+    /// The structured content is returned alongside the human-readable text
+    /// and allows AI models to parse tool results without text extraction.
+    #[must_use]
+    pub fn with_structured(mut self, data: serde_json::Value) -> Self {
+        self.structured_content = Some(data);
+        self
+    }
 }
 
 // ============================================================================

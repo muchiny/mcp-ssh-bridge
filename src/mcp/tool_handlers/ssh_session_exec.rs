@@ -201,7 +201,8 @@ impl ToolHandler for SshSessionExecHandler {
             }
         }
 
-        Ok(ToolCallResult::text(json))
+        Ok(ToolCallResult::text(json)
+            .with_structured(serde_json::to_value(&response).unwrap_or_default()))
     }
 }
 

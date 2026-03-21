@@ -325,7 +325,9 @@ impl ToolHandler for SshMetricsMultiHandler {
         }
         let app = dash.build();
 
-        Ok(ToolCallResult::text(json_output).with_app(app))
+        Ok(ToolCallResult::text(json_output)
+            .with_structured(serde_json::to_value(&multi_result).unwrap_or_default())
+            .with_app(app))
     }
 }
 

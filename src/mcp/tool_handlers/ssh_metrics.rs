@@ -242,7 +242,9 @@ impl ToolHandler for SshMetricsHandler {
         dash = dash.refresh_action("ssh_metrics", serde_json::json!({"host": args.host}));
         let app = dash.build();
 
-        let result = ToolCallResult::text(json_output).with_app(app);
+        let result = ToolCallResult::text(json_output)
+            .with_structured(serde_json::to_value(&system_metrics).unwrap_or_default())
+            .with_app(app);
         Ok(result)
     }
 }

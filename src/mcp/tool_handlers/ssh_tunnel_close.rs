@@ -72,7 +72,8 @@ impl ToolHandler for SshTunnelCloseHandler {
         Ok(ToolCallResult::text(format!(
             "Tunnel '{}' closed successfully.\n{json}",
             args.tunnel_id
-        )))
+        ))
+        .with_structured(serde_json::to_value(&closed).unwrap_or_default()))
     }
 }
 
