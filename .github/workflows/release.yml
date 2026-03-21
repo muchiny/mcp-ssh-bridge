@@ -113,7 +113,7 @@ jobs:
         run: ls -lh artifacts/
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: "artifacts/${{ env.BINARY_NAME }}-*"
 
