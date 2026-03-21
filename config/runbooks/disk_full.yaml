@@ -1,0 +1,35 @@
+name: disk_full_recovery
+description: "Diagnose and recover from disk full conditions by identifying large files, cleaning old logs, and verifying recovery"
+version: "1.0"
+params:
+  threshold_percent:
+    type: integer
+    default: "90"
+    description: "Disk usage percentage threshold to trigger cleanup"
+  target_dir:
+    type: string
+    default: "/var/log"
+    description: "Directory to analyze and clean"
+
+steps:
+  - name: check_disk_usage
+    command: "df -h {{ target_dir }} | awk 'NR==2{print $5}' | tr -d '%'"
+    save_as: current_usage
+
+  - name: evaluate_threshold
+    condition: "{{ current_usage }} >= {{ threshold_percent }}"
+    on_false: skip_to_end
+
+  - name: find_large_files
+    command: "find {{ target_dir }} -type f -size +50M -exec ls -lh {} + 2>/dev/null | sort -k5 -rh | head -20"
+
+  - name: find_old_compressed_logs
+    command: "find {{ target_dir }} -name '*.gz' -o -name '*.old' -o -name '*.bak' | head -30"
+
+  - name: clean_old_compressed_logs
+    command: "find {{ target_dir }} -name '*.gz' -mtime +7 -delete 2>/dev/null && echo 'Cleaned compressed logs older than 7 days'"
+    confirm: true
+    rollback: "echo 'Cannot restore deleted files - check backups'"
+
+  - name: verify_recovery
+    command: "df -h {{ target_dir }}"

@@ -1,0 +1,32 @@
+name: cert_renewal_check
+description: "Check TLS certificate expiry dates and attempt renewal via certbot/acme if certificates are expiring soon"
+version: "1.0"
+params:
+  domain:
+    type: string
+    description: "Domain name to check certificate for"
+  warning_days:
+    type: integer
+    default: "30"
+    description: "Number of days before expiry to trigger warning"
+
+steps:
+  - name: check_cert_expiry
+    command: "echo | openssl s_client -servername {{ domain }} -connect {{ domain }}:443 2>/dev/null | openssl x509 -noout -dates 2>/dev/null || echo 'Cannot connect to {{ domain }}:443'"
+    save_as: cert_dates
+
+  - name: check_days_remaining
+    command: "echo | openssl s_client -servername {{ domain }} -connect {{ domain }}:443 2>/dev/null | openssl x509 -noout -checkend $(({{ warning_days }} * 86400)) 2>/dev/null && echo 'VALID' || echo 'EXPIRING_SOON'"
+    save_as: cert_status
+
+  - name: check_certbot_available
+    command: "command -v certbot >/dev/null 2>&1 && echo 'certbot_available' || echo 'certbot_not_found'"
+    save_as: has_certbot
+
+  - name: attempt_renewal
+    command: "certbot renew --cert-name {{ domain }} --dry-run 2>&1 || echo 'Dry run failed - manual intervention needed'"
+    confirm: true
+    rollback: "echo 'No changes made (was dry-run)'"
+
+  - name: verify_cert
+    command: "echo | openssl s_client -servername {{ domain }} -connect {{ domain }}:443 2>/dev/null | openssl x509 -noout -dates -subject 2>/dev/null || echo 'Verification failed'"
