@@ -609,6 +609,7 @@ mod tests {
             output_cache: None,
             runtime_max_output_chars: None,
             roots: Vec::new(),
+            session_recorder: None,
         };
 
         let handler = SshExecHandler;

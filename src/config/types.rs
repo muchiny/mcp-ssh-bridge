@@ -385,6 +385,38 @@ pub struct SanitizeConfig {
     /// Custom patterns with custom replacements
     #[serde(default)]
     pub custom_patterns: Vec<CustomSanitizePattern>,
+
+    /// Enable entropy-based secret detection (default: true)
+    ///
+    /// Detects high-entropy strings that may be secrets even when
+    /// they don't match any known pattern (e.g., random API keys).
+    #[serde(default = "default_sanitize_enabled")]
+    pub entropy_detection: bool,
+
+    /// Shannon entropy threshold in bits per character (default: 4.5)
+    ///
+    /// Tokens with entropy above this value are considered potential secrets.
+    /// - English text: ~3.5-4.5 bits
+    /// - Hex secrets: ~3.7-4.0 bits
+    /// - Base64 secrets: ~5.0-6.0 bits
+    #[serde(default = "default_entropy_threshold")]
+    pub entropy_threshold: f64,
+
+    /// Minimum token length for entropy analysis (default: 16)
+    #[serde(default = "default_entropy_min_length")]
+    pub entropy_min_length: usize,
+
+    /// Known safe strings to exclude from entropy detection
+    #[serde(default)]
+    pub entropy_whitelist: Vec<String>,
+}
+
+const fn default_entropy_threshold() -> f64 {
+    4.5
+}
+
+const fn default_entropy_min_length() -> usize {
+    16
 }
 
 impl Default for SanitizeConfig {
@@ -393,6 +425,10 @@ impl Default for SanitizeConfig {
             enabled: default_sanitize_enabled(),
             disable_builtin: Vec::new(),
             custom_patterns: Vec::new(),
+            entropy_detection: true,
+            entropy_threshold: default_entropy_threshold(),
+            entropy_min_length: default_entropy_min_length(),
+            entropy_whitelist: Vec::new(),
         }
     }
 }

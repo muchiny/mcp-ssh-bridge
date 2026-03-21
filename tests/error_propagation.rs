@@ -92,6 +92,7 @@ fn create_tool_context(config: &Config) -> ToolContext {
         output_cache: None,
         runtime_max_output_chars: None,
         roots: Vec::new(),
+        session_recorder: None,
     }
 }
 

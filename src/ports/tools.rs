@@ -47,6 +47,8 @@ pub struct ToolContext {
     pub runtime_max_output_chars: Option<Arc<RwLock<Option<usize>>>>,
     /// Client-declared workspace roots for path scoping.
     pub roots: Vec<crate::mcp::protocol::RootEntry>,
+    /// Optional session recorder for compliance auditing.
+    pub session_recorder: Option<Arc<crate::security::SessionRecorder>>,
 }
 
 impl ToolContext {
@@ -76,6 +78,7 @@ impl ToolContext {
             output_cache: None,
             runtime_max_output_chars: None,
             roots: Vec::new(),
+            session_recorder: None,
         }
     }
 
@@ -249,6 +252,7 @@ pub mod mock {
             output_cache: None,
             runtime_max_output_chars: None,
             roots: Vec::new(),
+            session_recorder: None,
         }
     }
 
@@ -281,6 +285,7 @@ pub mod mock {
             output_cache: None,
             runtime_max_output_chars: None,
             roots: Vec::new(),
+            session_recorder: None,
         }
     }
 }

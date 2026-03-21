@@ -5,6 +5,7 @@ use regex::{Regex, RegexSet};
 use tracing::{debug, error, info};
 
 use crate::config::{CustomSanitizePattern, SanitizeConfig};
+use crate::security::entropy::EntropyDetector;
 
 /// Threshold in bytes above which parallel detection is used
 const PARALLEL_THRESHOLD: usize = 512 * 1024; // 512 KB
@@ -44,6 +45,8 @@ pub struct Sanitizer {
     enabled: bool,
     /// Regex for stripping ANSI escape codes from SSH output
     ansi_regex: Option<Regex>,
+    /// Entropy-based secret detector (complements regex patterns)
+    entropy_detector: EntropyDetector,
 }
 
 struct SanitizePattern {
@@ -110,7 +113,14 @@ impl Sanitizer {
             }
         }
 
-        Self::from_pattern_defs_with_custom(&all_patterns, &all_custom, true)
+        let entropy_detector = EntropyDetector::new(
+            config.entropy_threshold,
+            config.entropy_min_length,
+            config.entropy_whitelist.clone(),
+            config.entropy_detection,
+        );
+
+        Self::from_pattern_defs_with_custom(&all_patterns, &all_custom, true, entropy_detector)
     }
 
     /// Create a new sanitizer with user-defined patterns (added to defaults)
@@ -127,13 +137,23 @@ impl Sanitizer {
             })
             .collect();
 
-        Self::from_pattern_defs_with_custom(&all_patterns, &custom, true)
+        Self::from_pattern_defs_with_custom(
+            &all_patterns,
+            &custom,
+            true,
+            EntropyDetector::default(),
+        )
     }
 
     /// Create a sanitizer with only default patterns
     #[must_use]
     pub fn with_defaults() -> Self {
-        Self::from_pattern_defs_with_custom(&Self::default_pattern_defs(), &[], true)
+        Self::from_pattern_defs_with_custom(
+            &Self::default_pattern_defs(),
+            &[],
+            true,
+            EntropyDetector::default(),
+        )
     }
 
     /// Create a disabled sanitizer (pass-through)
@@ -146,6 +166,7 @@ impl Sanitizer {
             literal_detector: AhoCorasick::builder().build(&empty).unwrap(),
             enabled: false,
             ansi_regex: None,
+            entropy_detector: EntropyDetector::disabled(),
         }
     }
 
@@ -154,6 +175,7 @@ impl Sanitizer {
         defs: &[PatternDef],
         custom: &[CustomSanitizePattern],
         enabled: bool,
+        entropy_detector: EntropyDetector,
     ) -> Self {
         let mut patterns = Vec::with_capacity(defs.len() + custom.len());
         let mut regex_patterns = Vec::with_capacity(defs.len() + custom.len());
@@ -237,12 +259,17 @@ impl Sanitizer {
             None
         };
 
+        if entropy_detector.is_enabled() {
+            info!("Entropy-based secret detection enabled");
+        }
+
         Self {
             patterns,
             detection_set,
             literal_detector,
             enabled,
             ansi_regex,
+            entropy_detector,
         }
     }
 
@@ -831,28 +858,50 @@ impl Sanitizer {
         let text_ref: &str = &text;
 
         // Tier 1: Fast keyword detection with Aho-Corasick
-        // If no keywords found, very likely no secrets present
+        // If no keywords found, very likely no secrets present — but entropy may still catch some
         if !self.literal_detector.is_match(text_ref) {
             debug!(
                 len = text_ref.len(),
                 "No secret keywords detected, skipping regex"
             );
+            // Still run entropy detection (catches secrets without known keywords)
+            if self.entropy_detector.is_enabled() {
+                let result = self.entropy_detector.redact(text_ref);
+                if result != text_ref {
+                    return Cow::Owned(result);
+                }
+            }
             return text;
         }
 
         // Tier 2: Check if any regex pattern matches
         if !self.detection_set.is_match(text_ref) {
             debug!(len = text_ref.len(), "Keywords found but no regex matches");
+            // Still run entropy detection
+            if self.entropy_detector.is_enabled() {
+                let result = self.entropy_detector.redact(text_ref);
+                if result != text_ref {
+                    return Cow::Owned(result);
+                }
+            }
             return text;
         }
 
-        // Tier 3: Apply sanitization
-        if text_ref.len() >= PARALLEL_THRESHOLD {
+        // Tier 3: Apply regex sanitization
+        let result = if text_ref.len() >= PARALLEL_THRESHOLD {
             debug!(len = text_ref.len(), "Using parallel sanitization");
-            Cow::Owned(self.sanitize_parallel(text_ref))
+            self.sanitize_parallel(text_ref)
         } else {
-            Cow::Owned(self.sanitize_sequential(text_ref))
+            self.sanitize_sequential(text_ref)
+        };
+
+        // Tier 4: Entropy-based detection (catches secrets missed by regex)
+        if self.entropy_detector.is_enabled() {
+            let result = self.entropy_detector.redact(&result);
+            return Cow::Owned(result);
         }
+
+        Cow::Owned(result)
     }
 
     /// Check if sanitization is enabled
@@ -1245,6 +1294,8 @@ users:
             enabled: true,
             disable_builtin: vec!["github".to_string()],
             custom_patterns: vec![],
+            entropy_detection: false,
+            ..Default::default()
         };
 
         let sanitizer = Sanitizer::from_config(&config);
@@ -1274,6 +1325,7 @@ users:
             enabled: true,
             disable_builtin: vec![],
             custom_patterns: vec![],
+            ..Default::default()
         };
 
         // Empty legacy patterns should be skipped (no panic, no extra patterns)
@@ -1294,6 +1346,7 @@ users:
             enabled: true,
             disable_builtin: vec![],
             custom_patterns: vec![],
+            ..Default::default()
         };
 
         // Add a custom legacy pattern

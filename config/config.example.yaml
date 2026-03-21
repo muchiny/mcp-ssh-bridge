@@ -182,6 +182,14 @@ security:
       #   replacement: "[MYAPP_KEY_REDACTED]"
       #   description: "MyApp API keys"
 
+    # --- Entropy-based detection (catches unknown secret formats) ---
+    # Detects high-entropy strings that don't match any known pattern
+    # entropy_detection: true        # Enable/disable (default: true)
+    # entropy_threshold: 4.5         # Shannon entropy bits threshold (default: 4.5)
+    # entropy_min_length: 16         # Min token length to analyze (default: 16)
+    # entropy_whitelist: []          # Known safe strings to exclude
+    #   - "my-known-safe-hash-value"
+
   # Legacy: Additional regex patterns (prefer using sanitize.custom_patterns)
   # These are combined with builtin patterns for backward compatibility
   sanitize_patterns: []
