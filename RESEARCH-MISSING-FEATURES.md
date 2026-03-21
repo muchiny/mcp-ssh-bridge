@@ -10,7 +10,7 @@ Votre projet est **déjà très avancé** :
 
 | Catégorie | Status |
 |---|---|
-| **258 tools** across 47 groups (34 Linux, 13 Windows) | ✅ |
+| **262 tools** across 47 groups (34 Linux, 13 Windows) | ✅ |
 | MCP Resources (6 : health, history, log, metrics, services, file) | ✅ |
 | MCP Prompts (7 : deploy, docker_health, k8s_overview, security_audit, system_health, troubleshoot, backup_verify) | ✅ |
 | MCP Sampling (server-initiated LLM calls) | ✅ |
@@ -23,8 +23,8 @@ Votre projet est **déjà très avancé** :
 | Transports: stdio + HTTP/SSE | ✅ |
 | Config hot-reload (watcher + list_changed notifications) | ✅ |
 | Apps (Dashboard, Table, Form, Chart builders) | ✅ |
-| SSH: connection pool, sessions, tunnels, retry | ✅ |
-| Security: blacklist, sanitization, rate limiting, audit | ✅ |
+| SSH: connection pool, sessions, tunnels, retry, ProxyJump, SOCKS proxy | ✅ |
+| Security: blacklist, sanitization, rate limiting, audit, RBAC | ✅ |
 | Docker, K8s, Helm, Ansible, Terraform, Vault, ESXi, Podman | ✅ |
 | Windows: AD, IIS, Hyper-V, Registry, Events, Services | ✅ |
 | Network Equipment (Cisco-style show commands) | ✅ |
@@ -68,17 +68,9 @@ Votre projet est **déjà très avancé** :
   - `ssh_incident_triage` — triage automatique d'un incident (corrèle logs, metrics, et état services)
   - `ssh_compare_state` — comparer l'état actuel vs un baseline connu
 
-#### 5. **SSH Jump Host / Bastion / ProxyJump**
-- **Quoi** : Support natif des jump hosts (SSH ProxyJump) pour atteindre des machines derrière un bastion.
-- **Pourquoi** : Quasi obligatoire en entreprise. Les environnements air-gapped utilisent des bastions.
-- **Config** :
-  ```yaml
-  hosts:
-    prod-db:
-      hostname: 10.0.1.50
-      jump_host: bastion.example.com
-      # ou chaîne: jump_hosts: [bastion1, bastion2]
-  ```
+#### 5. ~~SSH Jump Host / Bastion / ProxyJump~~ ✅ DÉJÀ IMPLÉMENTÉ
+- ProxyJump + SOCKS4/SOCKS5 proxy déjà supportés dans `src/ssh/` et `src/config/types.rs`.
+- **Amélioration possible** : Support des chaînes multi-hop (bastion1 → bastion2 → target) si pas déjà fait.
 
 #### 6. **Streamable HTTP Transport (MCP 2025-03-26)**
 - **Quoi** : Nouveau transport MCP qui remplace SSE. Un seul endpoint HTTP, bidirectionnel, supporte resumability.
@@ -233,7 +225,7 @@ Votre projet est **déjà très avancé** :
 
 | Feature | Votre Projet | mcp-server-ssh (basique) | Warp AI | Fabric AI |
 |---|---|---|---|---|
-| Nombre de tools | **258** | ~5 | N/A | N/A |
+| Nombre de tools | **262** | ~5 | N/A | N/A |
 | MCP Resources | ✅ (6) | ❌ | N/A | N/A |
 | MCP Prompts | ✅ (7) | ❌ | N/A | N/A |
 | MCP Sampling | ✅ | ❌ | N/A | N/A |
@@ -242,7 +234,7 @@ Votre projet est **déjà très avancé** :
 | Structured Output | ❌ | ❌ | N/A | N/A |
 | Runbook Engine | ❌ | ❌ | ❌ | ❌ |
 | Multi-host Orchestration | Basique | ❌ | ❌ | ✅ |
-| Jump Host/Bastion | ❌ | ❌ | ❌ | N/A |
+| Jump Host/Bastion | ✅ | ❌ | ❌ | N/A |
 | Session Recording | ❌ | ❌ | ✅ | ❌ |
 | Secrets Masking | Basique | ❌ | ❌ | ❌ |
 | Streamable HTTP | ❌ | ❌ | N/A | N/A |
@@ -253,16 +245,16 @@ Votre projet est **déjà très avancé** :
 
 | # | Feature | Effort | Impact | ROI |
 |---|---|---|---|---|
-| 1 | **SSH Jump Host / ProxyJump** | Moyen | Critique (enterprise) | 🔥🔥🔥🔥🔥 |
-| 2 | **Intelligent Diagnostics** (`ssh_diagnose`) | Moyen | Très élevé | 🔥🔥🔥🔥🔥 |
-| 3 | **Runbook Engine** | Élevé | Très élevé | 🔥🔥🔥🔥 |
-| 4 | **Structured Output** (MCP spec) | Faible | Élevé | 🔥🔥🔥🔥 |
-| 5 | **Advanced Multi-Host** (canary, rolling, diff) | Moyen | Élevé | 🔥🔥🔥🔥 |
-| 6 | **Secrets Detection avancée** | Faible | Élevé (sécurité) | 🔥🔥🔥🔥 |
-| 7 | **Streamable HTTP Transport** | Moyen | Élevé (future-proof) | 🔥🔥🔥 |
-| 8 | **Session Recording** | Moyen | Élevé (compliance) | 🔥🔥🔥 |
-| 9 | **File Diff/Patch/Template** | Faible | Moyen | 🔥🔥🔥 |
-| 10 | **Environment Drift Detection** | Moyen | Élevé (DevOps) | 🔥🔥🔥 |
+| 1 | **Intelligent Diagnostics** (`ssh_diagnose`) | Moyen | Très élevé | 🔥🔥🔥🔥🔥 |
+| 2 | **Runbook Engine** | Élevé | Très élevé | 🔥🔥🔥🔥🔥 |
+| 3 | **Structured Output** (MCP spec) | Faible | Élevé | 🔥🔥🔥🔥 |
+| 4 | **Advanced Multi-Host** (canary, rolling, diff) | Moyen | Élevé | 🔥🔥🔥🔥 |
+| 5 | **Secrets Detection avancée** | Faible | Élevé (sécurité) | 🔥🔥🔥🔥 |
+| 6 | **Streamable HTTP Transport** | Moyen | Élevé (future-proof) | 🔥🔥🔥🔥 |
+| 7 | **Session Recording** | Moyen | Élevé (compliance) | 🔥🔥🔥 |
+| 8 | **File Diff/Patch/Template** | Faible | Moyen | 🔥🔥🔥 |
+| 9 | **Environment Drift Detection** | Moyen | Élevé (DevOps) | 🔥🔥🔥 |
+| 10 | **SBOM & Vulnerability Scanning** | Moyen | Élevé (sécurité) | 🔥🔥🔥 |
 
 ---
 
