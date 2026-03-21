@@ -20,7 +20,8 @@ Votre projet est **déjà très avancé** :
 | MCP Completions (argument auto-completion) | ✅ |
 | MCP Tasks (background tasks with get/list/cancel/result) | ✅ |
 | OAuth 2.0 / JWT auth on HTTP transport | ✅ |
-| Transports: stdio + HTTP/SSE | ✅ |
+| Transports: stdio + Streamable HTTP (MCP 2025-11-25) | ✅ |
+| MCP Structured Output (structuredContent + outputSchema) | ✅ |
 | Config hot-reload (watcher + list_changed notifications) | ✅ |
 | Apps (Dashboard, Table, Form, Chart builders) | ✅ |
 | SSH: connection pool, sessions, tunnels, retry, ProxyJump, SOCKS proxy | ✅ |
@@ -36,10 +37,8 @@ Votre projet est **déjà très avancé** :
 
 ### 🔴 PRIORITÉ HAUTE — Différenciateurs concurrentiels
 
-#### 1. **MCP Structured Output (JSON Schema responses)**
-- **Quoi** : La spec MCP 2025-03-26 ajoute `structuredContent` aux résultats d'outils — le serveur retourne des données structurées (JSON Schema validé) en plus du `content` texte.
-- **Pourquoi** : Permet à Claude de parser les résultats de façon fiable (pas de regex sur du texte). Critique pour l'intégration dans des pipelines automatisés.
-- **Impact** : Les tools comme `ssh_k8s_get`, `ssh_docker_ps`, `ssh_metrics` pourraient retourner du JSON structuré + texte lisible.
+#### 1. ~~MCP Structured Output~~ ✅ DÉJÀ IMPLÉMENTÉ
+- `structuredContent` + `output_schema` implémentés dans `protocol.rs` et `ports/protocol.rs` avec tests.
 
 #### 2. **Multi-Host Orchestration Intelligente (Fan-out/Fan-in)**
 - **Quoi** : Exécuter une commande/workflow sur N hosts en parallèle avec agrégation des résultats, diff entre hosts, et détection d'anomalies.
@@ -72,10 +71,9 @@ Votre projet est **déjà très avancé** :
 - ProxyJump + SOCKS4/SOCKS5 proxy déjà supportés dans `src/ssh/` et `src/config/types.rs`.
 - **Amélioration possible** : Support des chaînes multi-hop (bastion1 → bastion2 → target) si pas déjà fait.
 
-#### 6. **Streamable HTTP Transport (MCP 2025-03-26)**
-- **Quoi** : Nouveau transport MCP qui remplace SSE. Un seul endpoint HTTP, bidirectionnel, supporte resumability.
-- **Pourquoi** : C'est le futur du MCP. SSE est "legacy". Les clients modernes vont migrer vers Streamable HTTP.
-- **Features** : Session management, resumability (Mcp-Session-Id), request batching.
+#### 6. ~~Streamable HTTP Transport~~ ✅ DÉJÀ IMPLÉMENTÉ
+- `src/mcp/transport/http.rs` implémente "Streamable HTTP Transport (MCP 2025-11-25)".
+- Type déclaré : `"streamable-http"`. Déjà le standard actuel, pas du SSE legacy.
 
 ---
 
@@ -231,13 +229,13 @@ Votre projet est **déjà très avancé** :
 | MCP Sampling | ✅ | ❌ | N/A | N/A |
 | MCP Elicitation | ✅ | ❌ | N/A | N/A |
 | MCP Tasks | ✅ | ❌ | N/A | N/A |
-| Structured Output | ❌ | ❌ | N/A | N/A |
+| Structured Output | ✅ | ❌ | N/A | N/A |
 | Runbook Engine | ❌ | ❌ | ❌ | ❌ |
 | Multi-host Orchestration | Basique | ❌ | ❌ | ✅ |
 | Jump Host/Bastion | ✅ | ❌ | ❌ | N/A |
 | Session Recording | ❌ | ❌ | ✅ | ❌ |
 | Secrets Masking | Basique | ❌ | ❌ | ❌ |
-| Streamable HTTP | ❌ | ❌ | N/A | N/A |
+| Streamable HTTP | ✅ | ❌ | N/A | N/A |
 
 ---
 
@@ -247,14 +245,14 @@ Votre projet est **déjà très avancé** :
 |---|---|---|---|---|
 | 1 | **Intelligent Diagnostics** (`ssh_diagnose`) | Moyen | Très élevé | 🔥🔥🔥🔥🔥 |
 | 2 | **Runbook Engine** | Élevé | Très élevé | 🔥🔥🔥🔥🔥 |
-| 3 | **Structured Output** (MCP spec) | Faible | Élevé | 🔥🔥🔥🔥 |
-| 4 | **Advanced Multi-Host** (canary, rolling, diff) | Moyen | Élevé | 🔥🔥🔥🔥 |
-| 5 | **Secrets Detection avancée** | Faible | Élevé (sécurité) | 🔥🔥🔥🔥 |
-| 6 | **Streamable HTTP Transport** | Moyen | Élevé (future-proof) | 🔥🔥🔥🔥 |
-| 7 | **Session Recording** | Moyen | Élevé (compliance) | 🔥🔥🔥 |
-| 8 | **File Diff/Patch/Template** | Faible | Moyen | 🔥🔥🔥 |
-| 9 | **Environment Drift Detection** | Moyen | Élevé (DevOps) | 🔥🔥🔥 |
-| 10 | **SBOM & Vulnerability Scanning** | Moyen | Élevé (sécurité) | 🔥🔥🔥 |
+| 3 | **Advanced Multi-Host** (canary, rolling, diff) | Moyen | Élevé | 🔥🔥🔥🔥 |
+| 4 | **Secrets Detection avancée** (entropie + patterns) | Faible | Élevé (sécurité) | 🔥🔥🔥🔥 |
+| 5 | **Session Recording** (asciinema + tamper-proof audit) | Moyen | Élevé (compliance) | 🔥🔥🔥🔥 |
+| 6 | **Environment Drift Detection** | Moyen | Élevé (DevOps) | 🔥🔥🔥 |
+| 7 | **File Diff/Patch/Template** | Faible | Moyen | 🔥🔥🔥 |
+| 8 | **SBOM & Vulnerability Scanning** | Moyen | Élevé (sécurité) | 🔥🔥🔥 |
+| 9 | **MCP Server Cards** (`.well-known/mcp/server-card.json`) | Faible | Moyen (découverte) | 🔥🔥🔥 |
+| 10 | **DXT Packaging** (one-click Claude Desktop install) | Faible | Moyen (adoption) | 🔥🔥 |
 
 ---
 
@@ -262,8 +260,10 @@ Votre projet est **déjà très avancé** :
 
 Votre stack est **déjà dans le top 1%** des serveurs MCP en termes de complétude. Vous avez implémenté des features MCP avancées (Sampling, Elicitation, Tasks, Apps) que quasi aucun autre serveur n'a.
 
-Les gaps principaux sont :
-1. **Opérationnel** : Jump hosts, runbooks, diagnostics intelligents — ce qui transforme l'outil d'un "remote executor" en un vrai "AI SRE platform"
-2. **Protocole** : Structured Output et Streamable HTTP pour rester à jour avec la spec MCP
-3. **Sécurité** : Secrets detection avancée et session recording pour la compliance enterprise
-4. **Orchestration** : Passer de "exécuter sur N hosts" à "orchestrer des workflows sur N hosts"
+**Zéro gap protocolaire** — vous implémentez TOUTES les features de la spec MCP (Tools, Resources, Prompts, Sampling, Elicitation, Tasks, Structured Output, Completions, Progress, Logging, OAuth 2.1, Streamable HTTP). Aucun autre serveur MCP connu ne fait ça.
+
+Les gaps restants sont purement **opérationnels** :
+1. **SRE Platform** : Runbooks, diagnostics intelligents, incident triage — transformer l'outil d'un "remote executor" en une plateforme SRE AI-native
+2. **Orchestration** : Passer de "exécuter sur N hosts" à "orchestrer des workflows sur N hosts" (canary, rolling, drift detection)
+3. **Sécurité avancée** : Secrets detection par entropie, session recording pour compliance SOC2/HIPAA, tamper-proof audit chain
+4. **Écosystème** : MCP Server Cards, DXT packaging pour adoption facile
