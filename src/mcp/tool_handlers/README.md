@@ -287,12 +287,83 @@ tool_handlers/
 │   ├── 📄 ssh_win_net_ping.rs         → 📡 SshWinNetPingHandler
 │   └── 📄 ssh_win_net_dns.rs          → 🔍 SshWinNetDnsHandler
 │
-└── 🪟 Windows Process (5 tools)
-    ├── 📄 ssh_win_process_list.rs     → 📋 SshWinProcessListHandler
-    ├── 📄 ssh_win_process_top.rs      → 📊 SshWinProcessTopHandler
-    ├── 📄 ssh_win_process_info.rs     → ℹ️ SshWinProcessInfoHandler
-    ├── 📄 ssh_win_process_by_name.rs  → 🔍 SshWinProcessByNameHandler
-    └── 📄 ssh_win_process_kill.rs     → 💀 SshWinProcessKillHandler
+├── 🪟 Windows Process (5 tools)
+│   ├── 📄 ssh_win_process_list.rs     → 📋 SshWinProcessListHandler
+│   ├── 📄 ssh_win_process_top.rs      → 📊 SshWinProcessTopHandler
+│   ├── 📄 ssh_win_process_info.rs     → ℹ️ SshWinProcessInfoHandler
+│   ├── 📄 ssh_win_process_by_name.rs  → 🔍 SshWinProcessByNameHandler
+│   └── 📄 ssh_win_process_kill.rs     → 💀 SshWinProcessKillHandler
+│
+├── 📄 File Operations (5 tools)
+│   ├── 📄 ssh_file_read.rs            → 📖 SshFileReadHandler
+│   ├── 📄 ssh_file_write.rs           → ✍️ SshFileWriteHandler
+│   ├── 📄 ssh_file_chmod.rs           → 🔒 SshFileChmodHandler
+│   ├── 📄 ssh_file_chown.rs           → 👤 SshFileChownHandler
+│   └── 📄 ssh_file_stat.rs            → ℹ️ SshFileStatHandler
+│
+├── 👤 User Management (8 tools)
+│   ├── 📄 ssh_user_list.rs            → 📋 SshUserListHandler
+│   ├── 📄 ssh_user_info.rs            → ℹ️ SshUserInfoHandler
+│   ├── 📄 ssh_user_add.rs             → ➕ SshUserAddHandler
+│   ├── 📄 ssh_user_modify.rs          → ✏️ SshUserModifyHandler
+│   ├── 📄 ssh_user_delete.rs          → 🗑️ SshUserDeleteHandler
+│   ├── 📄 ssh_group_list.rs           → 📋 SshGroupListHandler
+│   ├── 📄 ssh_group_add.rs            → ➕ SshGroupAddHandler
+│   └── 📄 ssh_group_delete.rs         → 🗑️ SshGroupDeleteHandler
+│
+├── 💾 Storage (7 tools)
+│   ├── 📄 ssh_storage_lsblk.rs        → 📋 SshStorageLsblkHandler
+│   ├── 📄 ssh_storage_df.rs           → 💾 SshStorageDfHandler
+│   ├── 📄 ssh_storage_mount.rs        → 📌 SshStorageMountHandler
+│   ├── 📄 ssh_storage_umount.rs       → 📤 SshStorageUmountHandler
+│   ├── 📄 ssh_storage_lvm.rs          → 🔧 SshStorageLvmHandler
+│   ├── 📄 ssh_storage_fdisk.rs        → 🔧 SshStorageFdiskHandler
+│   └── 📄 ssh_storage_fstab.rs        → 📄 SshStorageFstabHandler
+│
+├── 📋 Journald (4 tools)
+│   ├── 📄 ssh_journal_query.rs        → 🔍 SshJournalQueryHandler
+│   ├── 📄 ssh_journal_follow.rs       → 📡 SshJournalFollowHandler
+│   ├── 📄 ssh_journal_boots.rs        → 🔄 SshJournalBootsHandler
+│   └── 📄 ssh_journal_disk_usage.rs   → 💾 SshJournalDiskUsageHandler
+│
+├── ⏲️ Systemd Timers (5 tools)
+│   ├── 📄 ssh_timer_list.rs           → 📋 SshTimerListHandler
+│   ├── 📄 ssh_timer_info.rs           → ℹ️ SshTimerInfoHandler
+│   ├── 📄 ssh_timer_enable.rs         → ✅ SshTimerEnableHandler
+│   ├── 📄 ssh_timer_disable.rs        → ❌ SshTimerDisableHandler
+│   └── 📄 ssh_timer_trigger.rs        → ▶️ SshTimerTriggerHandler
+│
+├── 🛡️ Security Modules (5 tools)
+│   ├── 📄 ssh_selinux_status.rs       → 📊 SshSelinuxStatusHandler
+│   ├── 📄 ssh_selinux_booleans.rs     → 🔧 SshSelinuxBooleansHandler
+│   ├── 📄 ssh_apparmor_status.rs      → 📊 SshApparmorStatusHandler
+│   ├── 📄 ssh_apparmor_profiles.rs    → 📋 SshApparmorProfilesHandler
+│   └── 📄 ssh_security_audit.rs       → 🔍 SshSecurityAuditHandler
+│
+├── 🔌 Network Equipment (8 tools)
+│   ├── 📄 ssh_net_equip_show_run.rs        → 📄 SshNetEquipShowRunHandler
+│   ├── 📄 ssh_net_equip_show_interfaces.rs → 🔌 SshNetEquipShowInterfacesHandler
+│   ├── 📄 ssh_net_equip_show_routes.rs     → 🛤️ SshNetEquipShowRoutesHandler
+│   ├── 📄 ssh_net_equip_show_arp.rs        → 📋 SshNetEquipShowArpHandler
+│   ├── 📄 ssh_net_equip_show_version.rs    → ℹ️ SshNetEquipShowVersionHandler
+│   ├── 📄 ssh_net_equip_show_vlans.rs      → 🏷️ SshNetEquipShowVlansHandler
+│   ├── 📄 ssh_net_equip_config.rs          → ⚙️ SshNetEquipConfigHandler
+│   └── 📄 ssh_net_equip_save.rs            → 💾 SshNetEquipSaveHandler
+│
+├── 🦭 Podman (6 tools)
+│   ├── 📄 ssh_podman_ps.rs            → 📋 SshPodmanPsHandler
+│   ├── 📄 ssh_podman_logs.rs          → 📜 SshPodmanLogsHandler
+│   ├── 📄 ssh_podman_inspect.rs       → 🔍 SshPodmanInspectHandler
+│   ├── 📄 ssh_podman_exec.rs          → 💻 SshPodmanExecHandler
+│   ├── 📄 ssh_podman_images.rs        → 🖼️ SshPodmanImagesHandler
+│   └── 📄 ssh_podman_compose.rs       → 🔄 SshPodmanComposeHandler
+│
+└── 📒 LDAP (5 tools)
+    ├── 📄 ssh_ldap_search.rs          → 🔍 SshLdapSearchHandler
+    ├── 📄 ssh_ldap_user_info.rs       → 👤 SshLdapUserInfoHandler
+    ├── 📄 ssh_ldap_group_members.rs   → 👥 SshLdapGroupMembersHandler
+    ├── 📄 ssh_ldap_add.rs             → ➕ SshLdapAddHandler
+    └── 📄 ssh_ldap_modify.rs          → ✏️ SshLdapModifyHandler
 ```
 
 ---
@@ -301,7 +372,7 @@ tool_handlers/
 
 ```mermaid
 graph TB
-    subgraph Handlers["🔧 Tool Handlers (197 tools, 38 groups)"]
+    subgraph Handlers["🔧 Tool Handlers (250 tools, 47 groups)"]
         subgraph Exec["⚡ Execution"]
             E1["🖥️ SshExecHandler"]
             E2["🔄 SshExecMultiHandler"]

@@ -24,7 +24,7 @@ mcp/
 ├── 📄 history.rs          -> 📜 Re-exports from domain/history.rs
 ├── 📄 resource_registry.rs -> 📊 ResourceRegistry + create_default_resource_registry()
 ├── 📄 standard_tool.rs    -> 🏭 StandardTool trait + generic execution pipeline
-├── 🔧 tool_handlers/      -> 🛠️ Tool implementations (197 tools across 38 groups)
+├── 🔧 tool_handlers/      -> 🛠️ Tool implementations (250 tools across 47 groups)
 │   ├── 📄 mod.rs
 │   ├── 📄 utils.rs
 │   │
@@ -750,7 +750,7 @@ pub fn create_default_registry() -> ToolRegistry
 
 ### 🏷️ ToolAnnotations
 
-All **197 tools** have `ToolAnnotations` centralized in `registry.rs::tool_annotations()`. Annotations inform Claude about the impact level of each tool:
+All **250 tools** have `ToolAnnotations` centralized in `registry.rs::tool_annotations()`. Annotations inform Claude about the impact level of each tool:
 
 | Level | Function | Description |
 |-------|----------|-------------|

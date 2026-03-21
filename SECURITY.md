@@ -44,7 +44,7 @@ MCP SSH Bridge acts as a security boundary between an AI client (Claude Code) an
 |---------|-------------|
 | Command Validation | Whitelist/blacklist with regex patterns (`CommandValidator`) |
 | Shell Escaping | Single-quote wrapping for all user-supplied parameters |
-| Output Sanitization | 50+ patterns masking secrets in command output (`Sanitizer`) |
+| Output Sanitization | 56 patterns masking secrets in command output (`Sanitizer`) |
 | Rate Limiting | Per-host token bucket rate limiter (`RateLimiter`) |
 | Audit Logging | Async JSON-lines audit trail (`AuditLogger`) |
 | Host Key Verification | Strict mode by default (MITM protection) |

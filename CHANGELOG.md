@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-03-21
+
+### Added
+
+- **53 new SSH tools** across 9 new groups, bringing total from 197 to **250 tools** across **47 groups**:
+  - **File Operations** (`file_ops`, 5 tools): `ssh_file_read`, `ssh_file_write`, `ssh_file_chmod`, `ssh_file_chown`, `ssh_file_stat`
+  - **User Management** (`user_management`, 8 tools): `ssh_user_list`, `ssh_user_info`, `ssh_user_add`, `ssh_user_modify`, `ssh_user_delete`, `ssh_group_list`, `ssh_group_add`, `ssh_group_delete`
+  - **Storage** (`storage`, 7 tools): `ssh_storage_lsblk`, `ssh_storage_df`, `ssh_storage_mount`, `ssh_storage_umount`, `ssh_storage_lvm`, `ssh_storage_fdisk`, `ssh_storage_fstab`
+  - **Journald** (`journald`, 4 tools): `ssh_journal_query`, `ssh_journal_follow`, `ssh_journal_boots`, `ssh_journal_disk_usage`
+  - **Systemd Timers** (`systemd_timers`, 5 tools): `ssh_timer_list`, `ssh_timer_info`, `ssh_timer_enable`, `ssh_timer_disable`, `ssh_timer_trigger`
+  - **Security Modules** (`security_modules`, 5 tools): `ssh_selinux_status`, `ssh_selinux_booleans`, `ssh_apparmor_status`, `ssh_apparmor_profiles`, `ssh_security_audit`
+  - **Network Equipment** (`network_equipment`, 8 tools): `ssh_net_equip_show_run`, `ssh_net_equip_show_interfaces`, `ssh_net_equip_show_routes`, `ssh_net_equip_show_arp`, `ssh_net_equip_show_version`, `ssh_net_equip_show_vlans`, `ssh_net_equip_config`, `ssh_net_equip_save`
+  - **Podman** (`podman`, 6 tools): `ssh_podman_ps`, `ssh_podman_logs`, `ssh_podman_inspect`, `ssh_podman_exec`, `ssh_podman_images`, `ssh_podman_compose`
+  - **LDAP** (`ldap`, 5 tools): `ssh_ldap_search`, `ssh_ldap_user_info`, `ssh_ldap_group_members`, `ssh_ldap_add`, `ssh_ldap_modify`
+- **6 new MCP protocol features**: batches, roots, app management, HTTP streaming, OAuth, and discovery
+- **AI discoverability**: improved tool descriptions for better LLM understanding
+- **9 new domain builders**: `FileOpsCommandBuilder`, `UserManagementCommandBuilder`, `StorageCommandBuilder`, `JournaldCommandBuilder`, `SystemdTimerCommandBuilder`, `SecurityModulesCommandBuilder`, `NetworkEquipmentCommandBuilder`, `PodmanCommandBuilder`, `LdapCommandBuilder`
+
+### Changed
+
+- **Tool Count**: 197 → 250 tools
+- **Group Count**: 38 → 47 groups (34 Linux + 13 Windows)
+- README rewritten to focus on installation, purpose, and configuration
+- Documentation cleaned up across all modules
+
 ## [1.1.0] - 2026-02-19
 
 ### Added

@@ -71,6 +71,15 @@ src/
 │       ├── redis.rs         # RedisCommandBuilder
 │       ├── terraform.rs     # TerraformCommandBuilder
 │       ├── vault.rs         # VaultCommandBuilder
+│       ├── file_ops.rs       # FileOpsCommandBuilder (5 commands)
+│       ├── user_management.rs # UserManagementCommandBuilder (8 commands)
+│       ├── storage.rs        # StorageCommandBuilder (7 commands)
+│       ├── journald.rs       # JournaldCommandBuilder (4 commands)
+│       ├── systemd_timer.rs  # SystemdTimerCommandBuilder (5 commands)
+│       ├── security_modules.rs # SecurityModulesCommandBuilder (5 commands)
+│       ├── network_equipment.rs # NetworkEquipmentCommandBuilder (8 commands)
+│       ├── podman.rs         # PodmanCommandBuilder (6 commands)
+│       ├── ldap.rs           # LdapCommandBuilder (5 commands)
 │       ├── shell.rs          # 🪟 Shell utilities (OsType, ShellType, escape)
 │       ├── active_directory.rs # 🪟 ActiveDirectoryCommandBuilder
 │       ├── hyperv.rs          # 🪟 HyperVCommandBuilder
@@ -99,12 +108,12 @@ src/
 │   ├── mod.rs              # Module exports
 │   ├── server.rs           # Main server
 │   ├── protocol.rs         # JSON-RPC types
-│   ├── registry.rs         # Tool registry (197 tools, 38 groups)
+│   ├── registry.rs         # Tool registry (250 tools, 47 groups)
 │   ├── prompt_registry.rs  # Prompt registry
 │   ├── resource_registry.rs # Resource registry
 │   ├── standard_tool.rs    # StandardTool trait + generic pipeline
 │   ├── history.rs          # Command history (re-export from domain)
-│   ├── tool_handlers/      # Tool handlers (197)
+│   ├── tool_handlers/      # Tool handlers (250)
 │   │   ├── ssh_exec.rs     # Command execution
 │   │   ├── ssh_exec_multi.rs # Parallel multi-host execution
 │   │   ├── ssh_status.rs   # Host status
@@ -154,7 +163,16 @@ src/
 │   │   ├── ssh_reg_*.rs           # 🪟 Windows Registry (5 tools)
 │   │   ├── ssh_win_feature_*.rs   # 🪟 Windows Features (4 tools)
 │   │   ├── ssh_win_net_*.rs       # 🪟 Windows Network (6 tools)
-│   │   └── ssh_win_process_*.rs   # 🪟 Windows Process (5 tools)
+│   │   ├── ssh_win_process_*.rs   # 🪟 Windows Process (5 tools)
+│   │   ├── ssh_file_*.rs          # 📄 File Operations (5 tools)
+│   │   ├── ssh_user_*.rs + ssh_group_*.rs # 👤 User Management (8 tools)
+│   │   ├── ssh_storage_*.rs       # 💾 Storage (7 tools)
+│   │   ├── ssh_journal_*.rs       # 📋 Journald (4 tools)
+│   │   ├── ssh_timer_*.rs         # ⏲️ Systemd Timers (5 tools)
+│   │   ├── ssh_selinux_*.rs + ssh_apparmor_*.rs + ssh_security_audit.rs # 🛡️ Security Modules (5 tools)
+│   │   ├── ssh_net_equip_*.rs     # 🔌 Network Equipment (8 tools)
+│   │   ├── ssh_podman_*.rs        # 🦭 Podman (6 tools)
+│   │   └── ssh_ldap_*.rs          # 📒 LDAP (5 tools)
 │   └── resources/          # Resource handlers
 │       ├── metrics_resource.rs # metrics://{host}
 │       ├── file_resource.rs    # file://{host}/{path}
@@ -180,7 +198,7 @@ src/
 
 ## 🪟 Windows Support
 
-v2.0.1 adds **74 Windows tools** across **13 groups** for managing Windows servers via PowerShell over SSH.
+v2.0+ adds **74 Windows tools** across **13 groups** for managing Windows servers via PowerShell over SSH.
 
 ```mermaid
 graph LR
