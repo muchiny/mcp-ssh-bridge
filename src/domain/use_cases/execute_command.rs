@@ -81,6 +81,37 @@ impl ExecuteCommandResponse {
         }
         serde_json::to_string(&map).unwrap_or_default()
     }
+
+    /// Format output optimized for LLM token consumption.
+    ///
+    /// Aligned with pgEdge/Axiom best practices (2026):
+    /// - Success (`exit_code`=0) + no stderr → raw stdout (zero overhead)
+    /// - Success + stderr (warnings)         → stdout + `\n[stderr]\n` + stderr
+    /// - Error (`exit_code`!=0)              → `[exit:N]\n` + stderr + `\n---\n` + stdout
+    #[must_use]
+    pub fn format_for_llm(&self, stdout_display: &str) -> String {
+        if self.exit_code == 0 {
+            if self.stderr.is_empty() {
+                // Success, no warnings → raw stdout
+                stdout_display.to_string()
+            } else {
+                // Success with warnings → stdout + stderr marker
+                format!("{stdout_display}\n[stderr]\n{}", self.stderr)
+            }
+        } else if stdout_display.is_empty() {
+            // Error, no stdout
+            format!("[exit:{}]\n{}", self.exit_code, self.stderr)
+        } else if self.stderr.is_empty() {
+            // Error, no stderr (unusual but possible)
+            format!("[exit:{}]\n{stdout_display}", self.exit_code)
+        } else {
+            // Error with both stdout and stderr
+            format!(
+                "[exit:{}]\n{}\n---\n{stdout_display}",
+                self.exit_code, self.stderr
+            )
+        }
+    }
 }
 
 /// Use case for executing SSH commands
@@ -408,6 +439,108 @@ mod tests {
         assert_eq!(parsed["exit_code"], 0);
         assert!(parsed.get("stdout").is_none());
         assert!(parsed.get("stderr").is_none());
+    }
+
+    // ============== format_for_llm Tests ==============
+
+    #[test]
+    fn test_format_for_llm_success() {
+        let resp = ExecuteCommandResponse {
+            output: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+            stdout: "hello world".to_string(),
+            stderr: String::new(),
+            host: "server1".to_string(),
+            command: "echo hello".to_string(),
+        };
+
+        let result = resp.format_for_llm(&resp.stdout);
+        assert_eq!(result, "hello world"); // raw stdout, no wrapping
+    }
+
+    #[test]
+    fn test_format_for_llm_success_with_stderr() {
+        let resp = ExecuteCommandResponse {
+            output: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+            stdout: "output data".to_string(),
+            stderr: "warning: deprecated".to_string(),
+            host: "server1".to_string(),
+            command: "cmd".to_string(),
+        };
+
+        let result = resp.format_for_llm(&resp.stdout);
+        assert!(result.starts_with("output data"));
+        assert!(result.contains("[stderr]"));
+        assert!(result.contains("warning: deprecated"));
+    }
+
+    #[test]
+    fn test_format_for_llm_error() {
+        let resp = ExecuteCommandResponse {
+            output: String::new(),
+            exit_code: 127,
+            duration_ms: 5,
+            stdout: "partial output".to_string(),
+            stderr: "command not found".to_string(),
+            host: "server2".to_string(),
+            command: "nonexistent".to_string(),
+        };
+
+        let result = resp.format_for_llm(&resp.stdout);
+        assert!(result.starts_with("[exit:127]"));
+        assert!(result.contains("command not found"));
+        assert!(result.contains("partial output"));
+    }
+
+    #[test]
+    fn test_format_for_llm_error_no_stdout() {
+        let resp = ExecuteCommandResponse {
+            output: String::new(),
+            exit_code: 1,
+            duration_ms: 5,
+            stdout: String::new(),
+            stderr: "error occurred".to_string(),
+            host: "host".to_string(),
+            command: "cmd".to_string(),
+        };
+
+        let result = resp.format_for_llm(&resp.stdout);
+        assert_eq!(result, "[exit:1]\nerror occurred");
+    }
+
+    #[test]
+    fn test_format_for_llm_empty() {
+        let resp = ExecuteCommandResponse {
+            output: String::new(),
+            exit_code: 0,
+            duration_ms: 10,
+            stdout: String::new(),
+            stderr: String::new(),
+            host: "host".to_string(),
+            command: "true".to_string(),
+        };
+
+        let result = resp.format_for_llm(&resp.stdout);
+        assert_eq!(result, ""); // empty string, no wrapping
+    }
+
+    #[test]
+    fn test_format_for_llm_truncated_stdout() {
+        let resp = ExecuteCommandResponse {
+            output: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+            stdout: "full output here".to_string(),
+            stderr: String::new(),
+            host: "server1".to_string(),
+            command: "cmd".to_string(),
+        };
+
+        let result = resp.format_for_llm("truncated...");
+        assert_eq!(result, "truncated..."); // uses truncated version
     }
 
     #[test]

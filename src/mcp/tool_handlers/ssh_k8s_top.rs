@@ -142,7 +142,7 @@ impl StandardTool for K8sTopTool {
             refresh_args["namespace"] = json!(ns);
         }
         tbl = tbl.action("refresh", "Refresh", "ssh_k8s_top", Some(refresh_args));
-        result.with_app(tbl.build())
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

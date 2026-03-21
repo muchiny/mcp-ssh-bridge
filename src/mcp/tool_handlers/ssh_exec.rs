@@ -245,7 +245,7 @@ impl ToolHandler for SshExecHandler {
                 .await;
 
         // Save full output to local file if requested
-        let mut output_text = response.to_compact_json(&truncated_stdout);
+        let mut output_text = response.format_for_llm(&truncated_stdout);
         if let Some(ref save_path) = args.save_output {
             match super::utils::save_output_to_file(save_path, &response.output).await {
                 Ok(msg) => output_text = format!("{output_text}\n{msg}"),

@@ -152,7 +152,7 @@ impl StandardTool for DockerStatsTool {
                     );
             }
         }
-        result.with_app(tbl.build())
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

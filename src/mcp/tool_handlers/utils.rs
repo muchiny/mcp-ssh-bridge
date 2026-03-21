@@ -124,6 +124,35 @@ pub struct ParsedTable {
     pub rows: Vec<Vec<String>>,
 }
 
+impl ParsedTable {
+    /// Convert to TSV (tab-separated values) for token-efficient LLM consumption.
+    ///
+    /// Returns uppercased header row + tab-separated data rows.
+    /// TSV uses 30-40% fewer tokens than JSON for tabular data (pgEdge benchmark).
+    #[must_use]
+    pub fn to_tsv(&self) -> String {
+        let mut result = String::new();
+        // Header row (uppercase for readability)
+        for (i, h) in self.headers.iter().enumerate() {
+            if i > 0 {
+                result.push('\t');
+            }
+            result.push_str(&h.to_uppercase());
+        }
+        // Data rows
+        for row in &self.rows {
+            result.push('\n');
+            for (i, val) in row.iter().enumerate() {
+                if i > 0 {
+                    result.push('\t');
+                }
+                result.push_str(val);
+            }
+        }
+        result
+    }
+}
+
 /// Parse columnar CLI output using header-position-based column boundary detection.
 ///
 /// Algorithm:
@@ -532,5 +561,33 @@ short";
         assert_eq!(parsed.rows[0][2], ""); // short line, no status
         assert_eq!(parsed.rows[1][0], "short");
         assert_eq!(parsed.rows[1][1], ""); // even shorter
+    }
+
+    // ============== to_tsv Tests ==============
+
+    #[test]
+    fn test_to_tsv_basic() {
+        let output = "\
+NAME           IMAGE          STATUS
+container1     nginx:latest   Up 2 hours
+container2     redis:7        Up 3 hours";
+
+        let parsed = parse_columnar_output(output).unwrap();
+        let tsv = parsed.to_tsv();
+        let lines: Vec<&str> = tsv.lines().collect();
+        assert_eq!(lines[0], "NAME\tIMAGE\tSTATUS");
+        assert_eq!(lines[1], "container1\tnginx:latest\tUp 2 hours");
+        assert_eq!(lines[2], "container2\tredis:7\tUp 3 hours");
+    }
+
+    #[test]
+    fn test_to_tsv_single_row() {
+        let output = "\
+NAME     CPU
+node-1   250m";
+
+        let parsed = parse_columnar_output(output).unwrap();
+        let tsv = parsed.to_tsv();
+        assert_eq!(tsv, "NAME\tCPU\nnode-1\t250m");
     }
 }

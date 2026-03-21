@@ -133,23 +133,22 @@ impl StandardTool for K8sGetTool {
     }
 
     fn post_process(result: ToolCallResult, args: &SshK8sGetArgs, output: &str) -> ToolCallResult {
-        let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
-        if lines.len() < 2 {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
-        }
-        // Parse kubectl tabular output (header + rows)
-        let headers: Vec<&str> = lines[0].split_whitespace().collect();
+        };
         let mut tbl = table(format!("Kubernetes {}", args.resource));
-        for h in &headers {
-            tbl = tbl.column(h.to_lowercase(), *h);
+        for h in &parsed.headers {
+            tbl = tbl.column(h, h.to_uppercase());
         }
-        for line in &lines[1..] {
-            let values: Vec<&str> = line.split_whitespace().collect();
-            let mut row = serde_json::Map::new();
-            for (i, h) in headers.iter().enumerate() {
-                row.insert(h.to_lowercase(), json!(values.get(i).unwrap_or(&"")));
+        for row in &parsed.rows {
+            let mut row_map = serde_json::Map::new();
+            for (i, h) in parsed.headers.iter().enumerate() {
+                row_map.insert(
+                    h.clone(),
+                    json!(row.get(i).map_or("", String::as_str)),
+                );
             }
-            tbl = tbl.row(Value::Object(row));
+            tbl = tbl.row(Value::Object(row_map));
         }
         tbl = tbl.action(
             "refresh",
@@ -157,7 +156,7 @@ impl StandardTool for K8sGetTool {
             "ssh_k8s_get",
             Some(json!({"host": args.host, "resource": args.resource})),
         );
-        result.with_app(tbl.build())
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

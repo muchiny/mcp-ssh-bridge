@@ -144,7 +144,8 @@ impl StandardTool for DockerPsTool {
                     );
             }
         }
-        result.with_app(tbl.build())
+        // Replace text with TSV for token efficiency
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

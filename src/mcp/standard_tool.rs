@@ -283,8 +283,8 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
             }
         }
 
-        // Step 17: Build compact JSON (no duplication with structured_content)
-        let mut output_text = response.to_compact_json(&truncated_stdout);
+        // Step 17: Format for LLM (raw text on success, [exit:N] on error)
+        let mut output_text = response.format_for_llm(&truncated_stdout);
         if let Some(info) = save_info {
             output_text = format!("{output_text}\n{info}");
         }

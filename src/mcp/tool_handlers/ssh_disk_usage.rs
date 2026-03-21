@@ -181,7 +181,7 @@ impl ToolHandler for SshDiskUsageHandler {
             truncate_output_with_cache(&response.stdout, max_chars, ctx.output_cache.as_deref())
                 .await;
 
-        let mut output_text = response.to_compact_json(&truncated_stdout);
+        let mut output_text = response.format_for_llm(&truncated_stdout);
         if let Some(ref save_path) = args.save_output {
             match crate::mcp::tool_handlers::utils::save_output_to_file(save_path, &response.output)
                 .await
