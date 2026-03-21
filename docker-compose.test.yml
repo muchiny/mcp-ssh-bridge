@@ -1,0 +1,31 @@
+# Docker Compose for E2E testing with a real SSH server.
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   cargo test --test e2e_docker -- --ignored --test-threads=1
+#   docker compose -f docker-compose.test.yml down -v
+
+services:
+  test-sshd:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: mcp-test-sshd
+    ports:
+      - "2222:2222"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - USER_NAME=testuser
+      - USER_PASSWORD=testpass123
+      - SUDO_ACCESS=true
+      - PASSWORD_ACCESS=true
+    volumes:
+      - ./tests/fixtures/docker-sshd:/custom-cont-init.d:ro
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "ss -tlnp | grep -q 2222"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
