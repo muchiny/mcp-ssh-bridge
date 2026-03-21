@@ -94,26 +94,35 @@ impl StandardTool for ProcessListTool {
         args: &SshProcessListArgs,
         output: &str,
     ) -> ToolCallResult {
-        let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
-        if lines.len() < 2 {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
-        }
+        };
         let mut tbl = table("Processes")
             .column("user", "User")
             .column("pid", "PID")
             .column("cpu", "%CPU")
             .column("mem", "%MEM")
             .column("command", "Command");
-        for line in &lines[1..] {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 11 {
-                let pid = parts[1];
+
+        let user_idx = parsed.headers.iter().position(|h| h == "user");
+        let pid_idx = parsed.headers.iter().position(|h| h == "pid");
+        let cpu_idx = parsed.headers.iter().position(|h| h == "%cpu");
+        let mem_idx = parsed.headers.iter().position(|h| h == "%mem");
+        let cmd_idx = parsed.headers.iter().position(|h| h == "command");
+
+        for row in &parsed.rows {
+            let get = |idx: Option<usize>| {
+                idx.and_then(|i| row.get(i))
+                    .map_or("", String::as_str)
+            };
+            let user = get(user_idx);
+            if !user.is_empty() {
                 tbl = tbl.row(json!({
-                    "user": parts[0],
-                    "pid": pid,
-                    "cpu": parts[2],
-                    "mem": parts[3],
-                    "command": parts[10..].join(" "),
+                    "user": user,
+                    "pid": get(pid_idx),
+                    "cpu": get(cpu_idx),
+                    "mem": get(mem_idx),
+                    "command": get(cmd_idx),
                 }));
             }
         }
@@ -123,7 +132,7 @@ impl StandardTool for ProcessListTool {
             "ssh_process_list",
             Some(json!({"host": args.host})),
         );
-        result.with_app(tbl.build())
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

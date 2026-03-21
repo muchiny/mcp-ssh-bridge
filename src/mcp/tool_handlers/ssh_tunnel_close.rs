@@ -66,14 +66,10 @@ impl ToolHandler for SshTunnelCloseHandler {
 
         let closed = ctx.tunnel_manager.close(&args.tunnel_id).await?;
 
-        let json = serde_json::to_string_pretty(&closed)
+        let json = serde_json::to_string(&closed)
             .unwrap_or_else(|e| format!("Error serializing tunnel info: {e}"));
 
-        Ok(ToolCallResult::text(format!(
-            "Tunnel '{}' closed successfully.\n{json}",
-            args.tunnel_id
-        ))
-        .with_structured(serde_json::to_value(&closed).unwrap_or_default()))
+        Ok(ToolCallResult::text(json))
     }
 }
 

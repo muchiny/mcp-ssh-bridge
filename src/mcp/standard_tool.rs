@@ -263,30 +263,34 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
             );
         }
 
-        // Step 15: Truncate output
+        // Step 15: Truncate stdout for display
         #[allow(clippy::cast_possible_truncation)]
         let max_chars = args
             .max_output()
             .map_or(ctx.config.limits.max_output_chars, |v| v as usize);
-        let output_text =
-            truncate_output_with_cache(&response.output, max_chars, ctx.output_cache.as_deref())
+        let truncated_stdout =
+            truncate_output_with_cache(&response.stdout, max_chars, ctx.output_cache.as_deref())
                 .await;
 
-        // Step 16: Save output + return
-        let mut output_text = output_text;
+        // Step 16: Save full output to file if requested
+        let mut save_info: Option<String> = None;
         if let Some(save_path) = args.save_output() {
             match crate::mcp::tool_handlers::utils::save_output_to_file(save_path, &response.output)
                 .await
             {
-                Ok(msg) => output_text = format!("{output_text}\n\n--- {msg} ---"),
-                Err(msg) => {
-                    output_text = format!("{output_text}\n\n--- save_output error: {msg} ---");
-                }
+                Ok(msg) => save_info = Some(msg),
+                Err(msg) => save_info = Some(format!("save_output error: {msg}")),
             }
         }
 
-        let result = ToolCallResult::text(output_text).with_structured(response.to_structured());
-        Ok(T::post_process(result, &args, &response.output))
+        // Step 17: Format for LLM (raw text on success, [exit:N] on error)
+        let mut output_text = response.format_for_llm(&truncated_stdout);
+        if let Some(info) = save_info {
+            output_text = format!("{output_text}\n{info}");
+        }
+
+        let result = ToolCallResult::text(output_text);
+        Ok(T::post_process(result, &args, &response.stdout))
     }
 }
 

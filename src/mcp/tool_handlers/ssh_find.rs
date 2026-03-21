@@ -220,23 +220,23 @@ impl ToolHandler for SshFindHandler {
         let max_chars = args
             .max_output
             .map_or(ctx.config.limits.max_output_chars, |v| v as usize);
-        let output_text =
-            truncate_output_with_cache(&response.output, max_chars, ctx.output_cache.as_deref())
+        let truncated_stdout =
+            truncate_output_with_cache(&response.stdout, max_chars, ctx.output_cache.as_deref())
                 .await;
 
-        let mut output_text = output_text;
+        let mut output_text = response.format_for_llm(&truncated_stdout);
         if let Some(ref save_path) = args.save_output {
             match crate::mcp::tool_handlers::utils::save_output_to_file(save_path, &response.output)
                 .await
             {
-                Ok(msg) => output_text = format!("{output_text}\n\n--- {msg} ---"),
+                Ok(msg) => output_text = format!("{output_text}\n{msg}"),
                 Err(msg) => {
-                    output_text = format!("{output_text}\n\n--- save_output error: {msg} ---");
+                    output_text = format!("{output_text}\nsave_output error: {msg}");
                 }
             }
         }
 
-        Ok(ToolCallResult::text(output_text).with_structured(response.to_structured()))
+        Ok(ToolCallResult::text(output_text))
     }
 }
 

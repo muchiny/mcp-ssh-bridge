@@ -4,11 +4,14 @@
 //! via `docker stats`. Auto-detects `docker` or `podman` binary.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshDockerStatsArgs {
@@ -88,6 +91,68 @@ impl StandardTool for DockerStatsTool {
             args.no_stream.unwrap_or(true),
             args.format.as_deref(),
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshDockerStatsArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        let mut tbl = table("Docker Stats")
+            .column("name", "Name")
+            .column("cpu", "CPU %")
+            .column("mem_usage", "Mem Usage")
+            .column("mem_pct", "Mem %")
+            .column("net_io", "Net I/O")
+            .column("block_io", "Block I/O")
+            .column("pids", "PIDs");
+
+        let name_idx = parsed.headers.iter().position(|h| h == "name");
+        let cpu_idx = parsed.headers.iter().position(|h| h == "cpu %");
+        let mem_usage_idx = parsed
+            .headers
+            .iter()
+            .position(|h| h.starts_with("mem usage"));
+        let mem_pct_idx = parsed.headers.iter().position(|h| h == "mem %");
+        let net_idx = parsed.headers.iter().position(|h| h == "net i/o");
+        let block_idx = parsed.headers.iter().position(|h| h == "block i/o");
+        let pids_idx = parsed.headers.iter().position(|h| h == "pids");
+
+        for row in &parsed.rows {
+            let get = |idx: Option<usize>| {
+                idx.and_then(|i| row.get(i))
+                    .map_or("", String::as_str)
+            };
+            let name = get(name_idx);
+            if !name.is_empty() {
+                tbl = tbl
+                    .row(json!({
+                        "name": name,
+                        "cpu": get(cpu_idx),
+                        "mem_usage": get(mem_usage_idx),
+                        "mem_pct": get(mem_pct_idx),
+                        "net_io": get(net_idx),
+                        "block_io": get(block_idx),
+                        "pids": get(pids_idx),
+                    }))
+                    .action(
+                        format!("logs-{name}"),
+                        format!("Logs {name}"),
+                        "ssh_docker_logs",
+                        Some(json!({"host": args.host, "container": name})),
+                    )
+                    .action(
+                        format!("inspect-{name}"),
+                        format!("Inspect {name}"),
+                        "ssh_docker_inspect",
+                        Some(json!({"host": args.host, "container": name})),
+                    );
+            }
+        }
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

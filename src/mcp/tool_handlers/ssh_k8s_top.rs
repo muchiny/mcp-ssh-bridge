@@ -4,11 +4,14 @@
 //! Requires metrics-server. Auto-detects `kubectl` binary (k8s, k3s, microk8s).
 
 use serde::Deserialize;
+use serde_json::{Value, json};
 
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::KubernetesCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshK8sTopArgs {
@@ -101,6 +104,45 @@ impl StandardTool for K8sTopTool {
     fn validate(args: &SshK8sTopArgs, _host_config: &HostConfig) -> Result<()> {
         KubernetesCommandBuilder::validate_top_resource(&args.resource_type)?;
         Ok(())
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshK8sTopArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        let title = if args.resource_type == "nodes" {
+            "Node Metrics"
+        } else {
+            "Pod Metrics"
+        };
+        let mut tbl = table(title);
+
+        // Dynamic columns from parsed headers
+        for h in &parsed.headers {
+            tbl = tbl.column(h, h.to_uppercase());
+        }
+        for row in &parsed.rows {
+            let mut row_map = serde_json::Map::new();
+            for (i, h) in parsed.headers.iter().enumerate() {
+                row_map.insert(
+                    h.clone(),
+                    json!(row.get(i).map_or("", String::as_str)),
+                );
+            }
+            tbl = tbl.row(Value::Object(row_map));
+        }
+
+        let mut refresh_args =
+            json!({"host": &args.host, "resource_type": &args.resource_type});
+        if let Some(ns) = &args.namespace {
+            refresh_args["namespace"] = json!(ns);
+        }
+        tbl = tbl.action("refresh", "Refresh", "ssh_k8s_top", Some(refresh_args));
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

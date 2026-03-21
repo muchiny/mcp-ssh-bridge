@@ -88,24 +88,32 @@ impl StandardTool for ServiceListTool {
         args: &SshServiceListArgs,
         output: &str,
     ) -> ToolCallResult {
-        let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
-        if lines.len() < 2 {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
-        }
+        };
         let mut tbl = table("Systemd Services")
             .column("unit", "Unit")
             .column("load", "Load")
             .column("active", "Active")
             .column("sub", "Sub");
-        for line in &lines[1..] {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 4 {
-                let unit = parts[0];
+
+        let unit_idx = parsed.headers.iter().position(|h| h == "unit");
+        let load_idx = parsed.headers.iter().position(|h| h == "load");
+        let active_idx = parsed.headers.iter().position(|h| h == "active");
+        let sub_idx = parsed.headers.iter().position(|h| h == "sub");
+
+        for row in &parsed.rows {
+            let get = |idx: Option<usize>| {
+                idx.and_then(|i| row.get(i))
+                    .map_or("", String::as_str)
+            };
+            let unit = get(unit_idx);
+            if !unit.is_empty() {
                 tbl = tbl.row(json!({
                     "unit": unit,
-                    "load": parts[1],
-                    "active": parts[2],
-                    "sub": parts[3],
+                    "load": get(load_idx),
+                    "active": get(active_idx),
+                    "sub": get(sub_idx),
                 }));
             }
         }
@@ -115,7 +123,7 @@ impl StandardTool for ServiceListTool {
             "ssh_service_list",
             Some(json!({"host": args.host})),
         );
-        result.with_app(tbl.build())
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

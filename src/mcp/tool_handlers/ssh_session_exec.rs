@@ -190,19 +190,18 @@ impl ToolHandler for SshSessionExecHandler {
             "output": output_text,
         });
 
-        let mut json = serde_json::to_string_pretty(&response)
+        let mut json = serde_json::to_string(&response)
             .unwrap_or_else(|e| format!("Error serializing result: {e}"));
 
         // Save full output to local file if requested
         if let Some(ref save_path) = args.save_output {
             match super::utils::save_output_to_file(save_path, &sanitized_output).await {
-                Ok(msg) => json = format!("{json}\n\n--- {msg} ---"),
-                Err(msg) => json = format!("{json}\n\n--- save_output error: {msg} ---"),
+                Ok(msg) => json = format!("{json}\n{msg}"),
+                Err(msg) => json = format!("{json}\nsave_output error: {msg}"),
             }
         }
 
-        Ok(ToolCallResult::text(json)
-            .with_structured(serde_json::to_value(&response).unwrap_or_default()))
+        Ok(ToolCallResult::text(json))
     }
 }
 
