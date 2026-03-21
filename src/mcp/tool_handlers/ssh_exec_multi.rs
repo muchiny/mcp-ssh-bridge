@@ -251,21 +251,20 @@ impl ToolHandler for SshExecMultiHandler {
             results,
         };
 
-        let mut json_output = serde_json::to_string_pretty(&multi_result)
+        let mut json_output = serde_json::to_string(&multi_result)
             .unwrap_or_else(|e| format!("Error serializing results: {e}"));
 
         // Save full output to local file if requested
         if let Some(ref save_path) = args.save_output {
             match super::utils::save_output_to_file(save_path, &json_output).await {
-                Ok(msg) => json_output = format!("{json_output}\n\n--- {msg} ---"),
+                Ok(msg) => json_output = format!("{json_output}\n{msg}"),
                 Err(msg) => {
-                    json_output = format!("{json_output}\n\n--- save_output error: {msg} ---");
+                    json_output = format!("{json_output}\nsave_output error: {msg}");
                 }
             }
         }
 
-        Ok(ToolCallResult::text(json_output)
-            .with_structured(serde_json::to_value(&multi_result).unwrap_or_default()))
+        Ok(ToolCallResult::text(json_output))
     }
 }
 

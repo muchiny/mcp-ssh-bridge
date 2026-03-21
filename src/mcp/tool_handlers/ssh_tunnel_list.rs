@@ -46,11 +46,10 @@ impl ToolHandler for SshTunnelListHandler {
             return Ok(ToolCallResult::text("No active tunnels."));
         }
 
-        let json = serde_json::to_string_pretty(&tunnels)
+        let json = serde_json::to_string(&tunnels)
             .unwrap_or_else(|e| format!("Error serializing tunnels: {e}"));
 
-        Ok(ToolCallResult::text(json)
-            .with_structured(serde_json::to_value(&tunnels).unwrap_or_default()))
+        Ok(ToolCallResult::text(json))
     }
 }
 

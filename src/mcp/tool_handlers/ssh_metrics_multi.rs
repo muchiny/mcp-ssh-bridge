@@ -290,7 +290,7 @@ impl ToolHandler for SshMetricsMultiHandler {
             results: sorted_results,
         };
 
-        let json_output = serde_json::to_string_pretty(&multi_result)
+        let json_output = serde_json::to_string(&multi_result)
             .unwrap_or_else(|e| format!("Error serializing results: {e}"));
         let json_output = ctx.sanitizer.sanitize(&json_output).into_owned();
 
@@ -325,9 +325,7 @@ impl ToolHandler for SshMetricsMultiHandler {
         }
         let app = dash.build();
 
-        Ok(ToolCallResult::text(json_output)
-            .with_structured(serde_json::to_value(&multi_result).unwrap_or_default())
-            .with_app(app))
+        Ok(ToolCallResult::text(json_output).with_app(app))
     }
 }
 

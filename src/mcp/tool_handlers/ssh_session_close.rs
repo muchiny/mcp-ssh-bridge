@@ -65,11 +65,9 @@ impl ToolHandler for SshSessionCloseHandler {
 
         ctx.session_manager.close(&args.session_id).await?;
 
-        Ok(ToolCallResult::text(format!(
-            "Session '{}' closed successfully.",
-            args.session_id
+        Ok(ToolCallResult::text(
+            serde_json::json!({"status": "closed", "session_id": args.session_id}).to_string(),
         ))
-        .with_structured(serde_json::json!({"status": "closed", "session_id": args.session_id})))
     }
 }
 

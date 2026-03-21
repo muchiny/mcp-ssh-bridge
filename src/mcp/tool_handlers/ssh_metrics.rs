@@ -207,7 +207,7 @@ impl ToolHandler for SshMetricsHandler {
             .process_success(&args.host, &command, &output.into());
 
         // Serialize to JSON and sanitize output
-        let json_output = serde_json::to_string_pretty(&system_metrics)
+        let json_output = serde_json::to_string(&system_metrics)
             .unwrap_or_else(|e| format!("Error serializing metrics: {e}"));
         let json_output = ctx.sanitizer.sanitize(&json_output).into_owned();
 
@@ -242,9 +242,7 @@ impl ToolHandler for SshMetricsHandler {
         dash = dash.refresh_action("ssh_metrics", serde_json::json!({"host": args.host}));
         let app = dash.build();
 
-        let result = ToolCallResult::text(json_output)
-            .with_structured(serde_json::to_value(&system_metrics).unwrap_or_default())
-            .with_app(app);
+        let result = ToolCallResult::text(json_output).with_app(app);
         Ok(result)
     }
 }

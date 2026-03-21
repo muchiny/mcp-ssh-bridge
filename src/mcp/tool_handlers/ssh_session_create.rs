@@ -108,11 +108,10 @@ impl ToolHandler for SshSessionCreateHandler {
             .create(&args.host, host_config, &limits, jump_host)
             .await?;
 
-        let json = serde_json::to_string_pretty(&session_info)
+        let json = serde_json::to_string(&session_info)
             .unwrap_or_else(|e| format!("Error serializing session info: {e}"));
 
-        Ok(ToolCallResult::text(json)
-            .with_structured(serde_json::to_value(&session_info).unwrap_or_default()))
+        Ok(ToolCallResult::text(json))
     }
 }
 
