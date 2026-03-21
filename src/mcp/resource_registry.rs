@@ -94,8 +94,8 @@ impl ResourceRegistry {
 #[must_use]
 pub fn create_default_resource_registry() -> ResourceRegistry {
     use super::resources::{
-        FileResourceHandler, HistoryResourceHandler, LogResourceHandler, MetricsResourceHandler,
-        ServicesResourceHandler,
+        FileResourceHandler, HealthResourceHandler, HistoryResourceHandler, LogResourceHandler,
+        MetricsResourceHandler, ServicesResourceHandler,
     };
 
     let mut registry = ResourceRegistry::new();
@@ -105,6 +105,7 @@ pub fn create_default_resource_registry() -> ResourceRegistry {
     registry.register(Arc::new(FileResourceHandler));
     registry.register(Arc::new(ServicesResourceHandler));
     registry.register(Arc::new(HistoryResourceHandler));
+    registry.register(Arc::new(HealthResourceHandler));
 
     registry
 }
@@ -133,6 +134,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let validator = Arc::new(CommandValidator::new(&SecurityConfig::default()));
@@ -180,7 +182,7 @@ mod tests {
     #[test]
     fn test_default_resource_registry_has_all_handlers() {
         let registry = create_default_resource_registry();
-        assert_eq!(registry.len(), 5);
+        assert_eq!(registry.len(), 6);
         assert!(!registry.is_empty());
     }
 
@@ -191,9 +193,11 @@ mod tests {
 
         let resources = registry.list(&ctx).await.unwrap();
         // With no hosts configured, only host-independent resources are listed.
-        // history://recent is always present regardless of host config.
-        assert_eq!(resources.len(), 1);
-        assert_eq!(resources[0].uri, "history://recent");
+        // history://recent and health://server are always present regardless of host config.
+        assert_eq!(resources.len(), 2);
+        let uris: Vec<&str> = resources.iter().map(|r| r.uri.as_str()).collect();
+        assert!(uris.contains(&"history://recent"));
+        assert!(uris.contains(&"health://server"));
     }
 
     #[tokio::test]

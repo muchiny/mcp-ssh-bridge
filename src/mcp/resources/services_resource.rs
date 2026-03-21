@@ -137,8 +137,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -151,6 +153,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let validator = Arc::new(CommandValidator::new(&SecurityConfig::default()));

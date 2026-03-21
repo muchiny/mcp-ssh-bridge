@@ -72,6 +72,8 @@ pub struct McpServer {
     completion_provider: DefaultCompletionProvider,
     /// Pending server-to-client requests (elicitation, sampling).
     pending_requests: Arc<PendingRequests>,
+    /// Active resource subscriptions (uri -> list of subscription IDs).
+    resource_subscriptions: Arc<RwLock<HashMap<String, Vec<String>>>>,
     /// Client-declared roots (MCP Roots capability).
     roots: Arc<RwLock<Vec<RootEntry>>>,
     /// Whether the client supports `roots/list`.
@@ -177,6 +179,7 @@ impl McpServer {
             mcp_logger: Arc::new(RwLock::new(None)),
             completion_provider: DefaultCompletionProvider,
             pending_requests: Arc::new(PendingRequests::new()),
+            resource_subscriptions: Arc::new(RwLock::new(HashMap::new())),
             roots: Arc::new(RwLock::new(Vec::new())),
             client_supports_roots: AtomicBool::new(false),
         };
@@ -609,7 +612,7 @@ impl McpServer {
                 }
                 JsonRpcResponse::success(id, json!({}))
             }
-            "tools/list" => self.handle_tools_list(id),
+            "tools/list" => self.handle_tools_list(id, request.params.as_ref()),
             "tools/call" => self.handle_tools_call(id, request.params).await,
             "prompts/list" => self.handle_prompts_list(id),
             "prompts/get" => self.handle_prompts_get(id, request.params).await,
@@ -621,6 +624,13 @@ impl McpServer {
             "tasks/cancel" => self.handle_tasks_cancel(id, request.params).await,
             "completions/complete" => self.handle_completions_complete(id, request.params),
             "logging/setLevel" => self.handle_logging_set_level(id, request.params),
+            "resources/templates/list" => self.handle_resource_templates_list(id),
+            "resources/subscribe" => self.handle_resource_subscribe(id, request.params).await,
+            "resources/unsubscribe" => self.handle_resource_unsubscribe(id, request.params).await,
+            "notifications/cancelled" => {
+                Self::handle_cancellation_notification(request.params.as_ref());
+                JsonRpcResponse::success(id, json!({}))
+            }
             "ping" => JsonRpcResponse::success(id, json!({})),
             _ => {
                 error!(method = %request.method, "Unknown method");
@@ -744,9 +754,73 @@ impl McpServer {
         JsonRpcResponse::success_or_serialize_error(id, &result)
     }
 
-    fn handle_tools_list(&self, id: Option<Value>) -> JsonRpcResponse {
+    fn handle_tools_list(&self, id: Option<Value>, params: Option<&Value>) -> JsonRpcResponse {
+        use super::registry::tool_group;
+
+        let page_size = 50;
+
+        // Filtering by annotation hints and tool group
+        let filter_read_only = params
+            .and_then(|p| p.get("readOnlyHint"))
+            .and_then(Value::as_bool);
+        let filter_destructive = params
+            .and_then(|p| p.get("destructiveHint"))
+            .and_then(Value::as_bool);
+        let filter_group = params
+            .and_then(|p| p.get("group"))
+            .and_then(|v| v.as_str());
+
+        let mut all_tools = self.registry.list_tools();
+
+        if let Some(group_name) = filter_group {
+            all_tools.retain(|t| tool_group(&t.name) == group_name);
+        }
+        if let Some(read_only) = filter_read_only {
+            all_tools.retain(|t| {
+                t.annotations
+                    .as_ref()
+                    .and_then(|a| a.read_only_hint)
+                    .unwrap_or(false)
+                    == read_only
+            });
+        }
+        if let Some(destructive) = filter_destructive {
+            all_tools.retain(|t| {
+                t.annotations
+                    .as_ref()
+                    .and_then(|a| a.destructive_hint)
+                    .unwrap_or(false)
+                    == destructive
+            });
+        }
+
+        // Cursor-based pagination (only when cursor is provided)
+        let cursor = params
+            .and_then(|p| p.get("cursor"))
+            .and_then(|c| c.as_str());
+
+        let (page, next_cursor) = if let Some(cursor_val) = cursor {
+            let start = cursor_val.parse::<usize>().unwrap_or(0);
+            let end = (start + page_size).min(all_tools.len());
+            let page = if start < all_tools.len() {
+                all_tools[start..end].to_vec()
+            } else {
+                Vec::new()
+            };
+            let next = if end < all_tools.len() {
+                Some(end.to_string())
+            } else {
+                None
+            };
+            (page, next)
+        } else {
+            // No cursor: return all tools (no pagination)
+            (all_tools, None)
+        };
+
         let result = ToolsListResult {
-            tools: self.registry.list_tools(),
+            tools: page,
+            next_cursor,
         };
 
         JsonRpcResponse::success_or_serialize_error(id, &result)
@@ -1057,6 +1131,82 @@ impl McpServer {
     }
 
     // =========================================================================
+    // Resource template & subscription handlers
+    // =========================================================================
+
+    fn handle_resource_templates_list(&self, id: Option<Value>) -> JsonRpcResponse {
+        use super::protocol::ResourceTemplate;
+
+        let Ok(config) = self.config.try_read() else {
+            return JsonRpcResponse::success(id, json!({ "resourceTemplates": [] }));
+        };
+        let templates: Vec<ResourceTemplate> = config
+            .hosts
+            .keys()
+            .map(|host| ResourceTemplate {
+                uri_template: format!("ssh://{host}/{{path}}"),
+                name: format!("{host} file access"),
+                description: Some(format!("Access files on {host} via SSH")),
+                mime_type: None,
+            })
+            .collect();
+
+        JsonRpcResponse::success_or_serialize_error(id, &json!({ "resourceTemplates": templates }))
+    }
+
+    async fn handle_resource_subscribe(
+        &self,
+        id: Option<Value>,
+        params: Option<Value>,
+    ) -> JsonRpcResponse {
+        let uri = params
+            .as_ref()
+            .and_then(|p| p.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if uri.is_empty() {
+            return JsonRpcResponse::error(
+                id,
+                JsonRpcError::invalid_params("uri is required"),
+            );
+        }
+        let sub_id = uuid::Uuid::new_v4().to_string();
+        {
+            let mut subs = self.resource_subscriptions.write().await;
+            subs.entry(uri.to_string()).or_default().push(sub_id.clone());
+        }
+        JsonRpcResponse::success(id, json!({"subscriptionId": sub_id}))
+    }
+
+    async fn handle_resource_unsubscribe(
+        &self,
+        id: Option<Value>,
+        params: Option<Value>,
+    ) -> JsonRpcResponse {
+        let uri = params
+            .as_ref()
+            .and_then(|p| p.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !uri.is_empty() {
+            let mut subs = self.resource_subscriptions.write().await;
+            subs.remove(uri);
+        }
+        JsonRpcResponse::success(id, json!({}))
+    }
+
+    // =========================================================================
+    // Cancellation notification handler
+    // =========================================================================
+
+    fn handle_cancellation_notification(params: Option<&Value>) {
+        if let Some(request_id) = params.and_then(|p| p.get("requestId")) {
+            info!(request_id = %request_id, "Received cancellation notification");
+            // Future: cancel running task by request_id
+        }
+    }
+
+    // =========================================================================
     // Task handlers (MCP 2025-11-25+)
     // =========================================================================
 
@@ -1312,6 +1462,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
         let (server, _audit_task) = McpServer::new(config);
         server
@@ -1449,7 +1600,7 @@ mod tests {
     fn test_handle_tools_list_returns_all_registered_tools() {
         let server = create_test_server();
 
-        let response = server.handle_tools_list(Some(json!(1)));
+        let response = server.handle_tools_list(Some(json!(1)), None);
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
@@ -1469,7 +1620,7 @@ mod tests {
     fn test_handle_tools_list_tools_have_required_fields() {
         let server = create_test_server();
 
-        let response = server.handle_tools_list(Some(json!(1)));
+        let response = server.handle_tools_list(Some(json!(1)), None);
 
         let result = response.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
@@ -1769,7 +1920,7 @@ mod tests {
     #[test]
     fn test_tools_list_with_null_id() {
         let server = create_test_server();
-        let response = server.handle_tools_list(None);
+        let response = server.handle_tools_list(None, None);
 
         assert!(response.error.is_none());
         assert!(response.id.is_none());
@@ -1779,8 +1930,8 @@ mod tests {
     fn test_tools_list_multiple_times() {
         let server = create_test_server();
 
-        let response1 = server.handle_tools_list(Some(json!(1)));
-        let response2 = server.handle_tools_list(Some(json!(2)));
+        let response1 = server.handle_tools_list(Some(json!(1)), None);
+        let response2 = server.handle_tools_list(Some(json!(2)), None);
 
         assert!(response1.error.is_none());
         assert!(response2.error.is_none());
@@ -1985,6 +2136,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let (server, audit_task) = McpServer::new(config);
@@ -2070,7 +2222,7 @@ mod tests {
     #[test]
     fn test_tools_list_includes_execution_field() {
         let server = create_test_server();
-        let response = server.handle_tools_list(Some(json!(1)));
+        let response = server.handle_tools_list(Some(json!(1)), None);
 
         let result = response.result.unwrap();
         let tools = result["tools"].as_array().unwrap();

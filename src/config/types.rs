@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use zeroize::Zeroizing;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default)]
     pub hosts: HashMap<String, HostConfig>,
@@ -29,6 +29,10 @@ pub struct Config {
     /// HTTP transport configuration (used with `--http` flag).
     #[serde(default)]
     pub http: HttpTransportConfig,
+
+    /// Role-based access control configuration
+    #[serde(default)]
+    pub rbac: crate::security::rbac::RbacConfig,
 }
 
 /// HTTP transport configuration for the YAML config.
@@ -149,6 +153,10 @@ pub struct HostConfig {
     #[serde(default)]
     pub sudo_password: Option<String>,
 
+    /// Tags for grouping hosts (e.g., "production", "staging", "database")
+    #[serde(default)]
+    pub tags: Vec<String>,
+
     /// Remote operating system type (default: linux).
     ///
     /// Affects shell escaping, session initialization, and available tool groups.
@@ -161,6 +169,26 @@ pub struct HostConfig {
     /// Override to `powershell` if the Windows host has `PowerShell` as default shell.
     #[serde(default)]
     pub shell: Option<ShellType>,
+
+    /// Per-host retry configuration override
+    #[serde(default)]
+    pub retry: Option<HostRetryConfig>,
+}
+
+/// Per-host retry configuration override
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct HostRetryConfig {
+    /// Maximum retry attempts (overrides global `limits.retry_attempts`)
+    #[serde(default)]
+    pub max_attempts: Option<u32>,
+
+    /// Initial retry delay in milliseconds (overrides global `limits.retry_initial_delay_ms`)
+    #[serde(default)]
+    pub initial_delay_ms: Option<u64>,
+
+    /// Maximum delay cap in milliseconds (default: 30000)
+    #[serde(default)]
+    pub max_delay_ms: Option<u64>,
 }
 
 impl HostConfig {
@@ -173,6 +201,12 @@ impl HostConfig {
             OsType::Linux => ShellType::Posix,
             OsType::Windows => ShellType::Cmd,
         })
+    }
+
+    /// Check if this host has a specific tag
+    #[must_use]
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.tags.iter().any(|t| t.eq_ignore_ascii_case(tag))
     }
 }
 
@@ -1577,5 +1611,50 @@ mod tests {
             80_000
         );
         assert_eq!(config.effective_max_output_chars(Some("cursor")), 20_000);
+    }
+
+    #[test]
+    fn test_host_config_tags() {
+        let json = r#"{
+            "hostname": "example.com",
+            "user": "admin",
+            "auth": {"type": "agent"},
+            "tags": ["production", "web"]
+        }"#;
+        let host: HostConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(host.tags.len(), 2);
+        assert!(host.has_tag("production"));
+        assert!(host.has_tag("Production")); // case-insensitive
+        assert!(!host.has_tag("staging"));
+    }
+
+    #[test]
+    fn test_host_config_empty_tags_default() {
+        let json = r#"{
+            "hostname": "example.com",
+            "user": "admin",
+            "auth": {"type": "agent"}
+        }"#;
+        let host: HostConfig = serde_json::from_str(json).unwrap();
+        assert!(host.tags.is_empty());
+    }
+
+    #[test]
+    fn test_host_retry_config() {
+        let json = r#"{
+            "hostname": "example.com",
+            "user": "admin",
+            "auth": {"type": "agent"},
+            "retry": {
+                "max_attempts": 5,
+                "initial_delay_ms": 200,
+                "max_delay_ms": 60000
+            }
+        }"#;
+        let host: HostConfig = serde_json::from_str(json).unwrap();
+        let retry = host.retry.unwrap();
+        assert_eq!(retry.max_attempts, Some(5));
+        assert_eq!(retry.initial_delay_ms, Some(200));
+        assert_eq!(retry.max_delay_ms, Some(60000));
     }
 }

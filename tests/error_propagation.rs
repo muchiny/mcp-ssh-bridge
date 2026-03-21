@@ -37,8 +37,10 @@ fn create_config_with_host() -> Config {
             proxy_jump: None,
             socks_proxy: None,
             sudo_password: None,
+            tags: Vec::new(),
             os_type: OsType::Linux,
             shell: None,
+            retry: None,
         },
     );
     Config {
@@ -50,6 +52,7 @@ fn create_config_with_host() -> Config {
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
+        rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
     }
 }
 
@@ -325,6 +328,7 @@ async fn test_ssh_status_with_no_hosts_returns_content() {
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
+        rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
     };
     let registry = create_filtered_registry(&config.tool_groups);
     let ctx = create_tool_context(&config);

@@ -246,6 +246,9 @@ pub struct Tool {
     /// Execution hints for task support (MCP 2025-11-25+).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution: Option<ToolExecution>,
+    /// Structured output schema for the tool's return value (MCP 2025-06-18+).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<Value>,
 }
 
 /// Tool execution hints (MCP 2025-11-25+).
@@ -258,8 +261,11 @@ pub struct ToolExecution {
 
 /// MCP Tools List Response
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolsListResult {
     pub tools: Vec<Tool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
 }
 
 /// MCP Tool Call Parameters
@@ -364,6 +370,18 @@ pub struct ResourcesReadResult {
 #[serde(rename_all = "camelCase")]
 pub struct ResourcesCapability {
     pub list_changed: bool,
+}
+
+/// MCP Resource Template (returned by resources/templates/list)
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceTemplate {
+    pub uri_template: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
 }
 
 // ============================================================================
@@ -1024,6 +1042,7 @@ mod tests {
             input_schema: json!({"type": "object"}),
             annotations: None,
             execution: None,
+            output_schema: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
         assert!(json.contains("inputSchema"));
@@ -1125,6 +1144,7 @@ mod tests {
             input_schema: json!({"type": "object"}),
             annotations: Some(ToolAnnotations::read_only("List Docker Containers")),
             execution: None,
+            output_schema: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
         assert!(json.contains("\"annotations\""));
@@ -1141,6 +1161,7 @@ mod tests {
             input_schema: json!({"type": "object"}),
             annotations: None,
             execution: None,
+            output_schema: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
         assert!(!json.contains("annotations"));
@@ -1496,6 +1517,7 @@ mod tests {
             execution: Some(ToolExecution {
                 task_support: "optional".to_string(),
             }),
+            output_schema: None,
         };
         let json = serde_json::to_value(&tool).unwrap();
         assert_eq!(json["execution"]["taskSupport"], "optional");

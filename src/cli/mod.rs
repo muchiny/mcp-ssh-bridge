@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-pub use runner::{run_download, run_exec, run_history, run_status, run_upload};
+pub use runner::{run_config_diff, run_download, run_exec, run_history, run_list_tools, run_status, run_upload, run_validate};
 
 /// MCP SSH Bridge - Secure SSH access to air-gapped environments
 #[derive(Parser)]
@@ -41,6 +41,10 @@ pub struct Cli {
     /// Path to configuration file
     #[arg(short, long, global = true)]
     pub config: Option<PathBuf>,
+
+    /// Dry-run mode: show commands without executing
+    #[arg(long, global = true)]
+    pub dry_run: bool,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -122,6 +126,30 @@ pub enum Commands {
         #[arg(long, short)]
         progress: bool,
     },
+
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
+
+    /// List all available MCP tools
+    ListTools {
+        /// Filter by tool group name
+        #[arg(short, long)]
+        group: Option<String>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Validate configuration file
+    Validate,
+
+    /// Show differences between current and default configuration
+    ConfigDiff,
 
     /// Download a file from remote host via SFTP
     Download {

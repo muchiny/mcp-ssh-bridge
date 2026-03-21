@@ -129,8 +129,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -166,8 +168,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -183,8 +187,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -202,8 +208,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 

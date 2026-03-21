@@ -35,8 +35,10 @@ fn create_test_config() -> Config {
             proxy_jump: None,
             socks_proxy: None,
             sudo_password: None,
+            tags: Vec::new(),
             os_type: OsType::Linux,
             shell: None,
+            retry: None,
         },
     );
 
@@ -52,8 +54,10 @@ fn create_test_config() -> Config {
             proxy_jump: None,
             socks_proxy: None,
             sudo_password: None,
+            tags: Vec::new(),
             os_type: OsType::Linux,
             shell: None,
+            retry: None,
         },
     );
 
@@ -79,6 +83,7 @@ fn create_test_config() -> Config {
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
+        rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
     }
 }
 
@@ -458,8 +463,10 @@ fn test_proxy_jump_config() {
             proxy_jump: None,
             socks_proxy: None,
             sudo_password: None,
+            tags: Vec::new(),
             os_type: OsType::Linux,
             shell: None,
+            retry: None,
         },
     );
 
@@ -479,8 +486,10 @@ fn test_proxy_jump_config() {
             proxy_jump: Some("bastion".to_string()),
             socks_proxy: None,
             sudo_password: None,
+            tags: Vec::new(),
             os_type: OsType::Linux,
             shell: None,
+            retry: None,
         },
     );
 
@@ -493,6 +502,7 @@ fn test_proxy_jump_config() {
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
+        rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
     };
 
     // Verify bastion has no proxy_jump
@@ -521,8 +531,10 @@ fn test_proxy_jump_resolution() {
             proxy_jump: None,
             socks_proxy: None,
             sudo_password: None,
+            tags: Vec::new(),
             os_type: OsType::Linux,
             shell: None,
+            retry: None,
         },
     );
 
@@ -538,8 +550,10 @@ fn test_proxy_jump_resolution() {
             proxy_jump: Some("bastion".to_string()),
             socks_proxy: None,
             sudo_password: None,
+            tags: Vec::new(),
             os_type: OsType::Linux,
             shell: None,
+            retry: None,
         },
     );
 
@@ -552,6 +566,7 @@ fn test_proxy_jump_resolution() {
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
+        rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
     };
 
     // Simulate resolving jump host
@@ -576,8 +591,10 @@ fn test_proxy_jump_chain_detection() {
         proxy_jump: Some("bastion".to_string()),
         socks_proxy: None,
         sudo_password: None,
+        tags: Vec::new(),
         os_type: OsType::Linux,
         shell: None,
+        retry: None,
     };
 
     let host_without_jump = HostConfig {
@@ -590,8 +607,10 @@ fn test_proxy_jump_chain_detection() {
         proxy_jump: None,
         socks_proxy: None,
         sudo_password: None,
+        tags: Vec::new(),
         os_type: OsType::Linux,
         shell: None,
+        retry: None,
     };
 
     assert!(host_with_jump.proxy_jump.is_some());

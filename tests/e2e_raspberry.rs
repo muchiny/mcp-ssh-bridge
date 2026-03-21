@@ -109,8 +109,10 @@ fn to_host_config(config: &SshTestConfig) -> HostConfig {
         proxy_jump: None,
         socks_proxy: None,
         sudo_password: None,
+        tags: Vec::new(),
         os_type: OsType::Linux,
         shell: None,
+        retry: None,
     }
 }
 
@@ -146,6 +148,7 @@ fn build_ctx(host_config: HostConfig) -> ToolContext {
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
+        rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
     };
 
     let validator = Arc::new(CommandValidator::new(&config.security));
@@ -991,6 +994,7 @@ async fn test_security_command_denied() {
         tool_groups: ToolGroupsConfig::default(),
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
+        rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
     };
 
     let validator = Arc::new(CommandValidator::new(&security));

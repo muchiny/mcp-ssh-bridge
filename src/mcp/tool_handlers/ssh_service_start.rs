@@ -210,8 +210,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Windows,
                 shell: None,
+                retry: None,
             },
         );
 
