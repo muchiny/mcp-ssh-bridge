@@ -8,6 +8,7 @@ pub mod ansible;
 pub mod certificate;
 pub mod cron;
 pub mod database;
+pub mod diagnostics;
 pub mod docker;
 pub mod esxi;
 pub mod execute_command;
