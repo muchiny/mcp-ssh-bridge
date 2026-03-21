@@ -7,7 +7,8 @@ use tracing_subscriber::EnvFilter;
 
 use mcp_ssh_bridge::McpServer;
 use mcp_ssh_bridge::cli::{
-    Cli, Commands, run_download, run_exec, run_history, run_status, run_upload,
+    Cli, Commands, run_config_diff, run_download, run_exec, run_history, run_list_tools,
+    run_status, run_upload, run_validate,
 };
 use mcp_ssh_bridge::config::{default_config_path, load_config};
 
@@ -96,6 +97,14 @@ async fn main() -> Result<()> {
             timeout,
             working_dir,
         }) => {
+            if cli.dry_run {
+                println!("[dry-run] Would execute on host '{host}': {command}");
+                if let Some(ref dir) = working_dir {
+                    println!("[dry-run] Working directory: {dir}");
+                }
+                println!("[dry-run] Timeout: {timeout}s");
+                return Ok(());
+            }
             run_exec(config, &host, &command, timeout, working_dir.as_deref()).await?;
         }
         Some(Commands::Status) => {
@@ -103,6 +112,24 @@ async fn main() -> Result<()> {
         }
         Some(Commands::History { limit, host }) => {
             run_history(config, limit, host.as_deref()).await?;
+        }
+        Some(Commands::Completions { shell }) => {
+            use clap::CommandFactory;
+            clap_complete::generate(
+                shell,
+                &mut Cli::command(),
+                "mcp-ssh-bridge",
+                &mut std::io::stdout(),
+            );
+        }
+        Some(Commands::ListTools { group, json }) => {
+            run_list_tools(config, group.as_deref(), json).await?;
+        }
+        Some(Commands::Validate) => {
+            run_validate(config).await?;
+        }
+        Some(Commands::ConfigDiff) => {
+            run_config_diff(config).await?;
         }
         Some(Commands::Upload {
             host,

@@ -494,8 +494,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
         hosts.insert(
@@ -513,8 +515,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
         hosts.insert(
@@ -532,8 +536,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
         crate::ports::mock::create_test_context_with_hosts(hosts)

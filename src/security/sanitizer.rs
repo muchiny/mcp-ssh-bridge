@@ -42,6 +42,8 @@ pub struct Sanitizer {
     literal_detector: AhoCorasick,
     /// Whether sanitization is enabled
     enabled: bool,
+    /// Regex for stripping ANSI escape codes from SSH output
+    ansi_regex: Option<Regex>,
 }
 
 struct SanitizePattern {
@@ -143,6 +145,7 @@ impl Sanitizer {
             detection_set: RegexSet::empty(),
             literal_detector: AhoCorasick::builder().build(&empty).unwrap(),
             enabled: false,
+            ansi_regex: None,
         }
     }
 
@@ -228,11 +231,18 @@ impl Sanitizer {
             "Sanitizer initialized"
         );
 
+        let ansi_regex = if enabled {
+            Some(Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\[[\d;]*m").unwrap())
+        } else {
+            None
+        };
+
         Self {
             patterns,
             detection_set,
             literal_detector,
             enabled,
+            ansi_regex,
         }
     }
 
@@ -809,28 +819,39 @@ impl Sanitizer {
             return Cow::Borrowed(text);
         }
 
+        // Strip ANSI escape codes from SSH output
+        let text = if let Some(ref ansi_re) = self.ansi_regex {
+            match ansi_re.replace_all(text, "") {
+                Cow::Borrowed(_) => Cow::Borrowed(text),
+                Cow::Owned(stripped) => Cow::Owned(stripped),
+            }
+        } else {
+            Cow::Borrowed(text)
+        };
+        let text_ref: &str = &text;
+
         // Tier 1: Fast keyword detection with Aho-Corasick
         // If no keywords found, very likely no secrets present
-        if !self.literal_detector.is_match(text) {
+        if !self.literal_detector.is_match(text_ref) {
             debug!(
-                len = text.len(),
+                len = text_ref.len(),
                 "No secret keywords detected, skipping regex"
             );
-            return Cow::Borrowed(text);
+            return text;
         }
 
         // Tier 2: Check if any regex pattern matches
-        if !self.detection_set.is_match(text) {
-            debug!(len = text.len(), "Keywords found but no regex matches");
-            return Cow::Borrowed(text);
+        if !self.detection_set.is_match(text_ref) {
+            debug!(len = text_ref.len(), "Keywords found but no regex matches");
+            return text;
         }
 
         // Tier 3: Apply sanitization
-        if text.len() >= PARALLEL_THRESHOLD {
-            debug!(len = text.len(), "Using parallel sanitization");
-            Cow::Owned(self.sanitize_parallel(text))
+        if text_ref.len() >= PARALLEL_THRESHOLD {
+            debug!(len = text_ref.len(), "Using parallel sanitization");
+            Cow::Owned(self.sanitize_parallel(text_ref))
         } else {
-            Cow::Owned(self.sanitize_sequential(text))
+            Cow::Owned(self.sanitize_sequential(text_ref))
         }
     }
 
@@ -1725,5 +1746,21 @@ users:
         assert!(!output.contains("longlinetest"));
         assert!(!output.contains("sk-endofline"));
         assert!(output.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_strip_ansi_codes() {
+        let sanitizer = Sanitizer::with_defaults();
+        let input = "\x1b[32mSuccess\x1b[0m: operation completed";
+        let output = sanitizer.sanitize(input);
+        assert_eq!(output.as_ref(), "Success: operation completed");
+    }
+
+    #[test]
+    fn test_strip_ansi_complex_codes() {
+        let sanitizer = Sanitizer::with_defaults();
+        let input = "\x1b[1;31mERROR\x1b[0m \x1b[33mWarning\x1b[0m normal text";
+        let output = sanitizer.sanitize(input);
+        assert_eq!(output.as_ref(), "ERROR Warning normal text");
     }
 }

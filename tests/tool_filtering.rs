@@ -265,6 +265,11 @@ fn test_every_tool_maps_to_a_known_group() {
         "network_equipment",
         "podman",
         "ldap",
+        "postgresql",
+        "mysql",
+        "apache",
+        "letsencrypt",
+        "mongodb",
     ];
 
     for tool in &tools {

@@ -24,6 +24,192 @@ use crate::ssh::{
     is_retryable_error, with_retry_if,
 };
 
+/// List all available MCP tools
+pub async fn run_list_tools(
+    config: Arc<Config>,
+    group: Option<&str>,
+    json_output: bool,
+) -> Result<()> {
+    use crate::mcp::registry::{create_filtered_registry, tool_group};
+
+    let registry = create_filtered_registry(&config.tool_groups);
+    let mut tools = registry.list_tools();
+    tools.sort_by(|a, b| a.name.cmp(&b.name));
+
+    // Filter by group if specified
+    if let Some(group_filter) = group {
+        tools.retain(|t| tool_group(&t.name) == group_filter);
+    }
+
+    if json_output {
+        let json = serde_json::to_string_pretty(&tools)
+            .map_err(|e| BridgeError::Config(e.to_string()))?;
+        println!("{json}");
+    } else {
+        println!("{:<40} {:<20} DESCRIPTION", "TOOL", "GROUP");
+        let separator = "-".repeat(100);
+        println!("{separator}");
+        for tool in &tools {
+            let group = tool_group(&tool.name);
+            // Truncate description to 60 chars
+            let desc = if tool.description.len() > 60 {
+                format!("{}...", &tool.description[..57])
+            } else {
+                tool.description.clone()
+            };
+            println!("{:<40} {:<20} {}", tool.name, group, desc);
+        }
+        println!("\nTotal: {} tools", tools.len());
+    }
+
+    Ok(())
+}
+
+/// Validate the configuration file and report issues
+pub async fn run_validate(config: Arc<Config>) -> Result<()> {
+    use crate::mcp::registry::create_filtered_registry;
+    use crate::security::CommandValidator;
+
+    let mut issues: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+
+    // Check hosts
+    if config.hosts.is_empty() {
+        warnings.push("No hosts configured. Use ssh_config auto-discovery or add hosts to config.yaml.".to_string());
+    }
+
+    for (name, host) in &config.hosts {
+        if host.hostname.is_empty() {
+            issues.push(format!("Host '{name}': hostname is empty"));
+        }
+        if host.user.is_empty() {
+            issues.push(format!("Host '{name}': user is empty"));
+        }
+        if let crate::config::AuthConfig::Key { ref path, .. } = host.auth {
+            let expanded = shellexpand::tilde(path);
+            if !std::path::Path::new(expanded.as_ref()).exists() {
+                warnings.push(format!("Host '{name}': key file '{path}' not found"));
+            }
+        }
+    }
+
+    // Check security config
+    let validator = CommandValidator::new(&config.security);
+    let test_commands = ["ls", "cat /etc/hostname", "docker ps"];
+    for cmd in &test_commands {
+        if validator.validate(cmd).is_err() {
+            warnings.push(format!(
+                "Security: common command '{cmd}' is denied by current config"
+            ));
+        }
+    }
+
+    // Check tool registry loads
+    let registry = create_filtered_registry(&config.tool_groups);
+    let tool_count = registry.len();
+
+    // Report
+    if issues.is_empty() && warnings.is_empty() {
+        println!("Configuration is valid.");
+        println!("  Hosts: {}", config.hosts.len());
+        println!("  Tools: {tool_count}");
+        println!("  Security mode: {:?}", config.security.mode);
+    } else {
+        if !issues.is_empty() {
+            println!("ERRORS:");
+            for issue in &issues {
+                println!("  \u{2717} {issue}");
+            }
+        }
+        if !warnings.is_empty() {
+            println!("WARNINGS:");
+            for warning in &warnings {
+                println!("  \u{26a0} {warning}");
+            }
+        }
+        println!("\n  Hosts: {}", config.hosts.len());
+        println!("  Tools: {tool_count}");
+    }
+
+    if issues.is_empty() {
+        Ok(())
+    } else {
+        Err(BridgeError::Config(format!("{} error(s) found", issues.len())))
+    }
+}
+
+/// Show differences between current and default configuration
+pub async fn run_config_diff(config: Arc<Config>) -> Result<()> {
+    use crate::config::{LimitsConfig, SecurityConfig};
+
+    let default_security = SecurityConfig::default();
+    let default_limits = LimitsConfig::default();
+
+    println!("=== Configuration Differences (current vs default) ===\n");
+
+    // Compare security mode
+    if config.security.mode != default_security.mode {
+        println!(
+            "security.mode: {:?} (default: {:?})",
+            config.security.mode, default_security.mode
+        );
+    }
+
+    // Compare limits
+    if config.limits.command_timeout_seconds != default_limits.command_timeout_seconds {
+        println!(
+            "limits.command_timeout_seconds: {} (default: {})",
+            config.limits.command_timeout_seconds, default_limits.command_timeout_seconds
+        );
+    }
+    if config.limits.max_concurrent_commands != default_limits.max_concurrent_commands {
+        println!(
+            "limits.max_concurrent_commands: {} (default: {})",
+            config.limits.max_concurrent_commands, default_limits.max_concurrent_commands
+        );
+    }
+    if config.limits.rate_limit_per_second != default_limits.rate_limit_per_second {
+        println!(
+            "limits.rate_limit_per_second: {} (default: {})",
+            config.limits.rate_limit_per_second, default_limits.rate_limit_per_second
+        );
+    }
+    if config.limits.max_output_chars != default_limits.max_output_chars {
+        println!(
+            "limits.max_output_chars: {} (default: {})",
+            config.limits.max_output_chars, default_limits.max_output_chars
+        );
+    }
+
+    // Compare hosts
+    println!("\nhosts: {} configured", config.hosts.len());
+
+    // Compare blacklist
+    if config.security.blacklist.len() != default_security.blacklist.len() {
+        println!(
+            "security.blacklist: {} patterns (default: {} patterns)",
+            config.security.blacklist.len(),
+            default_security.blacklist.len()
+        );
+    }
+
+    // Compare disabled tool groups
+    let disabled: Vec<_> = config
+        .tool_groups
+        .groups
+        .iter()
+        .filter(|(_, enabled)| !**enabled)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    if !disabled.is_empty() {
+        println!("tool_groups.disabled: {disabled:?}");
+    }
+
+    println!("\n(Only non-default values are shown)");
+
+    Ok(())
+}
+
 /// Shell escape a string for safe use in shell commands
 fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
@@ -771,6 +957,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let ctx = create_context(Arc::new(config));
@@ -794,8 +981,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -808,6 +997,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let ctx = create_context(Arc::new(config));
@@ -832,6 +1022,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let ctx = create_context(Arc::new(config));
@@ -856,6 +1047,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let ctx = create_context(Arc::new(config));
@@ -951,6 +1143,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let ctx = create_context(Arc::new(config));
@@ -976,6 +1169,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let ctx = create_context(Arc::new(config));
@@ -999,6 +1193,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1024,8 +1219,10 @@ mod tests {
                     proxy_jump: None,
                     socks_proxy: None,
                     sudo_password: None,
+                    tags: Vec::new(),
                     os_type: OsType::Linux,
                     shell: None,
+                    retry: None,
                 },
             );
         }
@@ -1039,6 +1236,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1061,8 +1259,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -1078,8 +1278,10 @@ mod tests {
                 proxy_jump: Some("bastion".to_string()),
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -1092,6 +1294,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1113,6 +1316,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_status(Arc::new(config)).await;
@@ -1137,8 +1341,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -1151,6 +1357,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_status(Arc::new(config)).await;
@@ -1173,6 +1380,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_status(Arc::new(config)).await;
@@ -1195,6 +1403,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_status(Arc::new(config)).await;
@@ -1214,6 +1423,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_history(Arc::new(config), 10, None).await;
@@ -1231,6 +1441,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_history(Arc::new(config), 10, Some("nonexistent-host")).await;
@@ -1248,6 +1459,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_history(Arc::new(config), 0, None).await;
@@ -1265,6 +1477,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_history(Arc::new(config), 1000, None).await;
@@ -1284,6 +1497,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_exec(Arc::new(config), "unknown-host", "ls", 30, None).await;
@@ -1312,8 +1526,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -1331,6 +1547,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         // Try to execute a command not in whitelist
@@ -1356,6 +1573,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_upload(
@@ -1395,8 +1613,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -1409,6 +1629,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_upload(
@@ -1448,8 +1669,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -1462,6 +1685,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_upload(
@@ -1499,6 +1723,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_download(
@@ -1538,8 +1763,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             },
         );
 
@@ -1552,6 +1779,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let result = run_download(
@@ -1625,8 +1853,10 @@ mod tests {
                     proxy_jump: None,
                     socks_proxy: None,
                     sudo_password: None,
+                    tags: Vec::new(),
                     os_type: OsType::Linux,
                     shell: None,
+                    retry: None,
                 },
             );
         }
@@ -1656,8 +1886,10 @@ mod tests {
                 proxy_jump: None,
                 socks_proxy: None,
                 sudo_password: None,
+                tags: Vec::new(),
                 os_type: OsType::Linux,
                 shell: None,
+                retry: None,
             };
             // Should not panic
             let _ = format!("{:?}", host.host_key_verification);

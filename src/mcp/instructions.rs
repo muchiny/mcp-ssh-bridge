@@ -138,6 +138,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         }
     }
 
@@ -152,8 +153,10 @@ mod tests {
             proxy_jump: None,
             socks_proxy: None,
             sudo_password: None,
+            tags: Vec::new(),
             os_type: os,
             shell: None,
+            retry: None,
         }
     }
 

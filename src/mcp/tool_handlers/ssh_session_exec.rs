@@ -239,6 +239,7 @@ mod tests {
             tool_groups: ToolGroupsConfig::default(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
         };
 
         let validator = Arc::new(CommandValidator::new(&security));

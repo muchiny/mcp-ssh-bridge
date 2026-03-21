@@ -178,8 +178,10 @@ impl PartialHost {
             proxy_jump,
             socks_proxy: None,
             sudo_password: None,
+            tags: Vec::new(),
             os_type: OsType::Linux,
             shell: None,
+            retry: None,
         })
     }
 }
