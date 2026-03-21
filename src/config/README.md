@@ -448,9 +448,9 @@ let _watcher = ConfigWatcher::with_validator(
 
 Controls which tool groups are enabled. Groups not explicitly listed default to enabled.
 
-### Available Groups (38 groups, 197 tools)
+### Available Groups (47 groups, 250 tools)
 
-#### 🐧 Linux Groups (25 groups, 123 tools)
+#### 🐧 Linux Groups (34 groups, 176 tools)
 
 | Group | Tools | Description |
 |-------|-------|-------------|
@@ -479,6 +479,15 @@ Controls which tool groups are enabled. Groups not explicitly listed default to 
 | `terraform` | `ssh_terraform_init`, `ssh_terraform_plan`, `ssh_terraform_apply`, `ssh_terraform_state`, `ssh_terraform_output` | Terraform IaC |
 | `vault` | `ssh_vault_status`, `ssh_vault_read`, `ssh_vault_list`, `ssh_vault_write` | HashiCorp Vault |
 | `config` | `ssh_config_get`, `ssh_config_set` | Runtime config management |
+| `file_ops` | `ssh_file_read`, `ssh_file_write`, `ssh_file_chmod`, `ssh_file_chown`, `ssh_file_stat` | Remote file read/write/permissions |
+| `user_management` | `ssh_user_list`, `ssh_user_info`, `ssh_user_add`, `ssh_user_modify`, `ssh_user_delete`, `ssh_group_list`, `ssh_group_add`, `ssh_group_delete` | User and group management |
+| `storage` | `ssh_storage_lsblk`, `ssh_storage_df`, `ssh_storage_mount`, `ssh_storage_umount`, `ssh_storage_lvm`, `ssh_storage_fdisk`, `ssh_storage_fstab` | Block devices, mounts, LVM |
+| `journald` | `ssh_journal_query`, `ssh_journal_follow`, `ssh_journal_boots`, `ssh_journal_disk_usage` | Systemd journal queries |
+| `systemd_timers` | `ssh_timer_list`, `ssh_timer_info`, `ssh_timer_enable`, `ssh_timer_disable`, `ssh_timer_trigger` | Systemd timer management |
+| `security_modules` | `ssh_selinux_status`, `ssh_selinux_booleans`, `ssh_apparmor_status`, `ssh_apparmor_profiles`, `ssh_security_audit` | SELinux and AppArmor |
+| `network_equipment` | `ssh_net_equip_show_run`, `ssh_net_equip_show_interfaces`, `ssh_net_equip_show_routes`, `ssh_net_equip_show_arp`, `ssh_net_equip_show_version`, `ssh_net_equip_show_vlans`, `ssh_net_equip_config`, `ssh_net_equip_save` | Cisco/Juniper/Arista network gear |
+| `podman` | `ssh_podman_ps`, `ssh_podman_logs`, `ssh_podman_inspect`, `ssh_podman_exec`, `ssh_podman_images`, `ssh_podman_compose` | Podman container management |
+| `ldap` | `ssh_ldap_search`, `ssh_ldap_user_info`, `ssh_ldap_group_members`, `ssh_ldap_add`, `ssh_ldap_modify` | LDAP directory operations |
 
 <details>
 <summary><strong>🪟 Windows Groups (13 groups, 74 tools)</strong></summary>

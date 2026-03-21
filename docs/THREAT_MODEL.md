@@ -32,7 +32,7 @@ MCP SSH Bridge is a Model Context Protocol (MCP) server that allows an AI client
 
 | Threat | Risk | Control | Status |
 |--------|------|---------|--------|
-| Command injection via tool parameters | HIGH | Shell escaping (single-quote wrapping) in all 18 domain builders | Covered |
+| Command injection via tool parameters | HIGH | Shell escaping (single-quote wrapping) in all 27 Linux + 13 Windows domain builders | Covered |
 | Command injection via container/namespace names | HIGH | Shell escaping applied to all user-supplied identifiers | Covered |
 | Path traversal in file operations | MEDIUM | `validate_path()` rejects `..` components | Covered |
 | Path traversal in `save_output` | MEDIUM | `validate_path()` called before local file writes | Covered |
@@ -61,7 +61,7 @@ All user-supplied parameters are wrapped in single quotes with internal single q
 
 | Threat | Risk | Control | Status |
 |--------|------|---------|--------|
-| Secrets in command output | HIGH | Sanitizer with 50+ regex patterns (API keys, passwords, tokens, private keys) | Covered |
+| Secrets in command output | HIGH | Sanitizer with 56 regex patterns (API keys, passwords, tokens, private keys) | Covered |
 | Credentials in error messages | MEDIUM | Error types mask connection details | Covered |
 | Sudo password in logs | LOW | Verified: original command (no password) passed to audit, not the sudo-wrapped command | Covered (verified false positive) |
 | Credentials in memory | LOW | `Zeroizing<String>` for auth passwords and sudo passwords | Covered |
@@ -131,6 +131,6 @@ All user-supplied parameters are wrapped in single quotes with internal single q
 
 - **240+ security-focused unit tests** across validator, sanitizer, rate limiter, audit logger, known hosts
 - **58 adversarial integration tests** (`tests/security_audit.rs`) covering command injection, path traversal, credential leakage
-- **26 fuzz targets** for input validation
+- **53 fuzz targets** for input validation (all command builders + protocol types)
 - **Mutation testing** at ~88% score on security module
 - **`#![forbid(unsafe_code)]`** enforced project-wide

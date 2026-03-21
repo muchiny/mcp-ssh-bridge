@@ -8,7 +8,7 @@
 [![MCP](https://img.shields.io/badge/MCP-2025--11--25-blueviolet?style=flat-square)](https://modelcontextprotocol.io)
 
 **A Rust MCP server that lets Claude Code securely execute commands on remote servers via SSH.**
-**197 tools across 38 groups — Linux, Windows, Docker, Kubernetes, databases, and more.**
+**250 tools across 47 groups — Linux, Windows, Docker, Kubernetes, Podman, LDAP, network equipment, and more.**
 
 </div>
 
@@ -22,7 +22,7 @@ MCP SSH Bridge is a local server that sits between Claude Code and your remote s
 Claude Code  <--JSON-RPC-->  MCP SSH Bridge  <--SSH-->  Your Servers
 ```
 
-Without it, Claude cannot reach your servers. With it, Claude can run commands, transfer files, read logs, check metrics, manage Docker containers, Kubernetes clusters, systemd services, and much more — all through 197 purpose-built tools with built-in security controls.
+Without it, Claude cannot reach your servers. With it, Claude can run commands, transfer files, read logs, check metrics, manage Docker containers, Kubernetes clusters, Podman, LDAP directories, network equipment, systemd services, and much more — all through 250 purpose-built tools with built-in security controls.
 
 ---
 
@@ -322,7 +322,7 @@ Each entry records: timestamp, host, command, result (success/error), exit code,
 
 ## Tool groups
 
-The 197 tools are organized in 38 groups. All groups are enabled by default. Disable groups you don't need to reduce the MCP context sent to the LLM:
+The 250 tools are organized in 47 groups. All groups are enabled by default. Disable groups you don't need to reduce the MCP context sent to the LLM:
 
 ```yaml
 tool_groups:
@@ -332,10 +332,10 @@ tool_groups:
     database: false          # Disable db query/dump/restore
     esxi: false              # Disable VMware ESXi tools
     windows_services: false  # Disable Windows service management
-    # ... see config.example.yaml for all 38 groups
+    # ... see config.example.yaml for all 47 groups
 ```
 
-### Linux groups (25 groups, 123 tools)
+### Linux groups (34 groups, 176 tools)
 
 | Group | Tools |
 |-------|-------|
@@ -364,6 +364,15 @@ tool_groups:
 | `redis` | ssh_redis_info, ssh_redis_cli, ssh_redis_keys |
 | `terraform` | ssh_terraform_init, ssh_terraform_plan, ssh_terraform_apply, ssh_terraform_state, ssh_terraform_output |
 | `vault` | ssh_vault_status, ssh_vault_read, ssh_vault_list, ssh_vault_write |
+| `file_ops` | ssh_file_read, ssh_file_write, ssh_file_chmod, ssh_file_chown, ssh_file_stat |
+| `user_management` | ssh_user_list, ssh_user_info, ssh_user_add, ssh_user_modify, ssh_user_delete, ssh_group_list, ssh_group_add, ssh_group_delete |
+| `storage` | ssh_storage_lsblk, ssh_storage_df, ssh_storage_mount, ssh_storage_umount, ssh_storage_lvm, ssh_storage_fdisk, ssh_storage_fstab |
+| `journald` | ssh_journal_query, ssh_journal_follow, ssh_journal_boots, ssh_journal_disk_usage |
+| `systemd_timers` | ssh_timer_list, ssh_timer_info, ssh_timer_enable, ssh_timer_disable, ssh_timer_trigger |
+| `security_modules` | ssh_selinux_status, ssh_selinux_booleans, ssh_apparmor_status, ssh_apparmor_profiles, ssh_security_audit |
+| `network_equipment` | ssh_net_equip_show_run, ssh_net_equip_show_interfaces, ssh_net_equip_show_routes, ssh_net_equip_show_arp, ssh_net_equip_show_version, ssh_net_equip_show_vlans, ssh_net_equip_config, ssh_net_equip_save |
+| `podman` | ssh_podman_ps, ssh_podman_logs, ssh_podman_inspect, ssh_podman_exec, ssh_podman_images, ssh_podman_compose |
+| `ldap` | ssh_ldap_search, ssh_ldap_user_info, ssh_ldap_group_members, ssh_ldap_add, ssh_ldap_modify |
 
 ### Windows groups (13 groups, 74 tools)
 

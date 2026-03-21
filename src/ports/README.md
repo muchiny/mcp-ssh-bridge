@@ -20,7 +20,7 @@ ports/
 ```mermaid
 graph TB
     subgraph Adapters["🔌 Adapters (Implementations)"]
-        MCP["📡 mcp/tool_handlers/<br/>SshExecHandler, etc. (197 tools)"]
+        MCP["📡 mcp/tool_handlers/<br/>SshExecHandler, etc. (250 tools)"]
         PROMPTS["💬 mcp/prompts/<br/>SystemHealthPrompt, etc."]
         RESOURCES["📊 mcp/resources/<br/>MetricsResource, etc."]
         SSH["🔑 ssh/client.rs<br/>SshClient"]
@@ -105,10 +105,10 @@ classDiagram
     ToolHandler <|.. SshStatusHandler
     ToolHandler <|.. SshDockerPsHandler
 
-    note for ToolHandler "... and 194 more implementations (197 total across 38 groups)"
+    note for ToolHandler "... and 247 more implementations (250 total across 47 groups)"
 ```
 
-#### 🐧 Linux Groups (25 groups, 123 tools)
+#### 🐧 Linux Groups (34 groups, 176 tools)
 
 | Group | Count | Examples |
 |-------|-------|---------|
@@ -137,6 +137,15 @@ classDiagram
 | **redis** | 3 | `ssh_redis_info`, `ssh_redis_cli`, `ssh_redis_keys` |
 | **terraform** | 5 | `ssh_terraform_init`, `ssh_terraform_plan`, `ssh_terraform_apply`, ... |
 | **vault** | 4 | `ssh_vault_status`, `ssh_vault_read`, `ssh_vault_list`, `ssh_vault_write` |
+| **file_ops** | 5 | `ssh_file_read`, `ssh_file_write`, `ssh_file_chmod`, `ssh_file_chown`, `ssh_file_stat` |
+| **user_management** | 8 | `ssh_user_list`, `ssh_user_info`, `ssh_user_add`, `ssh_group_list`, ... |
+| **storage** | 7 | `ssh_storage_lsblk`, `ssh_storage_df`, `ssh_storage_mount`, ... |
+| **journald** | 4 | `ssh_journal_query`, `ssh_journal_follow`, `ssh_journal_boots`, `ssh_journal_disk_usage` |
+| **systemd_timers** | 5 | `ssh_timer_list`, `ssh_timer_info`, `ssh_timer_enable`, ... |
+| **security_modules** | 5 | `ssh_selinux_status`, `ssh_apparmor_status`, `ssh_security_audit`, ... |
+| **network_equipment** | 8 | `ssh_net_equip_show_run`, `ssh_net_equip_config`, `ssh_net_equip_save`, ... |
+| **podman** | 6 | `ssh_podman_ps`, `ssh_podman_logs`, `ssh_podman_exec`, ... |
+| **ldap** | 5 | `ssh_ldap_search`, `ssh_ldap_user_info`, `ssh_ldap_group_members`, ... |
 
 #### 🪟 Windows Groups (13 groups, 74 tools)
 
@@ -389,7 +398,7 @@ fn schema(&self) -> ToolSchema {
 
 ## 🏷️ ToolAnnotations (`registry.rs`)
 
-All 197 tools have `ToolAnnotations` metadata centralized in the `tool_annotations()` function in `registry.rs`. Annotations help MCP clients understand the safety level and expected behavior of each tool before execution.
+All 250 tools have `ToolAnnotations` metadata centralized in the `tool_annotations()` function in `registry.rs`. Annotations help MCP clients understand the safety level and expected behavior of each tool before execution.
 
 ### Annotation Levels
 

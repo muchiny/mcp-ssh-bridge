@@ -18,7 +18,7 @@ domain/
     ├── 📄 shell.rs              → 🐚 OsType, ShellType, shell::escape() (cross-platform foundation)
     ├── 📄 tunnel.rs             → TunnelManager
     │
-    │   ── 🐧 Linux Command Builders (18) ──
+    │   ── 🐧 Linux Command Builders (27) ──
     ├── 📄 database.rs           → DatabaseCommandBuilder
     ├── 📄 kubernetes.rs         → KubernetesCommandBuilder + HelmCommandBuilder
     ├── 📄 ansible.rs            → AnsibleCommandBuilder
@@ -34,6 +34,15 @@ domain/
     ├── 📄 redis.rs              → RedisCommandBuilder
     ├── 📄 terraform.rs          → TerraformCommandBuilder
     ├── 📄 vault.rs              → VaultCommandBuilder
+    ├── 📄 file_ops.rs           → FileOpsCommandBuilder (5 commands)
+    ├── 📄 user_management.rs    → UserManagementCommandBuilder (8 commands)
+    ├── 📄 storage.rs            → StorageCommandBuilder (7 commands)
+    ├── 📄 journald.rs           → JournaldCommandBuilder (4 commands)
+    ├── 📄 systemd_timer.rs      → SystemdTimerCommandBuilder (5 commands)
+    ├── 📄 security_modules.rs   → SecurityModulesCommandBuilder (5 commands)
+    ├── 📄 network_equipment.rs  → NetworkEquipmentCommandBuilder (8 commands)
+    ├── 📄 podman.rs             → PodmanCommandBuilder (6 commands)
+    ├── 📄 ldap.rs               → LdapCommandBuilder (5 commands)
     │
     │   ── 🪟 Windows Command Builders (13) ──
     ├── 📄 active_directory.rs   → ActiveDirectoryCommandBuilder (6 commands)
@@ -765,7 +774,7 @@ graph TB
         UC["ExecuteCommandUseCase"]
         HIST["CommandHistory"]
         SHELL["🐚 shell.rs<br/>(escape, cd_and_run, elevate)"]
-        LINUX["🐧 18 Linux CommandBuilders<br/>(Database, K8s, Helm, Ansible,<br/>Docker, Systemd, Network, Process,<br/>Package, Firewall, Cron, Certificate,<br/>Nginx, Redis, Terraform, Vault, ESXi, Git)"]
+        LINUX["🐧 27 Linux CommandBuilders<br/>(Database, K8s, Helm, Ansible,<br/>Docker, Systemd, Network, Process,<br/>Package, Firewall, Cron, Certificate,<br/>Nginx, Redis, Terraform, Vault, ESXi, Git,<br/>FileOps, UserMgmt, Storage, Journald,<br/>SystemdTimer, SecurityModules,<br/>NetworkEquipment, Podman, LDAP)"]
         WINDOWS["🪟 13 Windows CommandBuilders<br/>(ActiveDirectory, HyperV, IIS,<br/>ScheduledTask, WindowsEvent,<br/>WindowsFeature, WindowsFirewall,<br/>WindowsNetwork, WindowsPerf,<br/>WindowsProcess, WindowsRegistry,<br/>WindowsService, WindowsUpdate)"]
     end
 
