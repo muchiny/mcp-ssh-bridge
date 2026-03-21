@@ -2,6 +2,13 @@
 
 > Date: 2026-03-21 | Analyse comparative avec l'écosystème MCP, les concurrents, et l'état de l'art
 
+> 🎉 **UPDATE v1.5.0 (2026-03-21)**: All 10 TOP RECOMMENDATIONS have been **implemented**!
+> See [CHANGELOG.md](CHANGELOG.md) for full details. The project now has **281 tools** across
+> **55 groups** with **4782 tests**. All previously identified gaps (Session Recording, Runbook
+> Engine, Intelligent Diagnostics, Multi-Host Orchestration, Drift Detection, SBOM/Vuln Scanning,
+> File Diff/Patch, Advanced Secrets Detection, MCP Server Cards, and DXT Packaging) are now
+> shipped. 🚀
+
 ---
 
 ## INVENTAIRE ACTUEL
