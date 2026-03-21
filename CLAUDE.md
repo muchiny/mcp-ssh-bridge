@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MCP SSH Bridge is a Rust MCP server that enables Claude Code to securely execute commands on air-gapped environments via SSH. JSON-RPC over stdio, strict security controls. **197 tools** across **38 groups** (25 Linux, 13 Windows).
+MCP SSH Bridge is a Rust MCP server that enables Claude Code to securely execute commands on air-gapped environments via SSH. JSON-RPC over stdio, strict security controls. **250 tools** across **47 groups** (34 Linux, 13 Windows).
 
 ## Build Commands
 

@@ -256,6 +256,15 @@ fn test_every_tool_maps_to_a_known_group() {
         "windows_features",
         "windows_network",
         "windows_process",
+        "file_ops",
+        "user_management",
+        "storage",
+        "journald",
+        "systemd_timers",
+        "security_modules",
+        "network_equipment",
+        "podman",
+        "ldap",
     ];
 
     for tool in &tools {
