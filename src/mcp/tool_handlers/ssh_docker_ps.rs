@@ -103,37 +103,33 @@ impl StandardTool for DockerPsTool {
         args: &SshDockerPsArgs,
         output: &str,
     ) -> ToolCallResult {
-        // Parse docker ps text output into table rows
-        let lines: Vec<&str> = output.lines().collect();
-        if lines.len() < 2 {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
-        }
+        };
         let mut tbl = table("Docker Containers")
             .column("name", "Name")
             .column("image", "Image")
             .column("status", "Status")
             .column("ports", "Ports");
-        // Parse header to find column positions
-        let header = lines[0];
-        let name_pos = header.find("NAMES").unwrap_or(0);
-        let _image_pos = header.find("IMAGE").unwrap_or(0);
-        let _status_pos = header.find("STATUS").unwrap_or(0);
-        let _ports_pos = header.find("PORTS").unwrap_or(0);
-        for line in &lines[1..] {
-            if line.trim().is_empty() {
-                continue;
-            }
-            // Simple: split by 2+ spaces for docker ps columnar output
-            let _parts: Vec<&str> = line.splitn(2, "  ").collect();
-            let name = line
-                .get(name_pos..)
-                .unwrap_or("")
-                .split_whitespace()
-                .next()
-                .unwrap_or("");
+
+        let name_idx = parsed.headers.iter().position(|h| h == "names");
+        let image_idx = parsed.headers.iter().position(|h| h == "image");
+        let status_idx = parsed.headers.iter().position(|h| h == "status");
+        let ports_idx = parsed.headers.iter().position(|h| h == "ports");
+
+        for row in &parsed.rows {
+            let get = |idx: Option<usize>| {
+                idx.and_then(|i| row.get(i))
+                    .map_or("", String::as_str)
+            };
+            let name = get(name_idx);
+            let image = get(image_idx);
+            let status = get(status_idx);
+            let ports = get(ports_idx);
+
             if !name.is_empty() {
                 tbl = tbl
-                    .row(json!({"name": name, "image": "", "status": "", "ports": ""}))
+                    .row(json!({"name": name, "image": image, "status": status, "ports": ports}))
                     .action(
                         format!("logs-{name}"),
                         format!("Logs {name}"),
