@@ -448,7 +448,7 @@ let _watcher = ConfigWatcher::with_validator(
 
 Controls which tool groups are enabled. Groups not explicitly listed default to enabled.
 
-### Available Groups (47 groups, 250 tools)
+### Available Groups (57 groups, 337 tools)
 
 #### 🐧 Linux Groups (34 groups, 176 tools)
 

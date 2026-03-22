@@ -3,8 +3,8 @@
 > Date: 2026-03-21 | Analyse comparative avec l'écosystème MCP, les concurrents, et l'état de l'art
 
 > 🎉 **UPDATE v1.5.0 (2026-03-21)**: All 10 TOP RECOMMENDATIONS have been **implemented**!
-> See [CHANGELOG.md](CHANGELOG.md) for full details. The project now has **281 tools** across
-> **55 groups** with **4782 tests**. All previously identified gaps (Session Recording, Runbook
+> See [CHANGELOG.md](CHANGELOG.md) for full details. The project now has **337 tools** across
+> **57 groups** with **4782 tests**. All previously identified gaps (Session Recording, Runbook
 > Engine, Intelligent Diagnostics, Multi-Host Orchestration, Drift Detection, SBOM/Vuln Scanning,
 > File Diff/Patch, Advanced Secrets Detection, MCP Server Cards, and DXT Packaging) are now
 > shipped. 🚀
@@ -270,7 +270,7 @@ Votre projet est **déjà très avancé** :
 
 > 🏆 **v1.5.0 UPDATE**: All 10 TOP RECOMMENDATIONS are now **✅ IMPLEMENTED**. Zero remaining gaps.
 
-Votre stack est **dans le top 0.1%** des serveurs MCP en termes de complétude. Avec **281 tools**, **55 groups**, et **4782 tests**, c'est le serveur MCP le plus complet au monde.
+Votre stack est **dans le top 0.1%** des serveurs MCP en termes de complétude. Avec **337 tools**, **57 groups**, et **4782 tests**, c'est le serveur MCP le plus complet au monde.
 
 **Zéro gap protocolaire** — vous implémentez TOUTES les features de la spec MCP (Tools, Resources, Prompts, Sampling, Elicitation, Tasks, Structured Output, Completions, Progress, Logging, OAuth 2.1, Streamable HTTP). Aucun autre serveur MCP connu ne fait ça.
 

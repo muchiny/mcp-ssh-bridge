@@ -21,7 +21,7 @@ The `manifest.json` file describes the extension to Claude Desktop:
   "name": "mcp-ssh-bridge",
   "display_name": "MCP SSH Bridge",
   "version": "1.4.0",
-  "description": "Execute commands securely on remote servers via SSH. 270+ tools for Linux, Windows, Docker, Kubernetes, and more.",
+  "description": "Execute commands securely on remote servers via SSH. 337 tools for Linux, Windows, Docker, Kubernetes, and more.",
   "author": {
     "name": "muchiny"
   },
@@ -90,7 +90,7 @@ dist/mcp-ssh-bridge.dxt
 
 3. **Configure your SSH hosts** in `~/.config/mcp-ssh-bridge/config.yaml` (see `config/config.example.yaml` for the full schema)
 
-4. **Start using SSH tools** — all 250+ tools are now available in Claude Desktop conversations
+4. **Start using SSH tools** — all 337 tools are now available in Claude Desktop conversations
 
 ---
 

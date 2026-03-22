@@ -152,7 +152,7 @@ hosts:
 
 ## Tool Groups
 
-All 47 tool groups (250 tools) are enabled by default. Disable groups you don't need:
+All 47 tool groups (337 tools) are enabled by default. Disable groups you don't need:
 
 ```yaml
 tool_groups:

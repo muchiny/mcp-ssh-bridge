@@ -372,7 +372,7 @@ tool_handlers/
 
 ```mermaid
 graph TB
-    subgraph Handlers["🔧 Tool Handlers (250 tools, 47 groups)"]
+    subgraph Handlers["🔧 Tool Handlers (337 tools, 57 groups)"]
         subgraph Exec["⚡ Execution"]
             E1["🖥️ SshExecHandler"]
             E2["🔄 SshExecMultiHandler"]

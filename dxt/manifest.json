@@ -3,7 +3,7 @@
   "name": "mcp-ssh-bridge",
   "display_name": "MCP SSH Bridge",
   "version": "1.4.0",
-  "description": "Execute commands securely on remote servers via SSH. 270+ tools for Linux, Windows, Docker, Kubernetes, and more.",
+  "description": "Execute commands securely on remote servers via SSH. 337 tools for Linux, Windows, Docker, Kubernetes, and more.",
   "author": {
     "name": "muchiny"
   },
