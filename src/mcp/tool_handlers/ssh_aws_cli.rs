@@ -1,0 +1,234 @@
+//! Handler for the `ssh_aws_cli` tool.
+//!
+//! Executes AWS CLI commands on a remote host.
+
+use serde::Deserialize;
+
+use crate::config::HostConfig;
+use crate::domain::use_cases::cloud::CloudCommandBuilder;
+use crate::error::Result;
+use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+
+#[derive(Debug, Deserialize)]
+pub struct SshAwsCliArgs {
+    /// Target host name from configuration.
+    host: String,
+    /// AWS service name (e.g. s3, ec2, iam).
+    service: String,
+    /// AWS CLI subcommand (e.g. describe-instances, list-buckets).
+    subcommand: String,
+    /// Additional arguments to pass to the AWS CLI command.
+    #[serde(default)]
+    args: Option<String>,
+    /// Override default command timeout in seconds.
+    #[serde(default)]
+    timeout_seconds: Option<u64>,
+    /// Maximum output characters before truncation.
+    #[serde(default)]
+    max_output: Option<u64>,
+    /// Save full output to a local file path.
+    #[serde(default)]
+    save_output: Option<String>,
+}
+
+impl_common_args!(SshAwsCliArgs);
+
+pub struct AwsCliTool;
+
+impl StandardTool for AwsCliTool {
+    type Args = SshAwsCliArgs;
+
+    const NAME: &'static str = "ssh_aws_cli";
+
+    const DESCRIPTION: &'static str = "Execute AWS CLI commands on a remote host. Runs \
+        'aws SERVICE SUBCOMMAND [ARGS] --output json' via SSH. Use this for any AWS API \
+        interaction including EC2, S3, IAM, Lambda, and other services.";
+
+    const SCHEMA: &'static str = r#"{
+                "type": "object",
+                "properties": {
+                    "host": {
+                        "type": "string",
+                        "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
+                    },
+                    "service": {
+                        "type": "string",
+                        "description": "AWS service name (e.g. s3, ec2, iam, lambda)"
+                    },
+                    "subcommand": {
+                        "type": "string",
+                        "description": "AWS CLI subcommand (e.g. describe-instances, list-buckets)"
+                    },
+                    "args": {
+                        "type": "string",
+                        "description": "Additional arguments (e.g. '--region us-east-1 --instance-ids i-123')"
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Override default command timeout in seconds",
+                        "minimum": 1
+                    },
+                    "max_output": {
+                        "type": "integer",
+                        "description": "Maximum output characters before truncation",
+                        "minimum": 100
+                    },
+                    "save_output": {
+                        "type": "string",
+                        "description": "Save full output to a local file path"
+                    }
+                },
+                "required": ["host", "service", "subcommand"]
+            }"#;
+
+    fn validate(args: &SshAwsCliArgs, _host_config: &HostConfig) -> Result<()> {
+        CloudCommandBuilder::validate_aws_service(&args.service)?;
+        CloudCommandBuilder::validate_subcommand(&args.subcommand)?;
+        Ok(())
+    }
+
+    fn build_command(args: &SshAwsCliArgs, _host_config: &HostConfig) -> Result<String> {
+        Ok(CloudCommandBuilder::build_aws_cli_command(
+            &args.service,
+            &args.subcommand,
+            args.args.as_deref(),
+        ))
+    }
+}
+
+/// Handler for the `ssh_aws_cli` tool.
+pub type SshAwsCliHandler = StandardToolHandler<AwsCliTool>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::BridgeError;
+    use crate::ports::ToolHandler;
+    use crate::ports::mock::create_test_context;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_missing_arguments() {
+        let handler = SshAwsCliHandler::new();
+        let ctx = create_test_context();
+        let result = handler.execute(None, &ctx).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpMissingParam { param } => assert_eq!(param, "arguments"),
+            e => panic!("Expected McpMissingParam, got: {e:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_unknown_host() {
+        let handler = SshAwsCliHandler::new();
+        let ctx = create_test_context();
+        let result = handler
+            .execute(
+                Some(json!({"host": "nonexistent", "service": "s3", "subcommand": "ls"})),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::UnknownHost { host } => assert_eq!(host, "nonexistent"),
+            e => panic!("Expected UnknownHost, got: {e:?}"),
+        }
+    }
+
+    #[test]
+    fn test_schema() {
+        let handler = SshAwsCliHandler::new();
+        assert_eq!(handler.name(), "ssh_aws_cli");
+        assert!(!handler.description().is_empty());
+        let schema = handler.schema();
+        assert_eq!(schema.name, "ssh_aws_cli");
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
+        let required = schema_json["required"].as_array().unwrap();
+        assert!(required.contains(&json!("host")));
+        assert!(required.contains(&json!("service")));
+        assert!(required.contains(&json!("subcommand")));
+    }
+
+    #[test]
+    fn test_args_deserialization() {
+        let json = json!({
+            "host": "server1",
+            "service": "ec2",
+            "subcommand": "describe-instances",
+            "args": "--region us-east-1",
+            "timeout_seconds": 30,
+            "max_output": 10000,
+            "save_output": "/tmp/aws.json"
+        });
+        let args: SshAwsCliArgs = serde_json::from_value(json).unwrap();
+        assert_eq!(args.host, "server1");
+        assert_eq!(args.service, "ec2");
+        assert_eq!(args.subcommand, "describe-instances");
+        assert_eq!(args.args.as_deref(), Some("--region us-east-1"));
+        assert_eq!(args.timeout_seconds, Some(30));
+        assert_eq!(args.max_output, Some(10000));
+        assert_eq!(args.save_output.as_deref(), Some("/tmp/aws.json"));
+    }
+
+    #[test]
+    fn test_args_minimal_deserialization() {
+        let json = json!({"host": "server1", "service": "s3", "subcommand": "ls"});
+        let args: SshAwsCliArgs = serde_json::from_value(json).unwrap();
+        assert_eq!(args.host, "server1");
+        assert_eq!(args.service, "s3");
+        assert_eq!(args.subcommand, "ls");
+        assert!(args.args.is_none());
+        assert!(args.timeout_seconds.is_none());
+        assert!(args.max_output.is_none());
+        assert!(args.save_output.is_none());
+    }
+
+    #[test]
+    fn test_schema_optional_fields() {
+        let handler = SshAwsCliHandler::new();
+        let schema = handler.schema();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
+        let props = schema_json["properties"].as_object().unwrap();
+        assert!(props.contains_key("args"));
+        assert!(props.contains_key("timeout_seconds"));
+        assert!(props.contains_key("max_output"));
+        assert!(props.contains_key("save_output"));
+    }
+
+    #[test]
+    fn test_args_debug() {
+        let json = json!({"host": "server1", "service": "s3", "subcommand": "ls"});
+        let args: SshAwsCliArgs = serde_json::from_value(json).unwrap();
+        let debug_str = format!("{args:?}");
+        assert!(debug_str.contains("SshAwsCliArgs"));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_json_type() {
+        let handler = SshAwsCliHandler::new();
+        let ctx = create_test_context();
+        let result = handler
+            .execute(Some(json!({"host": 123, "service": "s3", "subcommand": "ls"})), &ctx)
+            .await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(_) => {}
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
+
+    #[test]
+    fn test_schema_has_type_object() {
+        let handler = SshAwsCliHandler::new();
+        let schema = handler.schema();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
+        assert_eq!(schema_json["type"], "object");
+    }
+
+    #[test]
+    fn test_description_not_empty() {
+        let handler = SshAwsCliHandler::new();
+        assert!(handler.description().len() > 10);
+    }
+}
