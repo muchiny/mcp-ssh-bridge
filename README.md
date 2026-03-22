@@ -8,7 +8,7 @@
 [![MCP](https://img.shields.io/badge/MCP-2025--11--25-blueviolet?style=flat-square)](https://modelcontextprotocol.io)
 
 **A Rust MCP server that lets Claude Code securely execute commands on remote servers via SSH.**
-**281 tools across 55 groups — Linux, Windows, Docker, Kubernetes, Podman, LDAP, network equipment, and more.**
+**337 tools across 57 groups — Linux, Windows, Docker, Kubernetes, Podman, LDAP, network equipment, and more.**
 
 </div>
 
@@ -22,7 +22,7 @@ MCP SSH Bridge is a local server that sits between Claude Code and your remote s
 Claude Code  <--JSON-RPC-->  MCP SSH Bridge  <--SSH-->  Your Servers
 ```
 
-Without it, Claude cannot reach your servers. With it, Claude can run commands, transfer files, read logs, check metrics, manage Docker containers, Kubernetes clusters, Podman, LDAP directories, network equipment, systemd services, and much more — all through 281 purpose-built tools with built-in security controls.
+Without it, Claude cannot reach your servers. With it, Claude can run commands, transfer files, read logs, check metrics, manage Docker containers, Kubernetes clusters, Podman, LDAP directories, network equipment, systemd services, and much more — all through 337 purpose-built tools with built-in security controls.
 
 ```mermaid
 graph LR
@@ -355,7 +355,7 @@ Use `ssh_recording_start` / `ssh_recording_stop` to control recordings, `ssh_rec
 
 ## 🧰 Tool groups
 
-The 281 tools are organized in 55 groups. All groups are enabled by default. Disable groups you don't need to reduce the MCP context sent to the LLM:
+The 337 tools are organized in 57 groups. All groups are enabled by default. Disable groups you don't need to reduce the MCP context sent to the LLM:
 
 ```yaml
 tool_groups:
@@ -365,46 +365,52 @@ tool_groups:
     database: false          # Disable db query/dump/restore
     esxi: false              # Disable VMware ESXi tools
     windows_services: false  # Disable Windows service management
-    # ... see config.example.yaml for all 55 groups
+    # ... see config.example.yaml for all 57 groups
 ```
 
-### 🐧 Linux groups (38 groups, 194 tools)
+### 🐧 Linux groups (42 groups, 256 tools)
 
 | Group | Tools |
 |-------|-------|
 | `core` | ssh_exec, ssh_exec_multi, ssh_status, ssh_health, ssh_history, ssh_output_fetch |
 | `config` | ssh_config_get, ssh_config_set |
 | `file_transfer` | ssh_upload, ssh_download, ssh_sync |
+| `file_ops` | ssh_file_read, ssh_file_write, ssh_file_chmod, ssh_file_chown, ssh_file_stat, ssh_file_diff, ssh_file_patch, ssh_file_template |
 | `sessions` | ssh_session_create, ssh_session_exec, ssh_session_list, ssh_session_close |
 | `monitoring` | ssh_metrics, ssh_metrics_multi, ssh_tail, ssh_disk_usage |
 | `tunnels` | ssh_tunnel_create, ssh_tunnel_list, ssh_tunnel_close |
 | `directory` | ssh_ls, ssh_find |
 | `database` | ssh_db_query, ssh_db_dump, ssh_db_restore |
-| `backup` | ssh_backup_create, ssh_backup_list, ssh_backup_restore |
+| `redis` | ssh_redis_info, ssh_redis_cli, ssh_redis_keys |
+| `postgresql` | ssh_postgresql_query, ssh_postgresql_status |
+| `mysql` | ssh_mysql_query, ssh_mysql_status |
+| `mongodb` | ssh_mongodb_status |
+| `backup` | ssh_backup_create, ssh_backup_list, ssh_backup_restore, ssh_backup_snapshot, ssh_backup_verify, ssh_backup_schedule |
 | `docker` | ssh_docker_ps, ssh_docker_logs, ssh_docker_inspect, ssh_docker_exec, ssh_docker_compose, ssh_docker_images, ssh_docker_stats, ssh_docker_volume_ls, ssh_docker_network_ls, ssh_docker_volume_inspect, ssh_docker_network_inspect |
+| `podman` | ssh_podman_ps, ssh_podman_logs, ssh_podman_inspect, ssh_podman_exec, ssh_podman_images, ssh_podman_compose |
 | `esxi` | ssh_esxi_vm_list, ssh_esxi_vm_info, ssh_esxi_vm_power, ssh_esxi_snapshot, ssh_esxi_host_info, ssh_esxi_datastore_list, ssh_esxi_network_list |
-| `git` | ssh_git_status, ssh_git_log, ssh_git_diff, ssh_git_pull, ssh_git_clone, ssh_git_branch, ssh_git_checkout |
 | `kubernetes` | ssh_k8s_get, ssh_k8s_logs, ssh_k8s_describe, ssh_k8s_apply, ssh_k8s_delete, ssh_k8s_rollout, ssh_k8s_scale, ssh_k8s_exec, ssh_k8s_top, ssh_helm_list, ssh_helm_status, ssh_helm_upgrade, ssh_helm_install, ssh_helm_rollback, ssh_helm_history, ssh_helm_uninstall |
+| `git` | ssh_git_status, ssh_git_log, ssh_git_diff, ssh_git_pull, ssh_git_clone, ssh_git_branch, ssh_git_checkout |
 | `ansible` | ssh_ansible_playbook, ssh_ansible_inventory, ssh_ansible_adhoc |
+| `terraform` | ssh_terraform_init, ssh_terraform_plan, ssh_terraform_apply, ssh_terraform_state, ssh_terraform_output |
+| `vault` | ssh_vault_status, ssh_vault_read, ssh_vault_list, ssh_vault_write |
 | `systemd` | ssh_service_status, ssh_service_start, ssh_service_stop, ssh_service_restart, ssh_service_list, ssh_service_logs, ssh_service_enable, ssh_service_disable, ssh_service_daemon_reload |
+| `systemd_timers` | ssh_timer_list, ssh_timer_info, ssh_timer_enable, ssh_timer_disable, ssh_timer_trigger |
 | `network` | ssh_net_connections, ssh_net_interfaces, ssh_net_routes, ssh_net_ping, ssh_net_traceroute, ssh_net_dns |
 | `process` | ssh_process_list, ssh_process_kill, ssh_process_top |
 | `package` | ssh_pkg_list, ssh_pkg_search, ssh_pkg_install, ssh_pkg_update, ssh_pkg_remove |
 | `firewall` | ssh_firewall_status, ssh_firewall_list, ssh_firewall_allow, ssh_firewall_deny |
 | `cron` | ssh_cron_list, ssh_cron_add, ssh_cron_remove |
+| `cron_analysis` | ssh_cron_analyze, ssh_cron_history, ssh_at_jobs |
 | `certificates` | ssh_cert_check, ssh_cert_info, ssh_cert_expiry |
+| `letsencrypt` | ssh_letsencrypt_status |
 | `nginx` | ssh_nginx_status, ssh_nginx_test, ssh_nginx_reload, ssh_nginx_list_sites |
-| `redis` | ssh_redis_info, ssh_redis_cli, ssh_redis_keys |
-| `terraform` | ssh_terraform_init, ssh_terraform_plan, ssh_terraform_apply, ssh_terraform_state, ssh_terraform_output |
-| `vault` | ssh_vault_status, ssh_vault_read, ssh_vault_list, ssh_vault_write |
-| `file_ops` | ssh_file_read, ssh_file_write, ssh_file_chmod, ssh_file_chown, ssh_file_stat, ssh_file_diff, ssh_file_patch, ssh_file_template |
+| `apache` | ssh_apache_status, ssh_apache_vhosts |
 | `user_management` | ssh_user_list, ssh_user_info, ssh_user_add, ssh_user_modify, ssh_user_delete, ssh_group_list, ssh_group_add, ssh_group_delete |
 | `storage` | ssh_storage_lsblk, ssh_storage_df, ssh_storage_mount, ssh_storage_umount, ssh_storage_lvm, ssh_storage_fdisk, ssh_storage_fstab |
 | `journald` | ssh_journal_query, ssh_journal_follow, ssh_journal_boots, ssh_journal_disk_usage |
-| `systemd_timers` | ssh_timer_list, ssh_timer_info, ssh_timer_enable, ssh_timer_disable, ssh_timer_trigger |
 | `security_modules` | ssh_selinux_status, ssh_selinux_booleans, ssh_apparmor_status, ssh_apparmor_profiles, ssh_security_audit |
 | `network_equipment` | ssh_net_equip_show_run, ssh_net_equip_show_interfaces, ssh_net_equip_show_routes, ssh_net_equip_show_arp, ssh_net_equip_show_version, ssh_net_equip_show_vlans, ssh_net_equip_config, ssh_net_equip_save |
-| `podman` | ssh_podman_ps, ssh_podman_logs, ssh_podman_inspect, ssh_podman_exec, ssh_podman_images, ssh_podman_compose |
 | `ldap` | ssh_ldap_search, ssh_ldap_user_info, ssh_ldap_group_members, ssh_ldap_add, ssh_ldap_modify |
 
 ### 🪟 Windows groups (13 groups, 74 tools)
@@ -425,16 +431,31 @@ tool_groups:
 | `windows_network` | ssh_win_net_ip, ssh_win_net_adapters, ssh_win_net_connections, ssh_win_net_routes, ssh_win_net_ping, ssh_win_net_dns |
 | `windows_process` | ssh_win_process_list, ssh_win_process_top, ssh_win_process_info, ssh_win_process_by_name, ssh_win_process_kill |
 
-### 🆕 New groups (v1.5.0 — 4 cross-platform groups, 19 tools)
+### 🆕 New groups (v1.5.0+ — 15 groups, 56 tools)
 
 | Group | Tools | Description |
 |-------|-------|-------------|
-| `diagnostics` | ssh_diagnose, ssh_incident_triage, ssh_compare_state | 🏥 Intelligent single-call diagnostics with symptom-based triage |
-| `runbooks` | ssh_runbook_list, ssh_runbook_execute, ssh_runbook_validate | 📋 YAML-defined multi-step operational procedures ([docs](config/runbooks/README.md)) |
-| `orchestration` | ssh_canary_exec, ssh_rolling_exec, ssh_fleet_diff | 🚀 Canary deployments, rolling updates, fleet-wide comparison |
-| `recording` | ssh_recording_start, ssh_recording_stop, ssh_recording_list, ssh_recording_replay, ssh_recording_verify | 🎥 Tamper-proof session recording (SOC2/HIPAA/PCI-DSS) |
-| `drift` | ssh_env_snapshot, ssh_env_diff, ssh_env_drift | 📊 Environment state capture and drift detection |
-| `security_scan` | ssh_sbom_generate, ssh_vuln_scan, ssh_compliance_check | 🛡️ SBOM, vulnerability scanning, CIS compliance checks |
+| `diagnostics` | ssh_diagnose, ssh_incident_triage, ssh_compare_state | Intelligent single-call diagnostics with symptom-based triage |
+| `runbooks` | ssh_runbook_list, ssh_runbook_execute, ssh_runbook_validate | YAML-defined multi-step operational procedures ([docs](config/runbooks/README.md)) |
+| `orchestration` | ssh_canary_exec, ssh_rolling_exec, ssh_fleet_diff | Canary deployments, rolling updates, fleet-wide comparison |
+| `recording` | ssh_recording_start, ssh_recording_stop, ssh_recording_list, ssh_recording_replay, ssh_recording_verify | Tamper-proof session recording (SOC2/HIPAA/PCI-DSS) |
+| `drift` | ssh_env_snapshot, ssh_env_diff, ssh_env_drift | Environment state capture and drift detection |
+| `security_scan` | ssh_sbom_generate, ssh_vuln_scan, ssh_compliance_check | SBOM, vulnerability scanning, CIS compliance checks |
+| `performance` | ssh_perf_trace, ssh_io_trace, ssh_latency_test, ssh_benchmark | Performance profiling, I/O tracing, benchmarks |
+| `container_logs` | ssh_container_log_search, ssh_container_log_stats, ssh_container_events, ssh_container_health_history | Container log analysis and health tracking |
+| `network_security` | ssh_port_scan, ssh_ssl_audit, ssh_network_capture, ssh_fail2ban_status | Port scanning, SSL audit, traffic capture, fail2ban |
+| `compliance` | ssh_cis_benchmark, ssh_stig_check, ssh_compliance_score, ssh_compliance_report | CIS/STIG benchmarks and compliance reporting |
+| `cloud` | ssh_aws_cli, ssh_cloud_metadata, ssh_cloud_tags, ssh_cloud_cost | Cloud provider interaction |
+| `inventory` | ssh_discover_hosts, ssh_inventory_sync, ssh_host_tags | Host discovery and CMDB sync |
+| `multicloud` | ssh_multicloud_list, ssh_multicloud_sync, ssh_multicloud_compare | Multi-cloud resource management |
+| `alerting` | ssh_alert_check, ssh_alert_list, ssh_alert_set | Metric monitoring, threshold checking, alert rules |
+| `capacity` | ssh_capacity_collect, ssh_capacity_trend, ssh_capacity_predict | Capacity data collection, trending, prediction |
+| `incident` | ssh_incident_timeline, ssh_incident_correlate | Incident response timeline and log correlation |
+| `log_aggregation` | ssh_log_aggregate, ssh_log_search_multi, ssh_log_tail_multi | Cross-host log aggregation, search, tail |
+| `key_management` | ssh_key_generate, ssh_key_distribute, ssh_key_audit | SSH key generation, distribution, audit |
+| `chatops` | ssh_webhook_send, ssh_notify | Slack/Teams/webhook notifications |
+| `templates` | ssh_template_list, ssh_template_show, ssh_template_apply, ssh_template_validate, ssh_template_diff | Config template management |
+| `pty` | ssh_pty_exec, ssh_pty_interact, ssh_pty_resize | Interactive PTY sessions |
 
 ---
 

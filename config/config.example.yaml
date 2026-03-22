@@ -307,7 +307,7 @@ audit:
 # Enable or disable groups of tools to reduce the MCP context sent to the LLM.
 # By default, all groups are enabled. Set a group to false to disable it.
 #
-# Available groups (55 groups, 281 tools):
+# Available groups (57 groups, 337 tools):
 #   core          - ssh_exec, ssh_exec_multi, ssh_status, ssh_health, ssh_history, ssh_output_fetch
 #   config        - ssh_config_get, ssh_config_set
 #   file_transfer - ssh_upload, ssh_download, ssh_sync

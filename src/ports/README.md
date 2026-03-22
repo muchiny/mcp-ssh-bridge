@@ -20,7 +20,7 @@ ports/
 ```mermaid
 graph TB
     subgraph Adapters["🔌 Adapters (Implementations)"]
-        MCP["📡 mcp/tool_handlers/<br/>SshExecHandler, etc. (250 tools)"]
+        MCP["📡 mcp/tool_handlers/<br/>SshExecHandler, etc. (337 tools)"]
         PROMPTS["💬 mcp/prompts/<br/>SystemHealthPrompt, etc."]
         RESOURCES["📊 mcp/resources/<br/>MetricsResource, etc."]
         SSH["🔑 ssh/client.rs<br/>SshClient"]
@@ -105,7 +105,7 @@ classDiagram
     ToolHandler <|.. SshStatusHandler
     ToolHandler <|.. SshDockerPsHandler
 
-    note for ToolHandler "... and 278 more implementations (281 total across 55 groups)"
+    note for ToolHandler "... and 334 more implementations (337 total across 57 groups)"
 ```
 
 #### 🐧 Linux Groups (34 groups, 176 tools)
@@ -419,7 +419,7 @@ fn schema(&self) -> ToolSchema {
 
 ## 🏷️ ToolAnnotations (`registry.rs`)
 
-All 250 tools have `ToolAnnotations` metadata centralized in the `tool_annotations()` function in `registry.rs`. Annotations help MCP clients understand the safety level and expected behavior of each tool before execution.
+All 337 tools have `ToolAnnotations` metadata centralized in the `tool_annotations()` function in `registry.rs`. Annotations help MCP clients understand the safety level and expected behavior of each tool before execution.
 
 ### Annotation Levels
 

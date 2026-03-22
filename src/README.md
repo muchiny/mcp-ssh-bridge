@@ -108,7 +108,7 @@ src/
 │   ├── mod.rs              # Module exports
 │   ├── server.rs           # Main server
 │   ├── protocol.rs         # JSON-RPC types
-│   ├── registry.rs         # Tool registry (250 tools, 47 groups)
+│   ├── registry.rs         # Tool registry (337 tools, 57 groups)
 │   ├── prompt_registry.rs  # Prompt registry
 │   ├── resource_registry.rs # Resource registry
 │   ├── standard_tool.rs    # StandardTool trait + generic pipeline

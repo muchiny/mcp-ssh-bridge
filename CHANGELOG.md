@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-03-22
+
+### Summary
+
+**281 → 337 tools** | **55 → 57 groups** | **5697 tests** | 56 new tools across 21 new groups
+
+### Added
+
+- **Performance profiling** (`performance` group, 4 tools): perf_trace, io_trace, latency_test, benchmark
+- **Container log analysis** (`container_logs` group, 4 tools): container_log_search, container_log_stats, container_events, container_health_history
+- **Cron analysis** (`cron_analysis` group, 3 tools): cron_analyze, cron_history, at_jobs
+- **Network security** (`network_security` group, 4 tools): port_scan, ssl_audit, network_capture, fail2ban_status
+- **Compliance** (`compliance` group, 4 tools): cis_benchmark, stig_check, compliance_score, compliance_report
+- **Cloud** (`cloud` group, 4 tools): aws_cli, cloud_metadata, cloud_tags, cloud_cost
+- **Inventory** (`inventory` group, 3 tools): discover_hosts, inventory_sync, host_tags
+- **Multi-cloud** (`multicloud` group, 3 tools): multicloud_list, multicloud_sync, multicloud_compare
+- **Alerting** (`alerting` group, 3 tools): alert_check, alert_list, alert_set
+- **Capacity** (`capacity` group, 3 tools): capacity_collect, capacity_trend, capacity_predict
+- **Incident** (`incident` group, 2 tools): incident_timeline, incident_correlate
+- **Log aggregation** (`log_aggregation` group, 3 tools): log_aggregate, log_search_multi, log_tail_multi
+- **Key management** (`key_management` group, 3 tools): key_generate, key_distribute, key_audit
+- **ChatOps** (`chatops` group, 2 tools): webhook_send, notify
+- **Config templates** (`templates` group, 5 tools): template_list, template_show, template_apply, template_validate, template_diff
+- **Interactive PTY** (`pty` group, 3 tools): pty_exec, pty_interact, pty_resize
+- **Backup extensions**: backup_snapshot, backup_verify, backup_schedule (3 tools added to existing `backup` group)
+- **TSV post_process** on 5 tools (port_scan, log_aggregate, discover_hosts, sbom_generate, runbook_list) for ~30-40% token savings
+- **DXT packaging** for Claude Desktop extension
+- **MCP server card** (`.well-known/mcp/server-card.json`)
+
+### Changed
+
+- **Tool Count**: 281 → 337 tools
+- **Group Count**: 55 → 57 groups (42 Linux + 13 Windows + 2 cross-platform)
+- **Test Count**: 4782 → 5697 tests
+- Updated all documentation (README.md, CLAUDE.md, config.example.yaml, dxt/, server-card.json)
+- Log aggregation output now uses TSV format instead of key=value
+
 ## [1.5.0] - 2026-03-21
 
 ### 🎯 Summary
