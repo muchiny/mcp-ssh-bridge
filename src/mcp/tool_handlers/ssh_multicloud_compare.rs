@@ -1,0 +1,230 @@
+//! Handler for the `ssh_multicloud_compare` tool.
+//!
+//! Compares instances between two cloud providers via a remote host.
+
+use serde::Deserialize;
+
+use crate::config::HostConfig;
+use crate::domain::use_cases::multicloud::MulticloudCommandBuilder;
+use crate::error::Result;
+use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+
+#[derive(Debug, Deserialize)]
+pub struct SshMulticloudCompareArgs {
+    /// Target host name from configuration.
+    host: String,
+    /// First cloud provider: aws, gcp, or azure.
+    provider1: String,
+    /// Second cloud provider: aws, gcp, or azure.
+    provider2: String,
+    /// Override default command timeout in seconds.
+    #[serde(default)]
+    timeout_seconds: Option<u64>,
+    /// Maximum output characters before truncation.
+    #[serde(default)]
+    max_output: Option<u64>,
+    /// Save full output to a local file path.
+    #[serde(default)]
+    save_output: Option<String>,
+}
+
+impl_common_args!(SshMulticloudCompareArgs);
+
+pub struct MulticloudCompareTool;
+
+impl StandardTool for MulticloudCompareTool {
+    type Args = SshMulticloudCompareArgs;
+
+    const NAME: &'static str = "ssh_multicloud_compare";
+
+    const DESCRIPTION: &'static str = "Compare instances between two cloud providers via a \
+        remote host. Fetches instance lists from both providers and outputs them side by side \
+        for comparison. Supports AWS, GCP, and Azure.";
+
+    const SCHEMA: &'static str = r#"{
+                "type": "object",
+                "properties": {
+                    "host": {
+                        "type": "string",
+                        "description": "Host alias from config.yaml (use ssh_status to list available hosts)"
+                    },
+                    "provider1": {
+                        "type": "string",
+                        "description": "First cloud provider: aws, gcp, or azure",
+                        "enum": ["aws", "gcp", "azure"]
+                    },
+                    "provider2": {
+                        "type": "string",
+                        "description": "Second cloud provider: aws, gcp, or azure",
+                        "enum": ["aws", "gcp", "azure"]
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Override default command timeout in seconds",
+                        "minimum": 1
+                    },
+                    "max_output": {
+                        "type": "integer",
+                        "description": "Maximum output characters before truncation",
+                        "minimum": 100
+                    },
+                    "save_output": {
+                        "type": "string",
+                        "description": "Save full output to a local file path"
+                    }
+                },
+                "required": ["host", "provider1", "provider2"]
+            }"#;
+
+    fn validate(args: &SshMulticloudCompareArgs, _host_config: &HostConfig) -> Result<()> {
+        MulticloudCommandBuilder::validate_provider(&args.provider1)?;
+        MulticloudCommandBuilder::validate_provider(&args.provider2)?;
+        Ok(())
+    }
+
+    fn build_command(
+        args: &SshMulticloudCompareArgs,
+        _host_config: &HostConfig,
+    ) -> Result<String> {
+        Ok(MulticloudCommandBuilder::build_multicloud_compare_command(
+            &args.provider1,
+            &args.provider2,
+        ))
+    }
+}
+
+/// Handler for the `ssh_multicloud_compare` tool.
+pub type SshMulticloudCompareHandler = StandardToolHandler<MulticloudCompareTool>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::BridgeError;
+    use crate::ports::ToolHandler;
+    use crate::ports::mock::create_test_context;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_missing_arguments() {
+        let handler = SshMulticloudCompareHandler::new();
+        let ctx = create_test_context();
+        let result = handler.execute(None, &ctx).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpMissingParam { param } => assert_eq!(param, "arguments"),
+            e => panic!("Expected McpMissingParam, got: {e:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_unknown_host() {
+        let handler = SshMulticloudCompareHandler::new();
+        let ctx = create_test_context();
+        let result = handler
+            .execute(
+                Some(json!({"host": "nonexistent", "provider1": "aws", "provider2": "gcp"})),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::UnknownHost { host } => assert_eq!(host, "nonexistent"),
+            e => panic!("Expected UnknownHost, got: {e:?}"),
+        }
+    }
+
+    #[test]
+    fn test_schema() {
+        let handler = SshMulticloudCompareHandler::new();
+        assert_eq!(handler.name(), "ssh_multicloud_compare");
+        assert!(!handler.description().is_empty());
+        let schema = handler.schema();
+        assert_eq!(schema.name, "ssh_multicloud_compare");
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
+        let required = schema_json["required"].as_array().unwrap();
+        assert!(required.contains(&json!("host")));
+        assert!(required.contains(&json!("provider1")));
+        assert!(required.contains(&json!("provider2")));
+    }
+
+    #[test]
+    fn test_args_deserialization() {
+        let json = json!({
+            "host": "server1",
+            "provider1": "aws",
+            "provider2": "azure",
+            "timeout_seconds": 120,
+            "max_output": 100000,
+            "save_output": "/tmp/compare.json"
+        });
+        let args: SshMulticloudCompareArgs = serde_json::from_value(json).unwrap();
+        assert_eq!(args.host, "server1");
+        assert_eq!(args.provider1, "aws");
+        assert_eq!(args.provider2, "azure");
+        assert_eq!(args.timeout_seconds, Some(120));
+        assert_eq!(args.max_output, Some(100_000));
+        assert_eq!(args.save_output.as_deref(), Some("/tmp/compare.json"));
+    }
+
+    #[test]
+    fn test_args_minimal_deserialization() {
+        let json = json!({"host": "server1", "provider1": "aws", "provider2": "gcp"});
+        let args: SshMulticloudCompareArgs = serde_json::from_value(json).unwrap();
+        assert_eq!(args.host, "server1");
+        assert_eq!(args.provider1, "aws");
+        assert_eq!(args.provider2, "gcp");
+        assert!(args.timeout_seconds.is_none());
+        assert!(args.max_output.is_none());
+        assert!(args.save_output.is_none());
+    }
+
+    #[test]
+    fn test_schema_optional_fields() {
+        let handler = SshMulticloudCompareHandler::new();
+        let schema = handler.schema();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
+        let props = schema_json["properties"].as_object().unwrap();
+        assert!(props.contains_key("timeout_seconds"));
+        assert!(props.contains_key("max_output"));
+        assert!(props.contains_key("save_output"));
+    }
+
+    #[test]
+    fn test_args_debug() {
+        let json = json!({"host": "server1", "provider1": "aws", "provider2": "gcp"});
+        let args: SshMulticloudCompareArgs = serde_json::from_value(json).unwrap();
+        let debug_str = format!("{args:?}");
+        assert!(debug_str.contains("SshMulticloudCompareArgs"));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_json_type() {
+        let handler = SshMulticloudCompareHandler::new();
+        let ctx = create_test_context();
+        let result = handler
+            .execute(
+                Some(json!({"host": 123, "provider1": "aws", "provider2": "gcp"})),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(_) => {}
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
+
+    #[test]
+    fn test_schema_has_type_object() {
+        let handler = SshMulticloudCompareHandler::new();
+        let schema = handler.schema();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
+        assert_eq!(schema_json["type"], "object");
+    }
+
+    #[test]
+    fn test_description_not_empty() {
+        let handler = SshMulticloudCompareHandler::new();
+        assert!(handler.description().len() > 10);
+    }
+}

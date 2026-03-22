@@ -179,6 +179,35 @@ pub fn tool_group(tool_name: &str) -> &'static str {
         | "ssh_firewall_allow"
         | "ssh_firewall_deny" => "firewall",
         "ssh_cron_list" | "ssh_cron_add" | "ssh_cron_remove" => "cron",
+        "ssh_cron_analyze" | "ssh_cron_history" | "ssh_at_jobs" => "cron_analysis",
+        "ssh_perf_trace" | "ssh_io_trace" | "ssh_latency_test" | "ssh_benchmark" => "performance",
+        "ssh_container_log_search"
+        | "ssh_container_log_stats"
+        | "ssh_container_events"
+        | "ssh_container_health_history" => "container_logs",
+        "ssh_port_scan" | "ssh_ssl_audit" | "ssh_network_capture" | "ssh_fail2ban_status" => {
+            "network_security"
+        }
+        "ssh_cis_benchmark"
+        | "ssh_stig_check"
+        | "ssh_compliance_score"
+        | "ssh_compliance_report" => "compliance",
+        "ssh_alert_set" | "ssh_alert_list" | "ssh_alert_check" => "alerting",
+        "ssh_capacity_collect" | "ssh_capacity_trend" | "ssh_capacity_predict" => "capacity",
+        "ssh_incident_timeline" | "ssh_incident_correlate" => "incident",
+        "ssh_log_search_multi" | "ssh_log_aggregate" | "ssh_log_tail_multi" => "log_aggregation",
+        "ssh_key_generate" | "ssh_key_distribute" | "ssh_key_audit" => "key_management",
+        "ssh_backup_snapshot" | "ssh_backup_verify" | "ssh_backup_schedule" => "backup",
+        "ssh_webhook_send" | "ssh_notify" => "chatops",
+        "ssh_template_list"
+        | "ssh_template_show"
+        | "ssh_template_apply"
+        | "ssh_template_validate"
+        | "ssh_template_diff" => "templates",
+        "ssh_pty_exec" | "ssh_pty_interact" | "ssh_pty_resize" => "pty",
+        "ssh_aws_cli" | "ssh_cloud_metadata" | "ssh_cloud_tags" | "ssh_cloud_cost" => "cloud",
+        "ssh_discover_hosts" | "ssh_inventory_sync" | "ssh_host_tags" => "inventory",
+        "ssh_multicloud_list" | "ssh_multicloud_sync" | "ssh_multicloud_compare" => "multicloud",
         "ssh_cert_check" | "ssh_cert_info" | "ssh_cert_expiry" => "certificates",
         "ssh_nginx_status" | "ssh_nginx_test" | "ssh_nginx_reload" | "ssh_nginx_list_sites" => {
             "nginx"
@@ -431,6 +460,96 @@ pub fn tool_annotations(tool_name: &str) -> ToolAnnotations {
 
         // Cron read-only
         "ssh_cron_list" => ToolAnnotations::read_only("List Cron Jobs"),
+
+        // Cron Analysis read-only
+        "ssh_cron_analyze" => ToolAnnotations::read_only("Analyze Cron Jobs"),
+        "ssh_cron_history" => ToolAnnotations::read_only("Cron Execution History"),
+        "ssh_at_jobs" => ToolAnnotations::read_only("List At Jobs"),
+
+        // Performance read-only
+        "ssh_perf_trace" => ToolAnnotations::read_only("Performance Trace"),
+        "ssh_io_trace" => ToolAnnotations::read_only("I/O Trace"),
+        "ssh_latency_test" => ToolAnnotations::read_only("Latency Test"),
+        "ssh_benchmark" => ToolAnnotations::read_only("Performance Benchmark"),
+
+        // Container Logs read-only
+        "ssh_container_log_search" => ToolAnnotations::read_only("Search Container Logs"),
+        "ssh_container_log_stats" => ToolAnnotations::read_only("Container Log Stats"),
+        "ssh_container_events" => ToolAnnotations::read_only("Container Events"),
+        "ssh_container_health_history" => ToolAnnotations::read_only("Container Health History"),
+
+        // Network Security read-only
+        "ssh_port_scan" => ToolAnnotations::read_only("Port Scan"),
+        "ssh_ssl_audit" => ToolAnnotations::read_only("SSL/TLS Audit"),
+        "ssh_network_capture" => ToolAnnotations::read_only("Network Capture"),
+        "ssh_fail2ban_status" => ToolAnnotations::read_only("Fail2ban Status"),
+
+        // Compliance read-only
+        "ssh_cis_benchmark" => ToolAnnotations::read_only("CIS Benchmark"),
+        "ssh_stig_check" => ToolAnnotations::read_only("STIG Check"),
+        "ssh_compliance_score" => ToolAnnotations::read_only("Compliance Score"),
+        "ssh_compliance_report" => ToolAnnotations::read_only("Compliance Report"),
+
+        // Alerting
+        "ssh_alert_set" => ToolAnnotations::read_only("Alert Set"),
+        "ssh_alert_list" => ToolAnnotations::read_only("Alert List"),
+        "ssh_alert_check" => ToolAnnotations::read_only("Alert Check"),
+
+        // Capacity read-only
+        "ssh_capacity_collect" => ToolAnnotations::read_only("Capacity Collect"),
+        "ssh_capacity_trend" => ToolAnnotations::read_only("Capacity Trend"),
+        "ssh_capacity_predict" => ToolAnnotations::read_only("Capacity Predict"),
+
+        // Incident read-only
+        "ssh_incident_timeline" => ToolAnnotations::read_only("Incident Timeline"),
+        "ssh_incident_correlate" => ToolAnnotations::read_only("Incident Correlate"),
+
+        // Log Aggregation read-only
+        "ssh_log_search_multi" => ToolAnnotations::read_only("Log Search Multi"),
+        "ssh_log_aggregate" => ToolAnnotations::read_only("Log Aggregate"),
+        "ssh_log_tail_multi" => ToolAnnotations::read_only("Log Tail Multi"),
+
+        // Key Management
+        "ssh_key_generate" => ToolAnnotations::mutating("Generate SSH Key"),
+        "ssh_key_distribute" => ToolAnnotations::mutating("Distribute SSH Key"),
+        "ssh_key_audit" => ToolAnnotations::read_only("SSH Key Audit"),
+
+        // Backup Enhanced
+        "ssh_backup_snapshot" => ToolAnnotations::mutating("Backup Snapshot"),
+        "ssh_backup_verify" => ToolAnnotations::read_only("Backup Verify"),
+        "ssh_backup_schedule" => ToolAnnotations::mutating("Backup Schedule"),
+
+        // ChatOps
+        "ssh_webhook_send" => ToolAnnotations::mutating("Webhook Send"),
+        "ssh_notify" => ToolAnnotations::mutating("Notify"),
+
+        // Config Templates
+        "ssh_template_list" => ToolAnnotations::read_only("Template List"),
+        "ssh_template_show" => ToolAnnotations::read_only("Template Show"),
+        "ssh_template_apply" => ToolAnnotations::destructive("Template Apply"),
+        "ssh_template_validate" => ToolAnnotations::read_only("Template Validate"),
+        "ssh_template_diff" => ToolAnnotations::read_only("Template Diff"),
+
+        // Interactive PTY
+        "ssh_pty_exec" => ToolAnnotations::mutating("PTY Execute"),
+        "ssh_pty_interact" => ToolAnnotations::mutating("PTY Interact"),
+        "ssh_pty_resize" => ToolAnnotations::read_only("PTY Resize"),
+
+        // Cloud read-only
+        "ssh_aws_cli" => ToolAnnotations::read_only("AWS CLI"),
+        "ssh_cloud_metadata" => ToolAnnotations::read_only("Cloud Metadata"),
+        "ssh_cloud_tags" => ToolAnnotations::read_only("Cloud Tags"),
+        "ssh_cloud_cost" => ToolAnnotations::read_only("Cloud Cost"),
+
+        // Inventory
+        "ssh_discover_hosts" => ToolAnnotations::read_only("Discover Hosts"),
+        "ssh_inventory_sync" => ToolAnnotations::read_only("Inventory Sync"),
+        "ssh_host_tags" => ToolAnnotations::mutating("Host Tags"),
+
+        // Multi-cloud read-only
+        "ssh_multicloud_list" => ToolAnnotations::read_only("Multi-cloud List"),
+        "ssh_multicloud_sync" => ToolAnnotations::read_only("Multi-cloud Sync"),
+        "ssh_multicloud_compare" => ToolAnnotations::read_only("Multi-cloud Compare"),
 
         // Certificates read-only
         "ssh_cert_check" => ToolAnnotations::read_only("Check Remote Certificate"),
@@ -868,6 +987,9 @@ pub fn create_default_registry() -> ToolRegistry {
 #[allow(clippy::too_many_lines, clippy::large_stack_arrays)]
 pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry {
     use super::tool_handlers::{
+        SshAlertCheckHandler,
+        SshAlertListHandler,
+        SshAlertSetHandler,
         SshApacheStatusHandler,
         SshApacheVhostsHandler,
         SshAdComputerListHandler,
@@ -882,19 +1004,41 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshBackupCreateHandler,
         SshBackupListHandler,
         SshBackupRestoreHandler,
+        SshAtJobsHandler,
+        SshAwsCliHandler,
+        SshBackupScheduleHandler,
+        SshBackupSnapshotHandler,
+        SshBackupVerifyHandler,
+        SshBenchmarkHandler,
+        SshCapacityCollectHandler,
+        SshCapacityPredictHandler,
+        SshCapacityTrendHandler,
         SshCanaryExecHandler,
         SshComplianceCheckHandler,
         SshCertCheckHandler,
         SshCertExpiryHandler,
         SshCertInfoHandler,
+        SshCisBenchmarkHandler,
+        SshCloudCostHandler,
+        SshCloudMetadataHandler,
+        SshCloudTagsHandler,
+        SshComplianceReportHandler,
+        SshComplianceScoreHandler,
         SshConfigGetHandler,
         SshConfigSetHandler,
+        SshContainerEventsHandler,
+        SshContainerHealthHistoryHandler,
+        SshContainerLogSearchHandler,
+        SshContainerLogStatsHandler,
         SshCronAddHandler,
+        SshCronAnalyzeHandler,
+        SshCronHistoryHandler,
         SshCronListHandler,
         SshCronRemoveHandler,
         SshDbDumpHandler,
         SshDbQueryHandler,
         SshDbRestoreHandler,
+        SshDiscoverHostsHandler,
         SshDiskUsageHandler,
         SshDockerComposeHandler,
         SshDockerExecHandler,
@@ -917,6 +1061,7 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshEsxiVmPowerHandler,
         SshExecHandler,
         SshExecMultiHandler,
+        SshFail2banStatusHandler,
         SshFileChmodHandler,
         SshFileChownHandler,
         SshFileReadHandler,
@@ -939,6 +1084,12 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshGitPullHandler,
         SshGitStatusHandler,
         SshHealthHandler,
+        SshHostTagsHandler,
+        SshIncidentCorrelateHandler,
+        SshIncidentTimelineHandler,
+        SshKeyAuditHandler,
+        SshKeyDistributeHandler,
+        SshKeyGenerateHandler,
         SshHelmHistoryHandler,
         SshHelmInstallHandler,
         SshHelmListHandler,
@@ -947,6 +1098,8 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshHelmUninstallHandler,
         SshHelmUpgradeHandler,
         SshHistoryHandler,
+        SshInventorySyncHandler,
+        SshIoTraceHandler,
         SshJournalBootsHandler,
         SshJournalDiskUsageHandler,
         SshJournalFollowHandler,
@@ -975,7 +1128,11 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshK8sRolloutHandler,
         SshK8sScaleHandler,
         SshK8sTopHandler,
+        SshLatencyTestHandler,
         SshLetsencryptStatusHandler,
+        SshLogAggregateHandler,
+        SshLogSearchMultiHandler,
+        SshLogTailMultiHandler,
         SshLdapAddHandler,
         SshLdapGroupMembersHandler,
         SshLdapModifyHandler,
@@ -983,6 +1140,9 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshLdapUserInfoHandler,
         SshLsHandler,
         SshMongodbStatusHandler,
+        SshMulticloudCompareHandler,
+        SshMulticloudListHandler,
+        SshMulticloudSyncHandler,
         SshMysqlQueryHandler,
         SshMysqlStatusHandler,
         SshMetricsHandler,
@@ -997,15 +1157,18 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshNetEquipShowVlansHandler,
         SshNetConnectionsHandler,
         SshNetDnsHandler,
+        SshNetworkCaptureHandler,
         SshNetInterfacesHandler,
         SshNetPingHandler,
         SshNetRoutesHandler,
         SshNetTracerouteHandler,
         SshNginxListSitesHandler,
+        SshNotifyHandler,
         SshNginxReloadHandler,
         SshNginxStatusHandler,
         SshNginxTestHandler,
         SshOutputFetchHandler,
+        SshPerfTraceHandler,
         SshPostgresqlQueryHandler,
         SshPostgresqlStatusHandler,
         SshPodmanComposeHandler,
@@ -1013,6 +1176,10 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshPodmanImagesHandler,
         SshPodmanInspectHandler,
         SshPodmanLogsHandler,
+        SshPortScanHandler,
+        SshPtyExecHandler,
+        SshPtyInteractHandler,
+        SshPtyResizeHandler,
         SshPodmanPsHandler,
         SshPkgInstallHandler,
         SshPkgListHandler,
@@ -1060,6 +1227,8 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshSecurityAuditHandler,
         SshSelinuxBooleansHandler,
         SshSelinuxStatusHandler,
+        SshSslAuditHandler,
+        SshStigCheckHandler,
         SshServiceDaemonReloadHandler,
         SshServiceDisableHandler,
         SshServiceEnableHandler,
@@ -1083,6 +1252,11 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshStorageUmountHandler,
         SshSyncHandler,
         SshTailHandler,
+        SshTemplateApplyHandler,
+        SshTemplateDiffHandler,
+        SshTemplateListHandler,
+        SshTemplateShowHandler,
+        SshTemplateValidateHandler,
         SshTerraformApplyHandler,
         SshTimerDisableHandler,
         SshTimerEnableHandler,
@@ -1106,6 +1280,7 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshVaultReadHandler,
         SshVaultStatusHandler,
         SshVaultWriteHandler,
+        SshWebhookSendHandler,
         SshWinDiskUsageHandler,
         SshWinEventExportHandler,
         SshWinEventLogsHandler,
@@ -1277,6 +1452,79 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshCronListHandler::new()),
         Arc::new(SshCronAddHandler::new()),
         Arc::new(SshCronRemoveHandler::new()),
+        // Cron Analysis
+        Arc::new(SshCronAnalyzeHandler::new()),
+        Arc::new(SshCronHistoryHandler::new()),
+        Arc::new(SshAtJobsHandler::new()),
+        // Performance Profiling
+        Arc::new(SshPerfTraceHandler::new()),
+        Arc::new(SshIoTraceHandler::new()),
+        Arc::new(SshLatencyTestHandler::new()),
+        Arc::new(SshBenchmarkHandler::new()),
+        // Container Log Analysis
+        Arc::new(SshContainerLogSearchHandler::new()),
+        Arc::new(SshContainerLogStatsHandler::new()),
+        Arc::new(SshContainerEventsHandler::new()),
+        Arc::new(SshContainerHealthHistoryHandler::new()),
+        // Network Security
+        Arc::new(SshPortScanHandler::new()),
+        Arc::new(SshSslAuditHandler::new()),
+        Arc::new(SshNetworkCaptureHandler::new()),
+        Arc::new(SshFail2banStatusHandler::new()),
+        // Compliance
+        Arc::new(SshCisBenchmarkHandler::new()),
+        Arc::new(SshStigCheckHandler::new()),
+        Arc::new(SshComplianceScoreHandler::new()),
+        Arc::new(SshComplianceReportHandler::new()),
+        // Cloud
+        Arc::new(SshAwsCliHandler::new()),
+        Arc::new(SshCloudMetadataHandler::new()),
+        Arc::new(SshCloudTagsHandler::new()),
+        Arc::new(SshCloudCostHandler::new()),
+        // Inventory
+        Arc::new(SshDiscoverHostsHandler::new()),
+        Arc::new(SshInventorySyncHandler::new()),
+        Arc::new(SshHostTagsHandler::new()),
+        // Multi-cloud
+        Arc::new(SshMulticloudListHandler::new()),
+        Arc::new(SshMulticloudSyncHandler::new()),
+        Arc::new(SshMulticloudCompareHandler::new()),
+        // Alerting
+        Arc::new(SshAlertSetHandler::new()),
+        Arc::new(SshAlertListHandler::new()),
+        Arc::new(SshAlertCheckHandler::new()),
+        // Capacity
+        Arc::new(SshCapacityCollectHandler::new()),
+        Arc::new(SshCapacityTrendHandler::new()),
+        Arc::new(SshCapacityPredictHandler::new()),
+        // Incident
+        Arc::new(SshIncidentTimelineHandler::new()),
+        Arc::new(SshIncidentCorrelateHandler::new()),
+        // Log Aggregation
+        Arc::new(SshLogSearchMultiHandler::new()),
+        Arc::new(SshLogAggregateHandler::new()),
+        Arc::new(SshLogTailMultiHandler::new()),
+        // Key Management
+        Arc::new(SshKeyGenerateHandler::new()),
+        Arc::new(SshKeyDistributeHandler::new()),
+        Arc::new(SshKeyAuditHandler::new()),
+        // Backup Enhanced
+        Arc::new(SshBackupSnapshotHandler::new()),
+        Arc::new(SshBackupVerifyHandler::new()),
+        Arc::new(SshBackupScheduleHandler::new()),
+        // ChatOps
+        Arc::new(SshWebhookSendHandler::new()),
+        Arc::new(SshNotifyHandler::new()),
+        // Config Templates
+        Arc::new(SshTemplateListHandler::new()),
+        Arc::new(SshTemplateShowHandler::new()),
+        Arc::new(SshTemplateApplyHandler::new()),
+        Arc::new(SshTemplateValidateHandler::new()),
+        Arc::new(SshTemplateDiffHandler::new()),
+        // Interactive PTY
+        Arc::new(SshPtyExecHandler::new()),
+        Arc::new(SshPtyInteractHandler::new()),
+        Arc::new(SshPtyResizeHandler::new()),
         // Certificates
         Arc::new(SshCertCheckHandler::new()),
         Arc::new(SshCertInfoHandler::new()),
@@ -1580,7 +1828,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn test_default_registry_has_all_tools() {
         let registry = create_default_registry();
-        assert_eq!(registry.len(), 281);
+        assert_eq!(registry.len(), 337);
         // Core
         assert!(registry.get("ssh_exec").is_some());
         assert!(registry.get("ssh_exec_multi").is_some());
@@ -2148,7 +2396,7 @@ mod tests {
     fn test_filtered_registry_all_enabled() {
         let config = ToolGroupsConfig::default();
         let registry = create_filtered_registry(&config);
-        assert_eq!(registry.len(), 281);
+        assert_eq!(registry.len(), 337);
     }
 
     #[test]
@@ -2159,7 +2407,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 4 session tools = 246
-        assert_eq!(registry.len(), 277);
+        assert_eq!(registry.len(), 333);
         assert!(registry.get("ssh_session_create").is_none());
         assert!(registry.get("ssh_session_exec").is_none());
         assert!(registry.get("ssh_session_list").is_none());
@@ -2176,7 +2424,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 4 monitoring tools  = 246
-        assert_eq!(registry.len(), 277);
+        assert_eq!(registry.len(), 333);
         assert!(registry.get("ssh_metrics").is_none());
         assert!(registry.get("ssh_metrics_multi").is_none());
         assert!(registry.get("ssh_tail").is_none());
@@ -2190,7 +2438,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 3 file transfer tools  = 247
-        assert_eq!(registry.len(), 278);
+        assert_eq!(registry.len(), 334);
         assert!(registry.get("ssh_upload").is_none());
         assert!(registry.get("ssh_download").is_none());
         assert!(registry.get("ssh_sync").is_none());
@@ -2206,7 +2454,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus sessions(4) + monitoring(4) + file_transfer(3) = 270
-        assert_eq!(registry.len(), 270);
+        assert_eq!(registry.len(), 326);
         assert!(registry.get("ssh_exec").is_some());
         assert!(registry.get("ssh_exec_multi").is_some());
         assert!(registry.get("ssh_status").is_some());
@@ -2223,7 +2471,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // All groups enabled (unlisted default to true)
-        assert_eq!(registry.len(), 281);
+        assert_eq!(registry.len(), 337);
     }
 
     #[test]
@@ -2234,7 +2482,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 3 tunnel tools  = 247
-        assert_eq!(registry.len(), 278);
+        assert_eq!(registry.len(), 334);
         assert!(registry.get("ssh_tunnel_create").is_none());
         assert!(registry.get("ssh_tunnel_list").is_none());
         assert!(registry.get("ssh_tunnel_close").is_none());
@@ -2250,7 +2498,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 16 kubernetes tools (9 k8s + 7 helm)  = 234
-        assert_eq!(registry.len(), 265);
+        assert_eq!(registry.len(), 321);
         // kubectl tools removed
         assert!(registry.get("ssh_k8s_get").is_none());
         assert!(registry.get("ssh_k8s_logs").is_none());
@@ -2282,7 +2530,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 3 ansible tools  = 247
-        assert_eq!(registry.len(), 278);
+        assert_eq!(registry.len(), 334);
         assert!(registry.get("ssh_ansible_playbook").is_none());
         assert!(registry.get("ssh_ansible_inventory").is_none());
         assert!(registry.get("ssh_ansible_adhoc").is_none());
@@ -2299,7 +2547,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 11 docker tools  = 270
-        assert_eq!(registry.len(), 270);
+        assert_eq!(registry.len(), 326);
         assert!(registry.get("ssh_docker_ps").is_none());
         assert!(registry.get("ssh_docker_logs").is_none());
         assert!(registry.get("ssh_docker_inspect").is_none());
@@ -2324,7 +2572,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 7 esxi tools  = 243
-        assert_eq!(registry.len(), 274);
+        assert_eq!(registry.len(), 330);
         assert!(registry.get("ssh_esxi_vm_list").is_none());
         assert!(registry.get("ssh_esxi_vm_info").is_none());
         assert!(registry.get("ssh_esxi_vm_power").is_none());
@@ -2346,7 +2594,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 7 git tools  = 243
-        assert_eq!(registry.len(), 274);
+        assert_eq!(registry.len(), 330);
         assert!(registry.get("ssh_git_status").is_none());
         assert!(registry.get("ssh_git_log").is_none());
         assert!(registry.get("ssh_git_diff").is_none());
@@ -2367,7 +2615,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 9 systemd tools  = 272
-        assert_eq!(registry.len(), 272);
+        assert_eq!(registry.len(), 328);
         assert!(registry.get("ssh_service_status").is_none());
         assert!(registry.get("ssh_service_start").is_none());
         assert!(registry.get("ssh_service_stop").is_none());
@@ -2388,7 +2636,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 6 network tools  = 244
-        assert_eq!(registry.len(), 275);
+        assert_eq!(registry.len(), 331);
         assert!(registry.get("ssh_net_connections").is_none());
         assert!(registry.get("ssh_net_interfaces").is_none());
         assert!(registry.get("ssh_net_routes").is_none());
@@ -2406,7 +2654,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 3 process tools  = 247
-        assert_eq!(registry.len(), 278);
+        assert_eq!(registry.len(), 334);
         assert!(registry.get("ssh_process_list").is_none());
         assert!(registry.get("ssh_process_kill").is_none());
         assert!(registry.get("ssh_process_top").is_none());
@@ -2421,7 +2669,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 5 package tools  = 276
-        assert_eq!(registry.len(), 276);
+        assert_eq!(registry.len(), 332);
         assert!(registry.get("ssh_pkg_list").is_none());
         assert!(registry.get("ssh_pkg_search").is_none());
         assert!(registry.get("ssh_pkg_install").is_none());
@@ -2438,7 +2686,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 4 firewall tools  = 246
-        assert_eq!(registry.len(), 277);
+        assert_eq!(registry.len(), 333);
         assert!(registry.get("ssh_firewall_status").is_none());
         assert!(registry.get("ssh_firewall_list").is_none());
         assert!(registry.get("ssh_firewall_allow").is_none());
@@ -2454,7 +2702,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 3 cron tools  = 247
-        assert_eq!(registry.len(), 278);
+        assert_eq!(registry.len(), 334);
         assert!(registry.get("ssh_cron_list").is_none());
         assert!(registry.get("ssh_cron_add").is_none());
         assert!(registry.get("ssh_cron_remove").is_none());
@@ -2469,7 +2717,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 3 certificate tools  = 247
-        assert_eq!(registry.len(), 278);
+        assert_eq!(registry.len(), 334);
         assert!(registry.get("ssh_cert_check").is_none());
         assert!(registry.get("ssh_cert_info").is_none());
         assert!(registry.get("ssh_cert_expiry").is_none());
@@ -2484,7 +2732,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 4 nginx tools  = 246
-        assert_eq!(registry.len(), 277);
+        assert_eq!(registry.len(), 333);
         assert!(registry.get("ssh_nginx_status").is_none());
         assert!(registry.get("ssh_nginx_test").is_none());
         assert!(registry.get("ssh_nginx_reload").is_none());
@@ -2500,7 +2748,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 3 redis tools  = 247
-        assert_eq!(registry.len(), 278);
+        assert_eq!(registry.len(), 334);
         assert!(registry.get("ssh_redis_info").is_none());
         assert!(registry.get("ssh_redis_cli").is_none());
         assert!(registry.get("ssh_redis_keys").is_none());
@@ -2515,7 +2763,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 5 terraform tools  = 276
-        assert_eq!(registry.len(), 276);
+        assert_eq!(registry.len(), 332);
         assert!(registry.get("ssh_terraform_init").is_none());
         assert!(registry.get("ssh_terraform_plan").is_none());
         assert!(registry.get("ssh_terraform_apply").is_none());
@@ -2532,7 +2780,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 4 vault tools  = 246
-        assert_eq!(registry.len(), 277);
+        assert_eq!(registry.len(), 333);
         assert!(registry.get("ssh_vault_status").is_none());
         assert!(registry.get("ssh_vault_read").is_none());
         assert!(registry.get("ssh_vault_list").is_none());
@@ -2548,7 +2796,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 2 config tools  = 248
-        assert_eq!(registry.len(), 279);
+        assert_eq!(registry.len(), 335);
         assert!(registry.get("ssh_config_get").is_none());
         assert!(registry.get("ssh_config_set").is_none());
         assert!(registry.get("ssh_exec").is_some());
@@ -2564,7 +2812,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 8 windows_services tools  = 242
-        assert_eq!(registry.len(), 273);
+        assert_eq!(registry.len(), 329);
         assert!(registry.get("ssh_win_service_status").is_none());
         assert!(registry.get("ssh_win_service_start").is_none());
         assert!(registry.get("ssh_win_service_stop").is_none());
@@ -2584,7 +2832,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 5 windows_events tools  = 276
-        assert_eq!(registry.len(), 276);
+        assert_eq!(registry.len(), 332);
         assert!(registry.get("ssh_win_event_logs").is_none());
         assert!(registry.get("ssh_win_event_query").is_none());
         assert!(registry.get("ssh_win_event_sources").is_none());
@@ -2601,7 +2849,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 6 active_directory tools  = 244
-        assert_eq!(registry.len(), 275);
+        assert_eq!(registry.len(), 331);
         assert!(registry.get("ssh_ad_user_list").is_none());
         assert!(registry.get("ssh_ad_user_info").is_none());
         assert!(registry.get("ssh_ad_group_list").is_none());
@@ -2619,7 +2867,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 5 scheduled_tasks tools  = 276
-        assert_eq!(registry.len(), 276);
+        assert_eq!(registry.len(), 332);
         assert!(registry.get("ssh_schtask_list").is_none());
         assert!(registry.get("ssh_schtask_info").is_none());
         assert!(registry.get("ssh_schtask_run").is_none());
@@ -2636,7 +2884,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 5 windows_firewall tools  = 276
-        assert_eq!(registry.len(), 276);
+        assert_eq!(registry.len(), 332);
         assert!(registry.get("ssh_win_firewall_status").is_none());
         assert!(registry.get("ssh_win_firewall_list").is_none());
         assert!(registry.get("ssh_win_firewall_allow").is_none());
@@ -2653,7 +2901,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 6 iis tools  = 244
-        assert_eq!(registry.len(), 275);
+        assert_eq!(registry.len(), 331);
         assert!(registry.get("ssh_iis_status").is_none());
         assert!(registry.get("ssh_iis_list_sites").is_none());
         assert!(registry.get("ssh_iis_list_pools").is_none());
@@ -2671,7 +2919,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 5 windows_updates tools  = 276
-        assert_eq!(registry.len(), 276);
+        assert_eq!(registry.len(), 332);
         assert!(registry.get("ssh_win_update_list").is_none());
         assert!(registry.get("ssh_win_update_history").is_none());
         assert!(registry.get("ssh_win_update_install").is_none());
@@ -2688,7 +2936,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 6 windows_perf tools  = 244
-        assert_eq!(registry.len(), 275);
+        assert_eq!(registry.len(), 331);
         assert!(registry.get("ssh_win_perf_cpu").is_none());
         assert!(registry.get("ssh_win_perf_memory").is_none());
         assert!(registry.get("ssh_win_perf_disk").is_none());
@@ -2706,7 +2954,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 8 hyperv tools  = 242
-        assert_eq!(registry.len(), 273);
+        assert_eq!(registry.len(), 329);
         assert!(registry.get("ssh_hyperv_vm_list").is_none());
         assert!(registry.get("ssh_hyperv_vm_info").is_none());
         assert!(registry.get("ssh_hyperv_vm_start").is_none());
@@ -2726,7 +2974,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 5 windows_registry tools  = 276
-        assert_eq!(registry.len(), 276);
+        assert_eq!(registry.len(), 332);
         assert!(registry.get("ssh_reg_query").is_none());
         assert!(registry.get("ssh_reg_set").is_none());
         assert!(registry.get("ssh_reg_list").is_none());
@@ -2743,7 +2991,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 4 windows_features tools  = 246
-        assert_eq!(registry.len(), 277);
+        assert_eq!(registry.len(), 333);
         assert!(registry.get("ssh_win_feature_list").is_none());
         assert!(registry.get("ssh_win_feature_info").is_none());
         assert!(registry.get("ssh_win_feature_install").is_none());
@@ -2759,7 +3007,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 6 windows_network tools  = 244
-        assert_eq!(registry.len(), 275);
+        assert_eq!(registry.len(), 331);
         assert!(registry.get("ssh_win_net_adapters").is_none());
         assert!(registry.get("ssh_win_net_ip").is_none());
         assert!(registry.get("ssh_win_net_routes").is_none());
@@ -2777,7 +3025,7 @@ mod tests {
 
         let registry = create_filtered_registry(&config);
         // 281 total minus 5 windows_process tools  = 276
-        assert_eq!(registry.len(), 276);
+        assert_eq!(registry.len(), 332);
         assert!(registry.get("ssh_win_process_list").is_none());
         assert!(registry.get("ssh_win_process_info").is_none());
         assert!(registry.get("ssh_win_process_kill").is_none());
@@ -3041,6 +3289,22 @@ mod tests {
             "orchestration",
             "drift",
             "security_scan",
+            "cron_analysis",
+            "performance",
+            "container_logs",
+            "network_security",
+            "compliance",
+            "cloud",
+            "inventory",
+            "multicloud",
+            "alerting",
+            "capacity",
+            "incident",
+            "log_aggregation",
+            "key_management",
+            "chatops",
+            "templates",
+            "pty",
         ];
         let registry = create_default_registry();
         for tool in registry.list_tools() {

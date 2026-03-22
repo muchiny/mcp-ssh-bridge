@@ -9,6 +9,7 @@ use crate::config::HostConfig;
 use crate::domain::use_cases::sbom::SbomCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{impl_common_args, StandardTool, StandardToolHandler};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshSbomGenerateArgs {
@@ -64,6 +65,47 @@ impl StandardTool for SbomGenerateTool {
         _host_config: &HostConfig,
     ) -> Result<String> {
         Ok(SbomCommandBuilder::build_sbom_command())
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        _args: &SshSbomGenerateArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        // Extract the TSV package list between === INSTALLED PACKAGES === and next ===
+        // dpkg-query already outputs tab-separated: Package\tVersion\tArch\tStatus
+        let mut in_packages = false;
+        let mut tsv = String::from("PACKAGE\tVERSION\tARCH\tSTATUS\n");
+        let mut other_sections = String::new();
+        for line in output.lines() {
+            if line.contains("=== INSTALLED PACKAGES ===") {
+                in_packages = true;
+                continue;
+            }
+            if line.starts_with("=== ") {
+                in_packages = false;
+                other_sections.push_str(line);
+                other_sections.push('\n');
+                continue;
+            }
+            if in_packages && !line.trim().is_empty() {
+                tsv.push_str(line);
+                tsv.push('\n');
+            } else if !in_packages && !line.trim().is_empty() {
+                other_sections.push_str(line);
+                other_sections.push('\n');
+            }
+        }
+        if tsv.lines().count() <= 1 {
+            // No package data extracted — return original
+            return result;
+        }
+        // Append non-package sections after TSV
+        if !other_sections.is_empty() {
+            tsv.push_str("\n--- System Info ---\n");
+            tsv.push_str(&other_sections);
+        }
+        ToolCallResult::text(tsv)
     }
 }
 

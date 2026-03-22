@@ -14,7 +14,7 @@ JSON wrapping of command output adds token overhead through key repetition, esca
 
 ## Format by Category
 
-### Category A: Standard Command Output (~168 tools)
+### Category A: Standard Command Output (~220 tools)
 
 **Tools:** All `StandardToolHandler` tools without `post_process` override.
 **Examples:** `ssh_file_read`, `ssh_git_status`, `ssh_service_restart`, `ssh_k8s_logs`, etc.
