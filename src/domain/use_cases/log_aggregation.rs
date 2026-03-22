@@ -103,13 +103,13 @@ impl LogAggregationCommandBuilder {
     pub fn build_log_aggregate_command(log_files: Option<&str>) -> String {
         let files = log_files.unwrap_or(DEFAULT_LOG_FILES);
         format!(
-            "echo '=== Log Aggregation ===' && \
+            "printf 'FILE\\tTOTAL\\tERRORS\\tWARNINGS\\n' && \
              for f in {files}; do \
                if [ -f \"$f\" ]; then \
                  total=$(wc -l < \"$f\" 2>/dev/null || echo 0); \
                  errors=$(grep -ci 'error' \"$f\" 2>/dev/null || echo 0); \
                  warnings=$(grep -ci 'warn' \"$f\" 2>/dev/null || echo 0); \
-                 echo \"$f: total=$total errors=$errors warnings=$warnings\"; \
+                 printf '%s\\t%s\\t%s\\t%s\\n' \"$f\" \"$total\" \"$errors\" \"$warnings\"; \
                fi; \
              done"
         )
@@ -267,7 +267,8 @@ mod tests {
     #[test]
     fn test_aggregate_defaults() {
         let cmd = LogAggregationCommandBuilder::build_log_aggregate_command(None);
-        assert!(cmd.contains("Log Aggregation"));
+        assert!(cmd.contains("FILE"));
+        assert!(cmd.contains("TOTAL"));
         assert!(cmd.contains("wc -l"));
         assert!(cmd.contains("error"));
         assert!(cmd.contains("warn"));

@@ -55,20 +55,23 @@ impl ToolHandler for SshRunbookListHandler {
             return Ok(ToolCallResult::text("No runbooks found."));
         }
 
-        let mut output = format!("Available runbooks ({}):\n\n", all_runbooks.len());
-
+        // TSV format for token efficiency (Category B)
+        let mut output = String::from("NAME\tVERSION\tSTEPS\tPARAMS\tDESCRIPTION\n");
         for rb in &all_runbooks {
-            let _ = writeln!(output, "  {} (v{})", rb.name, rb.version);
-            let _ = writeln!(output, "    {}", rb.description);
-            let _ = writeln!(output, "    Steps: {}", rb.steps.len());
-            if !rb.params.is_empty() {
-                output.push_str("    Params:\n");
-                for (name, param) in &rb.params {
-                    let default = param.default.as_deref().unwrap_or("(required)");
-                    let _ = writeln!(output, "      - {name}: {} [default: {default}]", param.param_type);
-                }
-            }
-            output.push('\n');
+            let params = if rb.params.is_empty() {
+                String::from("-")
+            } else {
+                rb.params.keys().cloned().collect::<Vec<_>>().join(",")
+            };
+            let _ = writeln!(
+                output,
+                "{}\t{}\t{}\t{}\t{}",
+                rb.name,
+                rb.version,
+                rb.steps.len(),
+                params,
+                rb.description
+            );
         }
 
         Ok(ToolCallResult::text(output))

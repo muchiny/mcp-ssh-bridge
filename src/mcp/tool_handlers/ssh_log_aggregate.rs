@@ -9,6 +9,7 @@ use crate::config::OsType;
 use crate::domain::use_cases::log_aggregation::LogAggregationCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshLogAggregateArgs {
@@ -73,6 +74,18 @@ impl StandardTool for LogAggregateTool {
         Ok(LogAggregationCommandBuilder::build_log_aggregate_command(
             args.log_files.as_deref(),
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        _args: &SshLogAggregateArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        // Output is already TSV (FILE\tTOTAL\tERRORS\tWARNINGS) — parse for table
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        ToolCallResult::text(parsed.to_tsv())
     }
 }
 
@@ -213,7 +226,7 @@ mod tests {
             save_output: None,
         };
         let cmd = LogAggregateTool::build_command(&args, &test_host_config()).unwrap();
-        assert!(cmd.contains("Log Aggregation"));
+        assert!(cmd.contains("FILE"));
         assert!(cmd.contains("wc -l"));
     }
 

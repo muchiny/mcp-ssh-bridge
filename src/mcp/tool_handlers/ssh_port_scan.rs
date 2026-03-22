@@ -11,6 +11,7 @@ use crate::domain::use_cases::network_security::{
 };
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshPortScanArgs {
@@ -93,6 +94,18 @@ impl StandardTool for PortScanTool {
             args.target.as_deref(),
             args.ports.as_deref(),
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        _args: &SshPortScanArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        // ss/netstat output is columnar — convert to TSV for token efficiency
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        ToolCallResult::text(parsed.to_tsv())
     }
 }
 

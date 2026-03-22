@@ -9,6 +9,7 @@ use crate::config::OsType;
 use crate::domain::use_cases::inventory::InventoryCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshDiscoverHostsArgs {
@@ -92,6 +93,18 @@ impl StandardTool for DiscoverHostsTool {
             &args.network,
             args.method.as_deref(),
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        _args: &SshDiscoverHostsArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        // ip neigh / arp-scan produce columnar output — convert to TSV
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        ToolCallResult::text(parsed.to_tsv())
     }
 }
 
