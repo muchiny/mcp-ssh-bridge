@@ -4,7 +4,9 @@
 //! the business logic by coordinating between ports and domain entities.
 
 pub mod active_directory;
+pub mod alerting;
 pub mod ansible;
+pub mod capacity;
 pub mod certificate;
 pub mod cloud;
 pub mod compliance;
@@ -23,6 +25,7 @@ pub mod firewall;
 pub mod git;
 pub mod hyperv;
 pub mod iis;
+pub mod incident;
 pub mod inventory;
 pub mod journald;
 pub mod kubernetes;
