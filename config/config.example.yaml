@@ -274,12 +274,40 @@ audit:
   retain_days: 30
 
 # =============================================================================
-# TOOL GROUPS
+# 🎥 SESSION RECORDING (v1.5.0)
+# =============================================================================
+# Record all SSH sessions for compliance (SOC2, HIPAA, PCI-DSS) and audit.
+# Recordings are tamper-proof with hash-chain integrity verification.
+
+# recording:
+#   # Enable/disable session recording (default: false)
+#   enabled: false
+#
+#   # Directory to store recordings (default: ~/.local/share/mcp-ssh-bridge/recordings/)
+#   path: ~/.local/share/mcp-ssh-bridge/recordings/
+#
+#   # Recording format: "asciinema" (v2) or "json" (structured)
+#   format: asciinema
+#
+#   # Enable hash-chain integrity for tamper-proof recordings (default: true)
+#   hash_chain: true
+#
+#   # Environment variable containing the HMAC key for hash-chain (default: MCP_RECORDING_KEY)
+#   hash_key_env: MCP_RECORDING_KEY
+#
+#   # Maximum recording duration in seconds (default: 3600 = 1 hour)
+#   max_duration_seconds: 3600
+#
+#   # Automatically mask secrets in recordings (default: true)
+#   auto_mask_secrets: true
+
+# =============================================================================
+# 🔧 TOOL GROUPS
 # =============================================================================
 # Enable or disable groups of tools to reduce the MCP context sent to the LLM.
 # By default, all groups are enabled. Set a group to false to disable it.
 #
-# Available groups (38 groups, 197 tools):
+# Available groups (55 groups, 281 tools):
 #   core          - ssh_exec, ssh_exec_multi, ssh_status, ssh_health, ssh_history, ssh_output_fetch
 #   config        - ssh_config_get, ssh_config_set
 #   file_transfer - ssh_upload, ssh_download, ssh_sync
@@ -344,6 +372,17 @@ audit:
 #                      ssh_win_net_connections, ssh_win_net_ping, ssh_win_net_dns
 #   windows_process  - ssh_win_process_list, ssh_win_process_info, ssh_win_process_kill,
 #                      ssh_win_process_top, ssh_win_process_by_name
+#
+#   --- 🆕 New groups (v1.5.0) ---
+#   recording        - ssh_recording_start, ssh_recording_stop, ssh_recording_list,
+#                      ssh_recording_replay, ssh_recording_export
+#   diagnostics      - ssh_diagnose, ssh_incident_triage, ssh_compare_state
+#   runbooks         - ssh_runbook_list, ssh_runbook_execute, ssh_runbook_status,
+#                      ssh_runbook_validate
+#   orchestration    - ssh_orchestrate, ssh_fleet_diff, ssh_rolling_exec,
+#                      ssh_canary_exec
+#   drift            - ssh_env_snapshot, ssh_env_diff, ssh_env_drift
+#   security_scan    - ssh_sbom_generate, ssh_vuln_scan, ssh_compliance_check
 
 tool_groups:
   groups: {}
@@ -381,6 +420,13 @@ tool_groups:
     # windows_features: false   # Disable Windows Features tools (Get-WindowsFeature, etc.)
     # windows_network: false    # Disable Windows Network tools (Get-NetAdapter, etc.)
     # windows_process: false    # Disable Windows Process tools (Get-Process, etc.)
+    # --- 🆕 v1.5.0 groups ---
+    # recording: false           # Disable session recording tools
+    # diagnostics: false         # Disable intelligent diagnostics (ssh_diagnose, etc.)
+    # runbooks: false            # Disable runbook engine tools
+    # orchestration: false       # Disable multi-host orchestration (canary, rolling, etc.)
+    # drift: false               # Disable environment drift detection
+    # security_scan: false       # Disable SBOM & vulnerability scanning
 
 # =============================================================================
 # SSH CONFIG AUTO-DISCOVERY

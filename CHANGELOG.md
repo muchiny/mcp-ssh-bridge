@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-03-21
+
+### 🎯 Summary
+
+**262 → 281 tools** | **47 → 55 groups** | **4782 tests** | 10 major features implemented from the [research roadmap](RESEARCH-MISSING-FEATURES.md)
+
+### Added
+
+#### 🔒 Security
+
+- **Session Recording & Replay** (`recording` group, 5 tools): `ssh_recording_start`, `ssh_recording_stop`, `ssh_recording_list`, `ssh_recording_replay`, `ssh_recording_export` — Compliance-grade session recording with tamper-proof hash-chain integrity, asciinema v2 / JSON export, and automatic secret masking (SOC2, HIPAA, PCI-DSS)
+- **SBOM & Vulnerability Scanning** (`security_scan` group, 3 tools): `ssh_sbom_generate`, `ssh_vuln_scan`, `ssh_compliance_check` — Software Bill of Materials generation, CVE scanning against installed packages, and CIS/STIG compliance verification
+- **Advanced Secrets Detection**: Entropy-based detection (Shannon entropy) alongside regex patterns for catching unknown secret formats; configurable threshold, min-length, and whitelist
+
+#### 🏥 SRE Platform
+
+- **Intelligent Diagnostics** (`diagnostics` group, 3 tools): `ssh_diagnose`, `ssh_incident_triage`, `ssh_compare_state` — Single-call comprehensive host diagnostics (CPU, RAM, disk, load, top processes, failed services, recent errors, OOM kills), automated incident triage with log/metric/service correlation, and baseline state comparison
+- **Runbook Engine** (`runbooks` group, 4 tools): `ssh_runbook_list`, `ssh_runbook_execute`, `ssh_runbook_status`, `ssh_runbook_validate` — YAML-based runbook definitions with conditions, loops, rollback; built-in templates for common incidents (disk full, OOM, service crash, cert expiry); async execution via MCP Tasks
+
+#### 🚀 Orchestration
+
+- **Multi-Host Orchestration** (`orchestration` group, 4 tools): `ssh_orchestrate`, `ssh_fleet_diff`, `ssh_rolling_exec`, `ssh_canary_exec` — Advanced fan-out/fan-in workflows with serial/parallel/canary strategies, rolling execution with automatic rollback on failure, and cross-host result diffing
+
+#### 🔄 DevOps
+
+- **Environment Drift Detection** (`drift` group, 3 tools): `ssh_env_snapshot`, `ssh_env_diff`, `ssh_env_drift` — Full environment snapshots (packages, configs, services, users), cross-environment comparison, and desired-state drift detection
+- **File Diff & Patch**: `ssh_file_diff`, `ssh_file_patch`, `ssh_file_template`, `ssh_file_search` — Cross-host file comparison, patch application, Jinja2/Handlebars template rendering, and remote ripgrep with context
+
+#### 📦 Distribution
+
+- **MCP Server Cards**: `.well-known/mcp/server-card.json` for automated server discovery
+- **DXT Packaging**: One-click Claude Desktop installation package
+
+#### 🏗️ Infrastructure
+
+- **`session_recorder` field** added to `ToolContext` (`Option<Arc<SessionRecorder>>`) for optional recording integration across all tool handlers
+- **5 new domain builders**: `RecordingCommandBuilder`, `DiagnosticsCommandBuilder`, `RunbookCommandBuilder`, `OrchestrationCommandBuilder`, `DriftCommandBuilder`
+- **Recording configuration section** in `config.yaml`: `enabled`, `path`, `format`, `hash_chain`, `hash_key_env`, `max_duration_seconds`, `auto_mask_secrets`
+
+### Changed
+
+- **Tool Count**: 262 → 281 tools
+- **Group Count**: 47 → 55 groups (42 Linux + 13 Windows)
+- **Test Count**: ~4200 → 4782 tests
+- Updated `config.example.yaml` with recording configuration and 6 new tool groups
+- Updated all documentation to reflect new tool counts and features
+
 ## [2.1.0] - 2026-03-21
 
 ### Added

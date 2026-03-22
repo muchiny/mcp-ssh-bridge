@@ -11,6 +11,7 @@ domain/
 ├── 📄 output_cache.rs           → 📦 OutputCache for paginated output retrieval
 ├── 📄 output_truncator.rs       → ✂️ Head+tail output truncation
 ├── 📄 task_store.rs             → 📋 TaskStore for MCP Tasks async lifecycle (v1.1.0)
+├── 📄 runbook.rs                → 📓 Runbook engine (YAML parsing, template variables, built-in runbooks)
 └── 📂 use_cases/
     ├── 📄 mod.rs                → Use case exports
     ├── 📄 execute_command.rs    → Main UseCase
@@ -18,7 +19,7 @@ domain/
     ├── 📄 shell.rs              → 🐚 OsType, ShellType, shell::escape() (cross-platform foundation)
     ├── 📄 tunnel.rs             → TunnelManager
     │
-    │   ── 🐧 Linux Command Builders (27) ──
+    │   ── 🐧 Linux Command Builders (32) ──
     ├── 📄 database.rs           → DatabaseCommandBuilder
     ├── 📄 kubernetes.rs         → KubernetesCommandBuilder + HelmCommandBuilder
     ├── 📄 ansible.rs            → AnsibleCommandBuilder
@@ -43,6 +44,11 @@ domain/
     ├── 📄 network_equipment.rs  → NetworkEquipmentCommandBuilder (8 commands)
     ├── 📄 podman.rs             → PodmanCommandBuilder (6 commands)
     ├── 📄 ldap.rs               → LdapCommandBuilder (5 commands)
+    ├── 📄 diagnostics.rs        → 🩺 DiagnosticsCommandBuilder (3 commands)
+    ├── 📄 orchestration.rs      → 🚀 OrchestrationCommandBuilder (3 commands)
+    ├── 📄 drift.rs              → 🔍 DriftCommandBuilder (2 commands)
+    ├── 📄 file_advanced.rs      → 📝 FileAdvancedCommandBuilder (3 commands)
+    ├── 📄 sbom.rs               → 🛡️ SbomCommandBuilder (3 commands)
     │
     │   ── 🪟 Windows Command Builders (13) ──
     ├── 📄 active_directory.rs   → ActiveDirectoryCommandBuilder (6 commands)
@@ -505,6 +511,174 @@ Cross-platform foundation for Windows support. Works with `OsType` (Linux/Window
 | `stderr_to_null(shell)` | Return the stderr-to-null redirect suffix |
 | `exit_code_var(shell)` | Return the exit-code variable (`$?`, `%ERRORLEVEL%`, `$LASTEXITCODE`) |
 
+## 🆕 New Command Builders
+
+The following diagram shows the new command builders and how they relate to the domain:
+
+```mermaid
+flowchart TB
+    subgraph NewBuilders["🆕 New Command Builders (5)"]
+        DIAG["🩺 DiagnosticsCommandBuilder<br/>(diagnose, triage, state snapshot)"]
+        ORCH["🚀 OrchestrationCommandBuilder<br/>(canary, rolling, fleet diff)"]
+        DRIFT["🔍 DriftCommandBuilder<br/>(env snapshot, drift detection)"]
+        FADV["📝 FileAdvancedCommandBuilder<br/>(diff, patch, template)"]
+        SBOM["🛡️ SbomCommandBuilder<br/>(SBOM, vuln scan, CIS compliance)"]
+    end
+
+    subgraph RootDomain["📓 Domain Root"]
+        RB["📓 Runbook Engine<br/>(YAML parsing, template vars,<br/>5 built-in runbooks)"]
+    end
+
+    subgraph Infra["🔧 Infrastructure"]
+        SSH["SSH Executor"]
+        YAML["YAML Config"]
+    end
+
+    DIAG -->|"compound commands<br/>(single SSH call)"| SSH
+    ORCH -->|"multi-host<br/>coordination"| SSH
+    DRIFT -->|"snapshot &<br/>compare"| SSH
+    FADV -->|"diff/patch<br/>commands"| SSH
+    SBOM -->|"inventory &<br/>scanning"| SSH
+    RB -->|"step-by-step<br/>execution"| SSH
+    RB -->|"loads .yaml<br/>runbooks"| YAML
+```
+
+## 🩺 DiagnosticsCommandBuilder (`use_cases/diagnostics.rs`)
+
+Builds comprehensive diagnostic commands that collect multiple system metrics in a single SSH call, avoiding sequential round-trips.
+
+### API
+
+| Method | Description |
+|--------|-------------|
+| `build_diagnose_command()` | 🏥 Comprehensive host diagnostic (uptime, CPU, memory, disk, top processes, failed services, recent errors, OOM kills, network listeners) |
+| `build_triage_command(symptom, since)` | 🚨 Incident triage tailored to a specific symptom (`slow`, `crash`, `oom`, `disk`, `network`, or generic) |
+| `build_state_snapshot_command()` | 📸 Capture current system state for comparison (packages, services, listeners, kernel, hostname) |
+
+### Supported Triage Symptoms
+
+| Symptom | Sections Collected |
+|---------|-------------------|
+| `slow` / `performance` | CPU load, IO wait, disk latency, slow queries |
+| `crash` / `restart` | Recent boots, core dumps, failed services, kernel panics |
+| `oom` / `memory` | Memory detail, top mem processes, OOM kills, swap |
+| `disk` / `storage` | Disk usage, inode usage, large files, disk errors |
+| `network` / `connectivity` | Interfaces, routes, DNS, listeners, dropped packets |
+| _(other)_ | General triage with failed services and recent errors |
+
+## 🚀 OrchestrationCommandBuilder (`use_cases/orchestration.rs`)
+
+Builds commands for multi-host orchestration patterns: canary deployments, rolling updates, and fleet-wide configuration drift detection. The actual orchestration logic (coordinating multiple SSH calls) lives in the tool handlers; this builder constructs the individual commands.
+
+### API
+
+| Method | Description |
+|--------|-------------|
+| `build_canary_command(command, health_check)` | 🐤 Build a canary execution command with optional health check (chains with `&& (hc \|\| true)`) |
+| `build_rolling_command(command, health_check)` | 🔄 Build a rolling execution command with optional health check and descriptive fallback |
+| `build_fleet_diff_command(command)` | 🔎 Build a fleet diff command (comparison performed by caller across multiple hosts) |
+
+## 🔍 DriftCommandBuilder (`use_cases/drift.rs`)
+
+Builds commands to capture environment state snapshots for drift detection between hosts or across time.
+
+### API
+
+| Method | Description |
+|--------|-------------|
+| `build_snapshot_command()` | 📸 Capture comprehensive environment snapshot (OS, kernel, hostname, packages, services, listeners, users, groups, crontabs, config checksums) |
+| `build_diff_instruction()` | 📋 Return instructions for comparing two snapshots using `ssh_env_snapshot` + `save_output` |
+
+## 📝 FileAdvancedCommandBuilder (`use_cases/file_advanced.rs`)
+
+Builds commands for advanced file operations: diff, patch, and template rendering via `envsubst`.
+
+### API
+
+| Method | Description |
+|--------|-------------|
+| `build_diff_command(file1, file2, context_lines)` | ↔️ Build a unified diff command between two files on the same host |
+| `build_patch_command(target_file, patch_content, dry_run)` | 🩹 Build a patch apply command (supports `--dry-run` mode) |
+| `build_template_command(template_path, output_path, variables)` | 📄 Build a template rendering command using `envsubst` with exported variables |
+
+## 🛡️ SbomCommandBuilder (`use_cases/sbom.rs`)
+
+Builds commands for software inventory (SBOM), vulnerability scanning, and CIS compliance checks.
+
+### API
+
+| Method | Description |
+|--------|-------------|
+| `build_sbom_command()` | 📦 Generate a software bill of materials (package manager detection, installed packages, kernel, OS) |
+| `build_vuln_scan_command()` | 🔓 Check for known vulnerabilities (security upgrades, kernel version, pending updates, last update time) |
+| `build_compliance_command(profile)` | ✅ Run CIS compliance checks (file permissions, SSH config, firewall, password policy, sysctl) |
+
+### Supported Compliance Profiles
+
+| Profile | Checks Performed |
+|---------|-----------------|
+| `cis-level1` / `cis-level2` | File permissions, SSH configuration, firewall status, password policy, core dump limits, sysctl security settings |
+| _(other)_ | Basic compliance: `/etc/passwd` + `/etc/shadow` permissions, `PermitRootLogin` check |
+
+## 📓 Runbook Engine (`domain/runbook.rs`)
+
+A YAML-based runbook engine for automated multi-step operational procedures. Lives in the domain root (not `use_cases/`) as it orchestrates entire workflows rather than building individual commands.
+
+### 📐 Data Model
+
+| Struct | Description |
+|--------|-------------|
+| `Runbook` | Top-level definition: name, description, version, params, steps |
+| `RunbookParam` | Parameter definition with type, default value, and description |
+| `RunbookStep` | Single step: command, save_as, condition, on_false, confirm, rollback |
+| `StepResult` | Result of executing one step: name, command, output, exit_code, skipped, error |
+| `RunbookResult` | Full execution result: runbook_name, steps, completed, error |
+
+### 🔧 API
+
+| Function | Description |
+|----------|-------------|
+| `validate_runbook(runbook)` | ✅ Validate a runbook definition (non-empty name, at least one step, each step has command or condition) |
+| `apply_template(template, vars)` | 🔀 Replace `{{ variable }}` and `{{variable}}` patterns with values from a HashMap |
+| `load_runbooks_from_dir(dir)` | 📂 Load all `.yaml`/`.yml` runbooks from a directory |
+| `load_runbook(path)` | 📄 Load and validate a single runbook from a YAML file |
+| `default_runbooks_dir()` | 📁 Get the default runbooks directory (`~/.config/mcp-ssh-bridge/runbooks/`) |
+| `builtin_runbooks()` | 🏗️ Get 5 built-in runbook definitions (embedded in binary) |
+
+### 📦 Built-in Runbooks
+
+| Runbook | Description |
+|---------|-------------|
+| `disk_full` | 💾 Disk full remediation |
+| `service_restart` | 🔄 Service restart procedure |
+| `oom_recovery` | 🧠 OOM kill recovery |
+| `log_rotation` | 📋 Log rotation cleanup |
+| `cert_renewal` | 🔐 Certificate renewal |
+
+### 📝 YAML Format Example
+
+```yaml
+name: disk_full
+description: Automated disk full remediation
+version: "1.0"
+params:
+  threshold:
+    type: string
+    default: "90"
+    description: Disk usage percentage threshold
+steps:
+  - name: check_usage
+    command: "df -h {{ dir }}"
+    save_as: usage
+  - name: evaluate
+    condition: "{{ usage }} > {{ threshold }}"
+    on_false: skip_to_end
+  - name: cleanup
+    command: "find {{ dir }} -name '*.log' -mtime +30 -delete"
+    confirm: true
+    rollback: "echo 'Manual review needed'"
+```
+
 ## 🪟 Windows Command Builders
 
 All Windows builders generate PowerShell commands and use `shell::escape(s, ShellType::PowerShell)` for safe parameter interpolation. Tool handlers guard against incorrect OS routing with `OsType::Windows` checks.
@@ -774,7 +948,8 @@ graph TB
         UC["ExecuteCommandUseCase"]
         HIST["CommandHistory"]
         SHELL["🐚 shell.rs<br/>(escape, cd_and_run, elevate)"]
-        LINUX["🐧 27 Linux CommandBuilders<br/>(Database, K8s, Helm, Ansible,<br/>Docker, Systemd, Network, Process,<br/>Package, Firewall, Cron, Certificate,<br/>Nginx, Redis, Terraform, Vault, ESXi, Git,<br/>FileOps, UserMgmt, Storage, Journald,<br/>SystemdTimer, SecurityModules,<br/>NetworkEquipment, Podman, LDAP)"]
+        RUNBOOK["📓 Runbook Engine<br/>(YAML parsing, template vars,<br/>5 built-in runbooks)"]
+        LINUX["🐧 32 Linux CommandBuilders<br/>(Database, K8s, Helm, Ansible,<br/>Docker, Systemd, Network, Process,<br/>Package, Firewall, Cron, Certificate,<br/>Nginx, Redis, Terraform, Vault, ESXi, Git,<br/>FileOps, UserMgmt, Storage, Journald,<br/>SystemdTimer, SecurityModules,<br/>NetworkEquipment, Podman, LDAP,<br/>Diagnostics, Orchestration, Drift,<br/>FileAdvanced, SBOM)"]
         WINDOWS["🪟 13 Windows CommandBuilders<br/>(ActiveDirectory, HyperV, IIS,<br/>ScheduledTask, WindowsEvent,<br/>WindowsFeature, WindowsFirewall,<br/>WindowsNetwork, WindowsPerf,<br/>WindowsProcess, WindowsRegistry,<br/>WindowsService, WindowsUpdate)"]
     end
 

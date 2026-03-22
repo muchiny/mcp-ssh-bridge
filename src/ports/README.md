@@ -105,7 +105,7 @@ classDiagram
     ToolHandler <|.. SshStatusHandler
     ToolHandler <|.. SshDockerPsHandler
 
-    note for ToolHandler "... and 247 more implementations (250 total across 47 groups)"
+    note for ToolHandler "... and 278 more implementations (281 total across 55 groups)"
 ```
 
 #### 🐧 Linux Groups (34 groups, 176 tools)
@@ -272,8 +272,14 @@ pub struct ToolContext {
     pub tunnel_manager: Arc<TunnelManager>,
     pub output_cache: Arc<OutputCache>,
     pub runtime_max_output_chars: Arc<std::sync::atomic::AtomicUsize>,
+    pub session_recorder: Option<Arc<SessionRecorder>>,  // 🎥 v1.5.0
 }
 ```
+
+> 🎥 **`session_recorder`** (added in v1.5.0): Optional session recording component for
+> compliance-grade audit trails. When enabled, records all commands and outputs in a
+> tamper-proof, hash-chained format (asciinema v2 or JSON). Supports automatic secret
+> masking in recordings. Set to `None` when recording is disabled in configuration.
 
 ### Diagram
 
@@ -292,6 +298,7 @@ classDiagram
         +tunnel_manager: Arc~TunnelManager~
         +output_cache: Arc~OutputCache~
         +runtime_max_output_chars: Arc~AtomicUsize~
+        +session_recorder: Option~Arc~SessionRecorder~~
     }
 
     ToolContext --> Config : "⚙️ Configuration"
@@ -306,7 +313,21 @@ classDiagram
     ToolContext --> TunnelManager : "🚇 Tunnels"
     ToolContext --> OutputCache : "📦 Output Pagination"
     ToolContext --> AtomicUsize : "📏 Per-Client Limit"
+    ToolContext --> SessionRecorder : "🎥 Session Recording"
 ```
+
+> 💡 **Note**: The `session_recorder` field is `Option<Arc<SessionRecorder>>` — it is `None`
+> when recording is disabled, avoiding any overhead. When present, it provides:
+>
+> ```mermaid
+> flowchart LR
+>     CMD["🔧 Tool Execute"] --> REC{"🎥 Recording<br/>enabled?"}
+>     REC -->|Yes| RECORD["📼 Record command<br/>+ output"]
+>     REC -->|No| SKIP["⏭️ Skip"]
+>     RECORD --> MASK["🔒 Auto-mask<br/>secrets"]
+>     MASK --> HASH["🔗 Hash-chain<br/>entry"]
+>     HASH --> STORE["💾 Write to<br/>recording file"]
+> ```
 
 ### Usage in a Handler
 

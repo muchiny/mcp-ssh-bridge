@@ -8,13 +8,13 @@
 [![MCP](https://img.shields.io/badge/MCP-2025--11--25-blueviolet?style=flat-square)](https://modelcontextprotocol.io)
 
 **A Rust MCP server that lets Claude Code securely execute commands on remote servers via SSH.**
-**250 tools across 47 groups — Linux, Windows, Docker, Kubernetes, Podman, LDAP, network equipment, and more.**
+**281 tools across 55 groups — Linux, Windows, Docker, Kubernetes, Podman, LDAP, network equipment, and more.**
 
 </div>
 
 ---
 
-## What is this?
+## 🔍 What is this?
 
 MCP SSH Bridge is a local server that sits between Claude Code and your remote servers. Claude Code talks to it via JSON-RPC over stdio, and it executes commands on your servers over SSH.
 
@@ -22,11 +22,26 @@ MCP SSH Bridge is a local server that sits between Claude Code and your remote s
 Claude Code  <--JSON-RPC-->  MCP SSH Bridge  <--SSH-->  Your Servers
 ```
 
-Without it, Claude cannot reach your servers. With it, Claude can run commands, transfer files, read logs, check metrics, manage Docker containers, Kubernetes clusters, Podman, LDAP directories, network equipment, systemd services, and much more — all through 250 purpose-built tools with built-in security controls.
+Without it, Claude cannot reach your servers. With it, Claude can run commands, transfer files, read logs, check metrics, manage Docker containers, Kubernetes clusters, Podman, LDAP directories, network equipment, systemd services, and much more — all through 281 purpose-built tools with built-in security controls.
+
+```mermaid
+graph LR
+    CC[🤖 Claude Code] -->|JSON-RPC stdio| MCP[⚡ MCP SSH Bridge]
+    MCP -->|SSH| S1[🖥️ Linux Servers]
+    MCP -->|SSH| S2[🪟 Windows Servers]
+    MCP -->|SSH| S3[🐳 Docker/K8s]
+    MCP -->|SSH| S4[📡 Network Equipment]
+
+    subgraph "Security Layer"
+        MCP --- V[🛡️ Validator]
+        MCP --- San[🔒 Sanitizer + Entropy]
+        MCP --- A[📝 Audit + Recording]
+    end
+```
 
 ---
 
-## Install
+## 📦 Install
 
 Pick one method:
 
@@ -52,9 +67,11 @@ make release
 docker pull ghcr.io/muchiny/mcp-ssh-bridge:latest
 ```
 
+**Claude Desktop (DXT):** Download the `.dxt` file from [Releases](https://github.com/muchiny/mcp-ssh-bridge/releases/latest) and drag-and-drop into Claude Desktop.
+
 ---
 
-## Configure
+## ⚙️ Configure
 
 ### 1. Create the config file
 
@@ -163,7 +180,7 @@ That's it. Restart Claude Code and it will discover all available tools automati
 
 ---
 
-## SSH hosts from ~/.ssh/config
+## 🔑 SSH hosts from ~/.ssh/config
 
 Hosts from your `~/.ssh/config` are auto-discovered by default — no extra configuration needed. They are merged with YAML-defined hosts (YAML takes precedence on conflicts).
 
@@ -178,7 +195,7 @@ ssh_config:
 
 ---
 
-## Advanced host configuration
+## 🌐 Advanced host configuration
 
 ### Jump hosts (bastion)
 
@@ -258,7 +275,7 @@ Then use `"sudo": true` in tool calls like `ssh_exec`.
 
 ---
 
-## Limits and timeouts
+## ⏱️ Limits and timeouts
 
 ```yaml
 limits:
@@ -287,14 +304,16 @@ limits:
 
 ---
 
-## Output sanitization
+## 🔒 Output sanitization
 
-Outputs are automatically scanned for secrets using 56 built-in patterns covering: passwords, API keys (AWS, OpenAI, GitHub, GitLab, Slack, etc.), certificates, database connection strings, Kubernetes tokens, and more. Detected secrets are replaced with `[REDACTED]`.
+Outputs are automatically scanned for secrets using **56 built-in regex patterns + Shannon entropy detection** covering: passwords, API keys (AWS, OpenAI, GitHub, GitLab, Slack, etc.), certificates, database connection strings, Kubernetes tokens, and more. Detected secrets are replaced with `[REDACTED]`.
 
 ```yaml
 security:
   sanitize:
     enabled: true                    # Default: true
+    entropy_detection: true          # 🆕 Detect high-entropy strings (unknown secrets)
+    entropy_threshold: 4.5           # Shannon entropy bits threshold
     disable_builtin:
       # - "gitlab"                   # Disable a specific category
     custom_patterns:
@@ -304,7 +323,7 @@ security:
 
 ---
 
-## Audit logging
+## 📝 Audit logging
 
 All commands are logged to a JSON-lines audit file:
 
@@ -318,11 +337,25 @@ audit:
 
 Each entry records: timestamp, host, command, result (success/error), exit code, duration.
 
+### 🎥 Session recording (compliance)
+
+Record full SSH sessions in asciinema v2 format with HMAC-SHA256 hash-chain for tamper-proof compliance auditing (SOC2, HIPAA, PCI-DSS):
+
+```yaml
+recording:
+  enabled: true
+  path: ~/.local/share/mcp-ssh-bridge/recordings/
+  hash_chain: true
+  hash_key_env: MCP_RECORDING_KEY
+```
+
+Use `ssh_recording_start` / `ssh_recording_stop` to control recordings, `ssh_recording_verify` to validate integrity.
+
 ---
 
-## Tool groups
+## 🧰 Tool groups
 
-The 250 tools are organized in 47 groups. All groups are enabled by default. Disable groups you don't need to reduce the MCP context sent to the LLM:
+The 281 tools are organized in 55 groups. All groups are enabled by default. Disable groups you don't need to reduce the MCP context sent to the LLM:
 
 ```yaml
 tool_groups:
@@ -332,10 +365,10 @@ tool_groups:
     database: false          # Disable db query/dump/restore
     esxi: false              # Disable VMware ESXi tools
     windows_services: false  # Disable Windows service management
-    # ... see config.example.yaml for all 47 groups
+    # ... see config.example.yaml for all 55 groups
 ```
 
-### Linux groups (34 groups, 176 tools)
+### 🐧 Linux groups (38 groups, 194 tools)
 
 | Group | Tools |
 |-------|-------|
@@ -364,7 +397,7 @@ tool_groups:
 | `redis` | ssh_redis_info, ssh_redis_cli, ssh_redis_keys |
 | `terraform` | ssh_terraform_init, ssh_terraform_plan, ssh_terraform_apply, ssh_terraform_state, ssh_terraform_output |
 | `vault` | ssh_vault_status, ssh_vault_read, ssh_vault_list, ssh_vault_write |
-| `file_ops` | ssh_file_read, ssh_file_write, ssh_file_chmod, ssh_file_chown, ssh_file_stat |
+| `file_ops` | ssh_file_read, ssh_file_write, ssh_file_chmod, ssh_file_chown, ssh_file_stat, ssh_file_diff, ssh_file_patch, ssh_file_template |
 | `user_management` | ssh_user_list, ssh_user_info, ssh_user_add, ssh_user_modify, ssh_user_delete, ssh_group_list, ssh_group_add, ssh_group_delete |
 | `storage` | ssh_storage_lsblk, ssh_storage_df, ssh_storage_mount, ssh_storage_umount, ssh_storage_lvm, ssh_storage_fdisk, ssh_storage_fstab |
 | `journald` | ssh_journal_query, ssh_journal_follow, ssh_journal_boots, ssh_journal_disk_usage |
@@ -374,7 +407,7 @@ tool_groups:
 | `podman` | ssh_podman_ps, ssh_podman_logs, ssh_podman_inspect, ssh_podman_exec, ssh_podman_images, ssh_podman_compose |
 | `ldap` | ssh_ldap_search, ssh_ldap_user_info, ssh_ldap_group_members, ssh_ldap_add, ssh_ldap_modify |
 
-### Windows groups (13 groups, 74 tools)
+### 🪟 Windows groups (13 groups, 74 tools)
 
 | Group | Tools |
 |-------|-------|
@@ -392,9 +425,20 @@ tool_groups:
 | `windows_network` | ssh_win_net_ip, ssh_win_net_adapters, ssh_win_net_connections, ssh_win_net_routes, ssh_win_net_ping, ssh_win_net_dns |
 | `windows_process` | ssh_win_process_list, ssh_win_process_top, ssh_win_process_info, ssh_win_process_by_name, ssh_win_process_kill |
 
+### 🆕 New groups (v1.5.0 — 4 cross-platform groups, 19 tools)
+
+| Group | Tools | Description |
+|-------|-------|-------------|
+| `diagnostics` | ssh_diagnose, ssh_incident_triage, ssh_compare_state | 🏥 Intelligent single-call diagnostics with symptom-based triage |
+| `runbooks` | ssh_runbook_list, ssh_runbook_execute, ssh_runbook_validate | 📋 YAML-defined multi-step operational procedures ([docs](config/runbooks/README.md)) |
+| `orchestration` | ssh_canary_exec, ssh_rolling_exec, ssh_fleet_diff | 🚀 Canary deployments, rolling updates, fleet-wide comparison |
+| `recording` | ssh_recording_start, ssh_recording_stop, ssh_recording_list, ssh_recording_replay, ssh_recording_verify | 🎥 Tamper-proof session recording (SOC2/HIPAA/PCI-DSS) |
+| `drift` | ssh_env_snapshot, ssh_env_diff, ssh_env_drift | 📊 Environment state capture and drift detection |
+| `security_scan` | ssh_sbom_generate, ssh_vuln_scan, ssh_compliance_check | 🛡️ SBOM, vulnerability scanning, CIS compliance checks |
+
 ---
 
-## MCP prompts and resources
+## 💡 MCP prompts and resources
 
 ### Prompts
 
@@ -422,7 +466,7 @@ Direct data access via URI:
 
 ---
 
-## CLI usage
+## 💻 CLI usage
 
 The binary can also be used standalone (outside MCP mode):
 
@@ -438,7 +482,7 @@ mcp-ssh-bridge download <host> <remote> <local>
 
 ---
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 **"Unknown host: xxx"** — The host alias is not in your `config.yaml`. Run `ssh_status` to see configured hosts.
 
@@ -460,7 +504,7 @@ Set per-host in config: `host_key_verification: AcceptNew`
 
 ---
 
-## Development
+## 🏗️ Development
 
 ```bash
 make build              # Debug build
@@ -469,14 +513,15 @@ make test               # Run tests (uses nextest if available)
 make lint               # Clippy with strict warnings
 make ci                 # Quick CI (fmt-check, lint, test, audit, typos)
 make ci-full            # Full CI (ci + hack + geiger)
+make dxt                # Build DXT package for Claude Desktop
 ```
 
-Rust edition 2024, MSRV 1.93+. `#![forbid(unsafe_code)]`.
+Rust edition 2024, MSRV 1.93+. `#![forbid(unsafe_code)]`. 4782+ tests.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ---
 
-## License
+## 📄 License
 
 [MIT](LICENSE)

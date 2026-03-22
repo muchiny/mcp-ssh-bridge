@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MCP SSH Bridge is a Rust MCP server that enables Claude Code to securely execute commands on air-gapped environments via SSH. JSON-RPC over stdio, strict security controls. **250 tools** across **47 groups** (34 Linux, 13 Windows).
+MCP SSH Bridge is a Rust MCP server that enables Claude Code to securely execute commands on air-gapped environments via SSH. JSON-RPC over stdio, strict security controls. **281 tools** across **55 groups** (38 Linux, 13 Windows, 4 cross-platform).
 
 ## Build Commands
 
@@ -14,6 +14,7 @@ make lint               # Run clippy with strict warnings
 make ci                 # Quick CI (fmt-check, lint, test, audit, typos)
 make ci-full            # Full CI (ci + hack + geiger)
 make release-pipeline   # Full release (ci-full + release-all + docker-scan)
+make dxt                # Build DXT package (Claude Desktop extension)
 make deps-check         # Check outdated/unused deps
 make help               # Show all available targets
 ```
@@ -44,6 +45,7 @@ make help               # Show all available targets
 │  ┌─────────────────────────────────────────────────────┐    │
 │  │                    Use Cases                         │    │
 │  │  ExecuteCommand │ ValidateCommand │ SanitizeOutput  │    │
+│  │  Diagnostics │ Runbooks │ Orchestration │ Drift     │    │
 │  └─────────────────────────────────────────────────────┘    │
 │  ┌─────────────────────────────────────────────────────┐    │
 │  │                    Entities                          │    │
@@ -60,10 +62,24 @@ src/
 ├── cli/                          # CLI (feature-gated: clap)
 ├── config/                       # YAML config loading
 ├── domain/                       # Pure business logic (use cases, builders)
+│   ├── runbook.rs                # 🆕 Runbook engine (YAML workflows)
+│   └── use_cases/                # Command builders (34 modules)
+│       ├── diagnostics.rs        # 🆕 Intelligent diagnostics
+│       ├── orchestration.rs      # 🆕 Multi-host orchestration
+│       ├── drift.rs              # 🆕 Environment drift detection
+│       ├── file_advanced.rs      # 🆕 File diff/patch/template
+│       └── sbom.rs               # 🆕 SBOM & vulnerability scanning
 ├── ports/                        # Traits (SshExecutor, ToolHandler, ConfigProvider)
 ├── mcp/                          # MCP protocol adapter + tool_handlers/
 ├── ssh/                          # SSH client adapter (russh)
 └── security/                     # Validation, sanitization, rate limiting
+    ├── entropy.rs                # 🆕 Shannon entropy-based secret detection
+    └── recording.rs              # 🆕 Session recording with hash-chain audit
+config/
+├── config.example.yaml           # Configuration reference
+└── runbooks/                     # 🆕 Built-in runbook YAML definitions
+.well-known/mcp/server-card.json  # 🆕 MCP ecosystem discovery
+dxt/                              # 🆕 DXT packaging (Claude Desktop extension)
 ```
 
 ## Feature Flags
@@ -79,7 +95,7 @@ mimalloc = ["dep:mimalloc"]
 1. **Ports (Traits)**: Define interfaces (`SshExecutor`, `ToolHandler`)
 2. **Adapters**: Implement ports (russh, JSON-RPC, YAML)
 3. **Domain**: Pure business logic, no external dependencies
-4. **Use Cases**: Orchestrate: validation -> execution -> sanitization -> audit
+4. **Use Cases**: Orchestrate: validation → execution → sanitization → audit
 5. **Tool Registry**: Open/Closed pattern for adding tools
 
 ## Code Quality
@@ -88,11 +104,12 @@ mimalloc = ["dep:mimalloc"]
 - Clippy with `-D warnings` (all lint groups enabled)
 - rustfmt 100 char line width
 - cargo-deny for security/license checks
+- 4782+ tests (unit, integration, fuzz, mutation)
 
 ## Configuration
 
 YAML config at `~/.config/mcp-ssh-bridge/config.yaml`. See `config/config.example.yaml`.
-Key sections: `hosts`, `security`, `limits`, `audit`, `tool_groups`.
+Key sections: `hosts`, `security`, `limits`, `audit`, `tool_groups`, `recording`.
 
 ## Known Advisories
 
