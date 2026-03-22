@@ -6,6 +6,7 @@
 pub mod active_directory;
 pub mod ansible;
 pub mod certificate;
+pub mod compliance;
 pub mod container_logs;
 pub mod cron;
 pub mod cron_analysis;
@@ -26,6 +27,7 @@ pub mod kubernetes;
 pub mod ldap;
 pub mod network;
 pub mod network_equipment;
+pub mod network_security;
 pub mod nginx;
 pub mod orchestration;
 pub mod package;
