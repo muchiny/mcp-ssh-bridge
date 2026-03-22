@@ -4,8 +4,6 @@
 //! Supports perf/strace tracing, I/O tracing, network latency testing,
 //! and quick benchmarks (CPU, I/O, memory).
 
-use std::fmt::Write;
-
 use crate::config::ShellType;
 use crate::error::{BridgeError, Result};
 

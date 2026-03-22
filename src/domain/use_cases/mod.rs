@@ -6,7 +6,9 @@
 pub mod active_directory;
 pub mod ansible;
 pub mod certificate;
+pub mod container_logs;
 pub mod cron;
+pub mod cron_analysis;
 pub mod database;
 pub mod diagnostics;
 pub mod docker;
@@ -28,6 +30,7 @@ pub mod nginx;
 pub mod orchestration;
 pub mod package;
 pub mod parse_metrics;
+pub mod performance;
 pub mod podman;
 pub mod process;
 pub mod redis;

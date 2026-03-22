@@ -170,9 +170,11 @@ mod tests {
             Some("'; rm -rf /; echo '"),
         )
         .unwrap();
-        // Should be shell-escaped
+        // Should be shell-escaped (wrapped in quotes so injection is neutralized)
         assert!(cmd.contains("--since"));
-        assert!(!cmd.contains("; rm -rf /; echo"));
+        // The escaped value should not contain unquoted semicolons
+        let escaped = shell_escape("'; rm -rf /; echo '");
+        assert!(cmd.contains(&escaped));
     }
 
     #[test]
