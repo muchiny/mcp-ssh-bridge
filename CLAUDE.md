@@ -105,35 +105,40 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 ### Core Infrastructure (Linux)
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `core` | `exec`, `script`, `env`, `uptime`, `hostname`, `reboot`, `shutdown`, `shell_config` | Running arbitrary commands, system info, reboots |
-| `file_transfer` | `upload`, `download`, `read_file`, `write_file`, `stat`, `find` | Moving/reading/writing files |
-| `file_ops` | `mkdir`, `copy`, `move`, `remove`, `chmod`, `chown`, `link`, `archive`, `extract`, `checksum`, `du`, `tree`, `watch`, `file_diff`, `file_patch`, `file_template`, `file_search_replace`, `file_head`, `file_tail`, `file_wc`, `file_sort`, `file_uniq`, `file_truncate` | File manipulation & analysis |
-| `sessions` | `session_start`, `session_send`, `session_read`, `session_end`, `session_list` | Persistent tmux sessions |
-| `directory` | `ls`, `pwd`, `cd` | Directory navigation |
-| `process` | `ps`, `kill`, `top` | Process management |
-| `monitoring` | `df`, `free`, `vmstat`, `iostat`, `netstat`, `lsof` | System monitoring |
-| `network` | `ping`, `traceroute`, `dig`, `curl`, `ss`, `ip_addr`, `ip_route` | Network diagnostics |
-| `systemd` | `service_status`, `service_start`, `service_stop`, `service_restart`, `service_enable`, `service_disable`, `service_logs`, `service_list` | Systemd service management |
+| `core` | `exec`, `exec_multi`, `sync`, `tail`, `find`, `disk_usage`, `status`, `health`, `history`, `output_fetch` | Running arbitrary commands, system info |
+| `file_transfer` | `upload`, `download`, `file_read`, `file_write`, `file_stat` | Moving/reading/writing files |
+| `file_ops` | `file_chmod`, `file_chown`, `file_diff`, `file_patch`, `file_template` | File manipulation (permissions, diff, patch, templates) |
+| `sessions` | `session_create`, `session_exec`, `session_close`, `session_list` | Persistent tmux sessions |
+| `directory` | `ls` | Directory listing |
+| `process` | `process_list`, `process_kill`, `process_top` | Process management |
+| `monitoring` | `metrics`, `metrics_multi`, `storage_df`, `tail` | System monitoring & metrics |
+| `network` | `net_connections`, `net_interfaces`, `net_routes`, `net_ping`, `net_traceroute`, `net_dns` | Network diagnostics |
+| `systemd` | `service_status`, `service_start`, `service_stop`, `service_restart`, `service_enable`, `service_disable`, `service_logs`, `service_list`, `service_daemon_reload` | Systemd service management |
 | `systemd_timers` | `timer_list`, `timer_info`, `timer_enable`, `timer_disable`, `timer_trigger` | Systemd timer management |
-| `firewall` | `firewall_status`, `firewall_list`, `firewall_allow`, `firewall_deny`, `firewall_delete` | iptables/ufw firewall rules |
-| `package` | `pkg_list`, `pkg_install`, `pkg_remove`, `pkg_update`, `pkg_search`, `pkg_info` | Package management (apt/yum/dnf) |
+| `firewall` | `firewall_status`, `firewall_list`, `firewall_allow`, `firewall_deny` | iptables/ufw firewall rules |
+| `package` | `pkg_list`, `pkg_install`, `pkg_remove`, `pkg_update`, `pkg_search` | Package management (apt/yum/dnf) |
 | `cron` | `cron_list`, `cron_add`, `cron_remove` | Crontab management |
-| `user_management` | `user_list`, `user_info`, `user_add`, `user_remove`, `group_list`, `group_add` | User & group management |
-| `storage` | `lvm_info`, `mount_list`, `swap_info` | Storage/LVM/mounts |
-| `journald` | `journal_query`, `journal_follow`, `journal_units` | Journald log queries |
-| `security_modules` | `selinux_status`, `apparmor_status`, `audit_log` | SELinux, AppArmor, auditd |
+| `user_management` | `user_list`, `user_info`, `user_add`, `user_modify`, `user_delete`, `group_list`, `group_add`, `group_delete` | User & group management |
+| `storage` | `storage_lsblk`, `storage_df`, `storage_mount`, `storage_umount`, `storage_lvm`, `storage_fdisk`, `storage_fstab` | Storage/LVM/mounts |
+| `journald` | `journal_query`, `journal_follow`, `journal_boots`, `journal_disk_usage` | Journald log queries |
+| `security_modules` | `selinux_status`, `selinux_booleans`, `apparmor_status`, `apparmor_profiles`, `security_audit` | SELinux, AppArmor, auditd |
+| `backup` | `backup_create`, `backup_list`, `backup_restore`, `backup_snapshot`, `backup_verify`, `backup_schedule` | Backup management |
+| `network_equipment` | `net_equip_show_run`, `net_equip_show_interfaces`, `net_equip_show_routes`, `net_equip_show_arp`, `net_equip_show_version`, `net_equip_show_vlans`, `net_equip_config`, `net_equip_save` | Network switch/router management |
+| `ldap` | `ldap_search`, `ldap_user_info`, `ldap_group_members`, `ldap_add`, `ldap_modify` | LDAP directory operations |
+| `tunnels` | `tunnel_create`, `tunnel_list`, `tunnel_close` | SSH tunnel management |
 
 ### Containers & Orchestration
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `docker` | `docker_ps`, `docker_logs`, `docker_inspect`, `docker_stats`, `docker_exec`, `docker_images`, `docker_compose` | Docker container management |
-| `podman` | `podman_ps`, `podman_logs`, `podman_inspect`, `podman_stats`, `podman_exec`, `podman_images` | Podman container management |
-| `kubernetes` | `kubectl_get`, `kubectl_describe`, `kubectl_logs`, `kubectl_apply`, `kubectl_delete`, `kubectl_exec` | Kubernetes cluster management |
+| `docker` | `docker_ps`, `docker_logs`, `docker_inspect`, `docker_exec`, `docker_compose`, `docker_images`, `docker_stats`, `docker_volume_ls`, `docker_network_ls`, `docker_volume_inspect`, `docker_network_inspect` | Docker container management |
+| `podman` | `podman_ps`, `podman_logs`, `podman_inspect`, `podman_exec`, `podman_images`, `podman_compose` | Podman container management |
+| `kubernetes` | `k8s_get`, `k8s_logs`, `k8s_describe`, `k8s_apply`, `k8s_delete`, `k8s_rollout`, `k8s_scale`, `k8s_exec`, `k8s_top`, `helm_list`, `helm_status`, `helm_upgrade`, `helm_install`, `helm_rollback`, `helm_history`, `helm_uninstall` | Kubernetes & Helm management |
+| `esxi` | `esxi_vm_list`, `esxi_vm_info`, `esxi_vm_power`, `esxi_snapshot`, `esxi_host_info`, `esxi_datastore_list`, `esxi_network_list` | VMware ESXi management |
 
 ### Databases
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `database` | `db_query`, `db_tables`, `db_schema` | Generic DB operations |
+| `database` | `db_query`, `db_dump`, `db_restore` | Generic DB operations |
 | `redis` | `redis_info`, `redis_cli`, `redis_keys` | Redis key-value store |
 | `postgresql` | `postgresql_query`, `postgresql_status` | PostgreSQL databases |
 | `mysql` | `mysql_query`, `mysql_status` | MySQL/MariaDB databases |
@@ -148,53 +153,53 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 ### Infrastructure as Code
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `ansible` | `ansible_playbook`, `ansible_inventory`, `ansible_facts` | Ansible automation |
-| `terraform` | `terraform_init`, `terraform_plan`, `terraform_apply`, `terraform_state` | Terraform IaC |
-| `vault` | `vault_read`, `vault_list`, `vault_status` | HashiCorp Vault secrets |
-| `git` | `git_status`, `git_log`, `git_diff`, `git_pull`, `git_clone` | Git repositories |
+| `ansible` | `ansible_playbook`, `ansible_inventory`, `ansible_adhoc` | Ansible automation |
+| `terraform` | `terraform_init`, `terraform_plan`, `terraform_apply`, `terraform_state`, `terraform_output` | Terraform IaC |
+| `vault` | `vault_read`, `vault_list`, `vault_status`, `vault_write` | HashiCorp Vault secrets |
+| `git` | `git_status`, `git_log`, `git_diff`, `git_pull`, `git_clone`, `git_branch`, `git_checkout` | Git repositories |
 
-### Security & Compliance (v1.7+)
+### Security & Compliance
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `certificates` | `cert_check`, `cert_info`, `cert_expiry` | TLS/SSL certificate inspection |
 | `letsencrypt` | `letsencrypt_status` | Let's Encrypt certificate status |
-| `security_scan` | `lynis_audit`, `rkhunter_check`, `clamav_scan` | Host security scanning |
-| `network_security` | `port_scan`, `firewall_audit`, `open_ports`, `connection_analysis`, `fail2ban_status`, `dns_audit`, `ssl_audit`, `network_segmentation` | Network security auditing |
-| `compliance` | `cis_benchmark`, `stig_check`, `pci_check`, `hipaa_check`, `soc2_check`, `gdpr_check`, `nist_check`, `iso27001_check` | Regulatory compliance checks |
+| `security_scan` | `sbom_generate`, `vuln_scan`, `compliance_check` | SBOM generation, vulnerability & compliance scanning |
+| `network_security` | `port_scan`, `ssl_audit`, `network_capture`, `fail2ban_status` | Port scanning, SSL audit, traffic capture, fail2ban |
+| `compliance` | `cis_benchmark`, `stig_check`, `compliance_score`, `compliance_report` | CIS/STIG benchmarks & compliance reporting |
 
-### Observability & Analysis (v1.6+)
+### Observability & Analysis
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `diagnostics` | `diagnose` | Intelligent root-cause diagnostics |
-| `performance` | `perf_profile`, `perf_flame`, `perf_benchmark` | Performance profiling |
-| `container_logs` | `container_log_search`, `container_log_stats`, `container_log_export` | Container log analysis |
-| `cron_analysis` | `cron_conflict_check`, `cron_timeline` | Cron scheduling analysis |
-| `drift` | `drift_detect` | Environment drift detection |
+| `diagnostics` | `diagnose`, `incident_triage`, `compare_state` | Intelligent root-cause diagnostics & state comparison |
+| `performance` | `perf_trace`, `io_trace`, `latency_test`, `benchmark` | Performance profiling, I/O tracing, benchmarks |
+| `container_logs` | `container_log_search`, `container_log_stats`, `container_events`, `container_health_history` | Container log analysis & health tracking |
+| `cron_analysis` | `cron_analyze`, `cron_history`, `at_jobs` | Cron conflict analysis, execution history |
+| `drift` | `env_snapshot`, `env_diff`, `env_drift` | Environment drift detection & snapshot comparison |
 
-### Cloud & Inventory (v1.8+)
+### Cloud & Inventory
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `cloud` | `aws_cli`, `cloud_metadata`, `cloud_tags`, `cloud_cost` | Cloud provider interaction |
 | `inventory` | `discover_hosts`, `inventory_sync`, `host_tags` | Host discovery & CMDB sync |
 | `multicloud` | `multicloud_list`, `multicloud_sync`, `multicloud_compare` | Multi-cloud resource management |
 
-### Alerting & Incident Response (v1.9+)
+### Alerting & Incident Response
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `alerting` | `alert_status`, `alert_silence`, `alert_history` | Monitoring alert management |
-| `capacity` | `capacity_forecast`, `capacity_report`, `capacity_recommend` | Capacity planning |
-| `incident` | `incident_timeline`, `incident_collect` | Incident response & forensics |
+| `alerting` | `alert_check`, `alert_list`, `alert_set` | Metric monitoring, threshold checking, alert rules |
+| `capacity` | `capacity_collect`, `capacity_trend`, `capacity_predict` | Capacity data collection, trending, prediction |
+| `incident` | `incident_timeline`, `incident_correlate` | Incident response timeline & log correlation |
 
-### Multi-host Operations & ChatOps (v2.0+)
+### Multi-host Operations & ChatOps
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `orchestration` | `orchestrate` | Multi-host command orchestration |
-| `runbooks` | `runbook_exec`, `runbook_list` | YAML-defined runbook execution |
-| `log_aggregation` | `log_aggregate`, `log_correlate`, `log_pattern`, `log_anomaly` | Cross-host log analysis |
-| `key_management` | `key_rotate`, `key_distribute`, `key_audit` | SSH key lifecycle management |
+| `orchestration` | `canary_exec`, `rolling_exec`, `fleet_diff` | Multi-host canary/rolling deployments, fleet comparison |
+| `runbooks` | `runbook_list`, `runbook_execute`, `runbook_validate` | YAML-defined runbook execution & validation |
+| `log_aggregation` | `log_aggregate`, `log_search_multi`, `log_tail_multi` | Cross-host log aggregation, search, tail |
+| `key_management` | `key_generate`, `key_distribute`, `key_audit` | SSH key generation, distribution, audit |
 | `chatops` | `webhook_send`, `notify` | Slack/Teams/webhook notifications |
 
-### Config Templates & Interactive (v2.1+)
+### Config Templates & Interactive
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `templates` | `template_list`, `template_show`, `template_apply`, `template_validate`, `template_diff` | Config template management |
@@ -203,25 +208,25 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 ### Windows (13 groups)
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `windows_services` | `win_service_*` | Windows service management |
-| `windows_events` | `win_event_*` | Windows Event Log queries |
-| `active_directory` | `win_ad_*` | Active Directory management |
-| `scheduled_tasks` | `win_task_*` | Windows Task Scheduler |
-| `windows_firewall` | `win_fw_*` | Windows Firewall rules |
-| `iis` | `win_iis_*` | IIS web server management |
-| `windows_updates` | `win_update_*` | Windows Update management |
-| `windows_perf` | `win_perf_*` | Performance counters |
-| `hyperv` | `win_hyperv_*` | Hyper-V VM management |
-| `windows_registry` | `win_reg_*` | Registry operations |
-| `windows_features` | `win_feature_*` | Windows Features/Roles |
-| `windows_network` | `win_net_*` | Windows networking |
-| `windows_process` | `win_proc_*` | Windows process management |
+| `windows_services` | `win_service_status`, `win_service_start`, `win_service_stop`, `win_service_restart`, `win_service_list`, `win_service_enable`, `win_service_disable`, `win_service_config` | Windows service management |
+| `windows_events` | `win_event_logs`, `win_event_query`, `win_event_sources`, `win_event_tail`, `win_event_export` | Windows Event Log queries |
+| `active_directory` | `ad_user_list`, `ad_user_info`, `ad_group_list`, `ad_group_members`, `ad_computer_list`, `ad_domain_info` | Active Directory management |
+| `scheduled_tasks` | `schtask_list`, `schtask_info`, `schtask_run`, `schtask_enable`, `schtask_disable` | Windows Task Scheduler |
+| `windows_firewall` | `win_firewall_status`, `win_firewall_list`, `win_firewall_allow`, `win_firewall_deny`, `win_firewall_remove` | Windows Firewall rules |
+| `iis` | `iis_status`, `iis_list_sites`, `iis_list_pools`, `iis_start`, `iis_stop`, `iis_restart` | IIS web server management |
+| `windows_updates` | `win_update_list`, `win_update_history`, `win_update_install`, `win_update_search`, `win_update_reboot` | Windows Update management |
+| `windows_perf` | `win_perf_cpu`, `win_perf_memory`, `win_perf_disk`, `win_perf_network`, `win_perf_overview`, `win_disk_usage` | Performance counters |
+| `hyperv` | `hyperv_vm_list`, `hyperv_vm_info`, `hyperv_vm_start`, `hyperv_vm_stop`, `hyperv_switch_list`, `hyperv_snapshot_list`, `hyperv_snapshot_create`, `hyperv_host_info` | Hyper-V VM management |
+| `windows_registry` | `reg_query`, `reg_set`, `reg_delete`, `reg_list`, `reg_export` | Registry operations |
+| `windows_features` | `win_feature_list`, `win_feature_info`, `win_feature_install`, `win_feature_remove` | Windows Features/Roles |
+| `windows_network` | `win_net_adapters`, `win_net_connections`, `win_net_dns`, `win_net_ip`, `win_net_ping`, `win_net_routes` | Windows networking |
+| `windows_process` | `win_process_list`, `win_process_info`, `win_process_kill`, `win_process_top`, `win_process_by_name` | Windows process management |
 
 ### Cross-Platform
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `config` | `config_show` | Show bridge configuration |
-| `recording` | `recording_start`, `recording_stop`, `recording_status`, `recording_list` | Session recording & audit |
+| `config` | `config_get`, `config_set` | Show/modify bridge configuration |
+| `recording` | `recording_start`, `recording_stop`, `recording_list`, `recording_replay`, `recording_verify` | Session recording & audit |
 
 ## Feature Flags
 
