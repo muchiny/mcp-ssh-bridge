@@ -221,6 +221,15 @@ impl ToolCallResult {
         self
     }
 
+    /// Strip non-standard `App` content items for clients that only accept
+    /// the MCP-spec types (`text`, `image`, `audio`, `resource`).
+    #[must_use]
+    pub fn without_apps(mut self) -> Self {
+        self.content
+            .retain(|c| !matches!(c, ToolContent::App { .. }));
+        self
+    }
+
     /// Set machine-readable structured content for AI consumption.
     ///
     /// The structured content is returned alongside the human-readable text

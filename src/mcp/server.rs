@@ -915,6 +915,10 @@ impl McpServer {
                     );
                 }
 
+                // Strip non-standard App content items — clients that don't
+                // advertise MCP Apps support reject unknown content types.
+                let result = result.without_apps();
+
                 JsonRpcResponse::success_or_serialize_error(id, &result)
             }
             Err(e) => {
@@ -993,6 +997,7 @@ impl McpServer {
             // Store the result and send notification
             let info = match result {
                 Ok(tool_result) => {
+                    let tool_result = tool_result.without_apps();
                     let result_value =
                         serde_json::to_value(&tool_result).unwrap_or_else(|e| json!({
                             "content": [{"type": "text", "text": format!("Serialization error: {e}")}],
