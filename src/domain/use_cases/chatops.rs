@@ -34,10 +34,7 @@ pub fn validate_webhook_url(url: &str) -> Result<()> {
     }
     if url.len() > 2048 {
         return Err(BridgeError::CommandDenied {
-            reason: format!(
-                "Webhook URL too long: {} chars (max 2048)",
-                url.len()
-            ),
+            reason: format!("Webhook URL too long: {} chars (max 2048)", url.len()),
         });
     }
     Ok(())
@@ -56,10 +53,7 @@ pub fn validate_payload(payload: &str) -> Result<()> {
     }
     if payload.len() > 10000 {
         return Err(BridgeError::CommandDenied {
-            reason: format!(
-                "Payload too long: {} chars (max 10000)",
-                payload.len()
-            ),
+            reason: format!("Payload too long: {} chars (max 10000)", payload.len()),
         });
     }
     Ok(())
@@ -264,10 +258,7 @@ mod tests {
 
     #[test]
     fn test_notify_invalid_url() {
-        let result = ChatOpsCommandBuilder::build_notify_command(
-            "hello",
-            "http://insecure.com",
-        );
+        let result = ChatOpsCommandBuilder::build_notify_command("hello", "http://insecure.com");
         assert!(result.is_err());
     }
 

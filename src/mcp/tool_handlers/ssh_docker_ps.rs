@@ -118,10 +118,7 @@ impl StandardTool for DockerPsTool {
         let ports_idx = parsed.headers.iter().position(|h| h == "ports");
 
         for row in &parsed.rows {
-            let get = |idx: Option<usize>| {
-                idx.and_then(|i| row.get(i))
-                    .map_or("", String::as_str)
-            };
+            let get = |idx: Option<usize>| idx.and_then(|i| row.get(i)).map_or("", String::as_str);
             let name = get(name_idx);
             let image = get(image_idx);
             let status = get(status_idx);
@@ -282,6 +279,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

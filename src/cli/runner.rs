@@ -15,13 +15,14 @@ use crate::domain::ExecuteCommandUseCase;
 use crate::error::{BridgeError, Result};
 use crate::mcp::CommandHistory;
 use crate::mcp::history::HistoryConfig;
+use crate::ports::ExecutorRouter;
 use crate::ports::ToolContext;
 use crate::security::{
     AuditEvent, AuditLogger, CommandResult, CommandValidator, RateLimiter, Sanitizer,
 };
 use crate::ssh::{
-    ConnectionPool, SessionManager, SshClient, TransferMode, TransferOptions, TransferProgress,
-    is_retryable_error, with_retry_if,
+    SessionManager, SshClient, TransferMode, TransferOptions, TransferProgress, is_retryable_error,
+    with_retry_if,
 };
 
 /// List all available MCP tools
@@ -42,8 +43,8 @@ pub async fn run_list_tools(
     }
 
     if json_output {
-        let json = serde_json::to_string_pretty(&tools)
-            .map_err(|e| BridgeError::Config(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(&tools).map_err(|e| BridgeError::Config(e.to_string()))?;
         println!("{json}");
     } else {
         println!("{:<40} {:<20} DESCRIPTION", "TOOL", "GROUP");
@@ -75,7 +76,10 @@ pub async fn run_validate(config: Arc<Config>) -> Result<()> {
 
     // Check hosts
     if config.hosts.is_empty() {
-        warnings.push("No hosts configured. Use ssh_config auto-discovery or add hosts to config.yaml.".to_string());
+        warnings.push(
+            "No hosts configured. Use ssh_config auto-discovery or add hosts to config.yaml."
+                .to_string(),
+        );
     }
 
     for (name, host) in &config.hosts {
@@ -134,7 +138,10 @@ pub async fn run_validate(config: Arc<Config>) -> Result<()> {
     if issues.is_empty() {
         Ok(())
     } else {
-        Err(BridgeError::Config(format!("{} error(s) found", issues.len())))
+        Err(BridgeError::Config(format!(
+            "{} error(s) found",
+            issues.len()
+        )))
     }
 }
 
@@ -227,7 +234,7 @@ fn create_context(config: Arc<Config>) -> ToolContext {
         AuditLogger::new(&config.audit).unwrap_or_else(|_| (AuditLogger::disabled(), None));
     let audit_logger = Arc::new(audit_logger);
     let history = Arc::new(CommandHistory::new(&HistoryConfig::default()));
-    let connection_pool = Arc::new(ConnectionPool::with_defaults());
+    let connection_pool = Arc::new(ExecutorRouter::with_defaults());
     let rate_limiter = Arc::new(RateLimiter::new(config.limits.rate_limit_per_second));
 
     let execute_use_case = Arc::new(ExecuteCommandUseCase::new(
@@ -985,6 +992,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -1223,6 +1231,7 @@ mod tests {
                     os_type: OsType::Linux,
                     shell: None,
                     retry: None,
+                    protocol: crate::config::Protocol::default(),
                 },
             );
         }
@@ -1263,6 +1272,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -1282,6 +1292,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -1345,6 +1356,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -1530,6 +1542,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -1617,6 +1630,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -1673,6 +1687,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -1767,6 +1782,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -1857,6 +1873,7 @@ mod tests {
                     os_type: OsType::Linux,
                     shell: None,
                     retry: None,
+                    protocol: crate::config::Protocol::default(),
                 },
             );
         }
@@ -1890,6 +1907,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             };
             // Should not panic
             let _ = format!("{:?}", host.host_key_verification);

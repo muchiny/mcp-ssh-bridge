@@ -55,10 +55,7 @@ impl StandardTool for ApparmorProfilesTool {
         }
     }"#;
 
-    fn build_command(
-        _args: &SshApparmorProfilesArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshApparmorProfilesArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SecurityModulesCommandBuilder::build_apparmor_profiles_command())
     }
 }

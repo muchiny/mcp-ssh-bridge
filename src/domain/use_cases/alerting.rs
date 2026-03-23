@@ -118,9 +118,7 @@ impl AlertingCommandBuilder {
         match (threshold, operator) {
             (Some(t), Some(op)) => Self::build_alert_check_command(metric, t, op),
             (Some(t), None) => Self::build_alert_check_command(metric, t, ">"),
-            _ => Ok(format!(
-                "VALUE=$({collect_cmd}); echo \"{metric}=$VALUE\""
-            )),
+            _ => Ok(format!("VALUE=$({collect_cmd}); echo \"{metric}=$VALUE\"")),
         }
     }
 
@@ -128,13 +126,17 @@ impl AlertingCommandBuilder {
     #[must_use]
     fn metric_command(metric: &str) -> &'static str {
         match metric {
-            "cpu" => "awk '{u=$2+$4; t=$2+$4+$5; if (NR>1) printf \"%.1f\", \
+            "cpu" => {
+                "awk '{u=$2+$4; t=$2+$4+$5; if (NR>1) printf \"%.1f\", \
                       ((u-pu)/(t-pt))*100; pu=u; pt=t}' \
-                      <(head -1 /proc/stat) <(sleep 1 && head -1 /proc/stat)",
+                      <(head -1 /proc/stat) <(sleep 1 && head -1 /proc/stat)"
+            }
             "memory" => "free | awk '/Mem:/{printf \"%.1f\", $3/$2*100}'",
             "disk" => "df / | awk 'NR==2{print $5}' | tr -d '%'",
             "load" => "cat /proc/loadavg | awk '{print $1}'",
-            "swap" => "free | awk '/Swap:/{if($2>0) printf \"%.1f\", $3/$2*100; else print \"0.0\"}'",
+            "swap" => {
+                "free | awk '/Swap:/{if($2>0) printf \"%.1f\", $3/$2*100; else print \"0.0\"}'"
+            }
             _ => "echo 0",
         }
     }

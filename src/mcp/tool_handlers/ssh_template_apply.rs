@@ -89,10 +89,7 @@ impl StandardTool for TemplateApplyTool {
         validate_dest_path(&args.dest)
     }
 
-    fn build_command(
-        args: &SshTemplateApplyArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshTemplateApplyArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(TemplateCommandBuilder::build_template_apply_command(
             &args.content,
             &args.dest,
@@ -153,8 +150,7 @@ mod tests {
         assert!(handler.description().contains("destructive"));
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_template_apply");
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("host")));
         assert!(required.contains(&json!("content")));
@@ -203,8 +199,7 @@ mod tests {
     fn test_schema_optional_fields() {
         let handler = SshTemplateApplyHandler::new();
         let schema = handler.schema();
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let props = schema_json["properties"].as_object().unwrap();
         assert!(props.contains_key("backup"));
         assert!(props.contains_key("timeout_seconds"));
@@ -258,6 +253,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshTemplateApplyArgs {
             host: "s".to_string(),
@@ -290,6 +286,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshTemplateApplyArgs {
             host: "s".to_string(),

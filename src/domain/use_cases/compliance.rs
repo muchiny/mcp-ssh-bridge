@@ -90,9 +90,7 @@ pub fn validate_stig_id(stig_id: &str) -> Result<()> {
 pub fn validate_report_format(format: &str) -> Result<()> {
     if format != "text" && format != "json" {
         return Err(BridgeError::CommandDenied {
-            reason: format!(
-                "Report format must be 'text' or 'json', got '{format}'"
-            ),
+            reason: format!("Report format must be 'text' or 'json', got '{format}'"),
         });
     }
     Ok(())
@@ -207,10 +205,7 @@ impl ComplianceCommandBuilder {
 
         if let Some(id) = stig_id {
             let escaped_id = shell_escape(id);
-            let _ = write!(
-                cmd,
-                "echo 'Checking STIG: {escaped_id}'; "
-            );
+            let _ = write!(cmd, "echo 'Checking STIG: {escaped_id}'; ");
             // Run targeted checks based on STIG ID pattern
             let _ = write!(
                 cmd,
@@ -471,8 +466,7 @@ mod tests {
 
     #[test]
     fn test_cis_benchmark_level1() {
-        let cmd =
-            ComplianceCommandBuilder::build_cis_benchmark_command(Some(1), None).unwrap();
+        let cmd = ComplianceCommandBuilder::build_cis_benchmark_command(Some(1), None).unwrap();
         assert!(cmd.contains("CIS Benchmark"));
         // Level 1 should NOT include audit rules
         assert!(!cmd.contains("Audit Rules"));
@@ -480,19 +474,14 @@ mod tests {
 
     #[test]
     fn test_cis_benchmark_level2() {
-        let cmd =
-            ComplianceCommandBuilder::build_cis_benchmark_command(Some(2), None).unwrap();
+        let cmd = ComplianceCommandBuilder::build_cis_benchmark_command(Some(2), None).unwrap();
         assert!(cmd.contains("Audit Rules"));
         assert!(cmd.contains("SELinux"));
     }
 
     #[test]
     fn test_cis_benchmark_category_ssh() {
-        let cmd = ComplianceCommandBuilder::build_cis_benchmark_command(
-            None,
-            Some("ssh"),
-        )
-        .unwrap();
+        let cmd = ComplianceCommandBuilder::build_cis_benchmark_command(None, Some("ssh")).unwrap();
         assert!(cmd.contains("SSH Hardening"));
         assert!(!cmd.contains("File Permissions"));
         assert!(!cmd.contains("Kernel Parameters"));
@@ -500,11 +489,8 @@ mod tests {
 
     #[test]
     fn test_cis_benchmark_category_filesystem() {
-        let cmd = ComplianceCommandBuilder::build_cis_benchmark_command(
-            None,
-            Some("filesystem"),
-        )
-        .unwrap();
+        let cmd = ComplianceCommandBuilder::build_cis_benchmark_command(None, Some("filesystem"))
+            .unwrap();
         assert!(cmd.contains("File Permissions"));
         assert!(!cmd.contains("SSH Hardening"));
     }
@@ -517,10 +503,8 @@ mod tests {
 
     #[test]
     fn test_cis_benchmark_invalid_category() {
-        let result = ComplianceCommandBuilder::build_cis_benchmark_command(
-            None,
-            Some("cat; rm -rf /"),
-        );
+        let result =
+            ComplianceCommandBuilder::build_cis_benchmark_command(None, Some("cat; rm -rf /"));
         assert!(result.is_err());
     }
 
@@ -538,8 +522,7 @@ mod tests {
 
     #[test]
     fn test_stig_check_specific_id() {
-        let cmd =
-            ComplianceCommandBuilder::build_stig_check_command(Some("V-12345")).unwrap();
+        let cmd = ComplianceCommandBuilder::build_stig_check_command(Some("V-12345")).unwrap();
         assert!(cmd.contains("V-12345"));
         assert!(cmd.contains("DISA STIG"));
     }
@@ -567,8 +550,7 @@ mod tests {
 
     #[test]
     fn test_compliance_report_text() {
-        let cmd =
-            ComplianceCommandBuilder::build_compliance_report_command(Some("text")).unwrap();
+        let cmd = ComplianceCommandBuilder::build_compliance_report_command(Some("text")).unwrap();
         assert!(cmd.contains("Compliance Report"));
         assert!(cmd.contains("File Permissions"));
         assert!(cmd.contains("SSH Configuration"));
@@ -577,8 +559,7 @@ mod tests {
 
     #[test]
     fn test_compliance_report_json() {
-        let cmd =
-            ComplianceCommandBuilder::build_compliance_report_command(Some("json")).unwrap();
+        let cmd = ComplianceCommandBuilder::build_compliance_report_command(Some("json")).unwrap();
         assert!(cmd.contains("compliance_report"));
         assert!(cmd.contains("hostname"));
         assert!(cmd.contains("checks"));
@@ -586,16 +567,14 @@ mod tests {
 
     #[test]
     fn test_compliance_report_default() {
-        let cmd =
-            ComplianceCommandBuilder::build_compliance_report_command(None).unwrap();
+        let cmd = ComplianceCommandBuilder::build_compliance_report_command(None).unwrap();
         // Default is text format
         assert!(cmd.contains("Compliance Report"));
     }
 
     #[test]
     fn test_compliance_report_invalid_format() {
-        let result =
-            ComplianceCommandBuilder::build_compliance_report_command(Some("xml"));
+        let result = ComplianceCommandBuilder::build_compliance_report_command(Some("xml"));
         assert!(result.is_err());
     }
 
@@ -603,10 +582,7 @@ mod tests {
 
     #[test]
     fn test_stig_id_escaped() {
-        let cmd = ComplianceCommandBuilder::build_stig_check_command(
-            Some("V-12345"),
-        )
-        .unwrap();
+        let cmd = ComplianceCommandBuilder::build_stig_check_command(Some("V-12345")).unwrap();
         assert!(cmd.contains("'V-12345'"));
     }
 }

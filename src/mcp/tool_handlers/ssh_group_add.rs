@@ -116,7 +116,10 @@ mod tests {
         let handler = SshGroupAddHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(Some(json!({"host": "nonexistent", "name": "developers"})), &ctx)
+            .execute(
+                Some(json!({"host": "nonexistent", "name": "developers"})),
+                &ctx,
+            )
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {

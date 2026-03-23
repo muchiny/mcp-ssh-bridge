@@ -29,7 +29,9 @@ impl UserCommandBuilder {
     #[must_use]
     pub fn build_user_info_command(username: &str) -> String {
         let escaped = shell_escape(username);
-        format!("id {escaped} && getent passwd {escaped} && lastlog -u {escaped} 2>/dev/null; groups {escaped}")
+        format!(
+            "id {escaped} && getent passwd {escaped} && lastlog -u {escaped} 2>/dev/null; groups {escaped}"
+        )
     }
 
     /// Build a useradd command.

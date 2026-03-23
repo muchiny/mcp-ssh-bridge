@@ -96,10 +96,7 @@ impl StandardTool for PtyExecTool {
         Ok(())
     }
 
-    fn build_command(
-        args: &SshPtyExecArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshPtyExecArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(PtyCommandBuilder::build_pty_exec_command(
             &args.command,
             args.rows,
@@ -136,10 +133,7 @@ mod tests {
         let handler = SshPtyExecHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"host": "nonexistent", "command": "top"})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": "nonexistent", "command": "top"})), &ctx)
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -156,8 +150,7 @@ mod tests {
         assert!(handler.description().contains("PTY"));
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_pty_exec");
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("host")));
         assert!(required.contains(&json!("command")));
@@ -204,8 +197,7 @@ mod tests {
     fn test_schema_optional_fields() {
         let handler = SshPtyExecHandler::new();
         let schema = handler.schema();
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let props = schema_json["properties"].as_object().unwrap();
         assert!(props.contains_key("rows"));
         assert!(props.contains_key("cols"));
@@ -256,6 +248,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshPtyExecArgs {
             host: "s".to_string(),
@@ -288,6 +281,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshPtyExecArgs {
             host: "s".to_string(),

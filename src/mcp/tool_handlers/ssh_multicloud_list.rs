@@ -74,10 +74,7 @@ impl StandardTool for MulticloudListTool {
         Ok(())
     }
 
-    fn build_command(
-        args: &SshMulticloudListArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshMulticloudListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(MulticloudCommandBuilder::build_multicloud_list_command(
             &args.provider,
         ))

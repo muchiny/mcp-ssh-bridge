@@ -80,10 +80,7 @@ impl StandardTool for KeyGenerateTool {
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
     fn build_command(args: &SshKeyGenerateArgs, _host_config: &HostConfig) -> Result<String> {
-        KeyManagementCommandBuilder::build_key_generate_command(
-            args.key_type.as_deref(),
-            args.bits,
-        )
+        KeyManagementCommandBuilder::build_key_generate_command(args.key_type.as_deref(), args.bits)
     }
 }
 
@@ -184,9 +181,7 @@ mod tests {
     async fn test_invalid_json_type() {
         let handler = SshKeyGenerateHandler::new();
         let ctx = create_test_context();
-        let result = handler
-            .execute(Some(json!({"host": 123})), &ctx)
-            .await;
+        let result = handler.execute(Some(json!({"host": 123})), &ctx).await;
         assert!(result.is_err());
         match result.unwrap_err() {
             BridgeError::McpInvalidRequest(_) => {}
@@ -209,6 +204,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

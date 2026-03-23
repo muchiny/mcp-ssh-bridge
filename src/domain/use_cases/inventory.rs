@@ -49,9 +49,7 @@ impl InventoryCommandBuilder {
         match action {
             "list" | "add" | "remove" => Ok(()),
             _ => Err(BridgeError::CommandDenied {
-                reason: format!(
-                    "Invalid tag action '{action}': must be one of: list, add, remove"
-                ),
+                reason: format!("Invalid tag action '{action}': must be one of: list, add, remove"),
             }),
         }
     }
@@ -183,16 +181,14 @@ mod tests {
 
     #[test]
     fn test_discover_hosts_arp() {
-        let cmd =
-            InventoryCommandBuilder::build_discover_hosts_command("10.0.0.0/24", Some("arp"));
+        let cmd = InventoryCommandBuilder::build_discover_hosts_command("10.0.0.0/24", Some("arp"));
         assert!(cmd.contains("arp-scan"));
         assert!(!cmd.contains("nmap"));
     }
 
     #[test]
     fn test_discover_hosts_ip() {
-        let cmd =
-            InventoryCommandBuilder::build_discover_hosts_command("10.0.0.0/24", Some("ip"));
+        let cmd = InventoryCommandBuilder::build_discover_hosts_command("10.0.0.0/24", Some("ip"));
         assert!(cmd.contains("ip neigh show"));
     }
 
@@ -231,8 +227,7 @@ mod tests {
 
     #[test]
     fn test_host_tags_remove() {
-        let cmd =
-            InventoryCommandBuilder::build_host_tags_command("remove", Some("deprecated"));
+        let cmd = InventoryCommandBuilder::build_host_tags_command("remove", Some("deprecated"));
         assert!(cmd.contains("grep -v"));
         assert!(cmd.contains("Tags removed"));
     }

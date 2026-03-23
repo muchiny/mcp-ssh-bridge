@@ -81,14 +81,8 @@ impl StandardTool for CisBenchmarkTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn build_command(
-        args: &SshCisBenchmarkArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
-        ComplianceCommandBuilder::build_cis_benchmark_command(
-            args.level,
-            args.category.as_deref(),
-        )
+    fn build_command(args: &SshCisBenchmarkArgs, _host_config: &HostConfig) -> Result<String> {
+        ComplianceCommandBuilder::build_cis_benchmark_command(args.level, args.category.as_deref())
     }
 }
 

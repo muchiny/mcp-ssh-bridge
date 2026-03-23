@@ -191,10 +191,7 @@ mod tests {
         let handler = SshWebhookSendHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"host": 123, "url": 456, "payload": 789})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": 123, "url": 456, "payload": 789})), &ctx)
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -218,6 +215,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

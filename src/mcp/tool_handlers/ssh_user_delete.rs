@@ -108,7 +108,10 @@ mod tests {
         let handler = SshUserDeleteHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(Some(json!({"host": "nonexistent", "username": "olduser"})), &ctx)
+            .execute(
+                Some(json!({"host": "nonexistent", "username": "olduser"})),
+                &ctx,
+            )
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {

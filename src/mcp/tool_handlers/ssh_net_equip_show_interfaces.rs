@@ -78,10 +78,12 @@ impl StandardTool for NetEquipShowInterfacesTool {
             .equipment_type
             .as_deref()
             .map_or(EquipmentType::Generic, EquipmentType::from_str_loose);
-        Ok(NetworkEquipmentCommandBuilder::build_show_interfaces_command(
-            eq_type,
-            args.interface.as_deref(),
-        ))
+        Ok(
+            NetworkEquipmentCommandBuilder::build_show_interfaces_command(
+                eq_type,
+                args.interface.as_deref(),
+            ),
+        )
     }
 }
 

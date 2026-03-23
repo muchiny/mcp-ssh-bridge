@@ -16,6 +16,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use mcp_ssh_bridge::ExecutorRouter;
 use mcp_ssh_bridge::config::{
     AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
     LimitsConfig, OsType, SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery,
@@ -25,7 +26,7 @@ use mcp_ssh_bridge::domain::history::HistoryConfig;
 use mcp_ssh_bridge::domain::{CommandHistory, ExecuteCommandUseCase, TunnelManager};
 use mcp_ssh_bridge::ports::protocol::ToolContent;
 use mcp_ssh_bridge::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
-use mcp_ssh_bridge::ssh::{ConnectionPool, SessionManager};
+use mcp_ssh_bridge::ssh::SessionManager;
 use mcp_ssh_bridge::{BridgeError, ToolContext, ToolHandler};
 
 use mcp_ssh_bridge::mcp::tool_handlers::*;
@@ -77,6 +78,7 @@ fn build_ctx_with_mode(
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
     hosts.insert(
@@ -98,6 +100,7 @@ fn build_ctx_with_mode(
             os_type: OsType::Windows,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
 
@@ -148,7 +151,7 @@ fn build_ctx_with_mode(
         sanitizer,
         audit_logger,
         history,
-        connection_pool: Arc::new(ConnectionPool::with_defaults()),
+        connection_pool: Arc::new(ExecutorRouter::with_defaults()),
         execute_use_case,
         rate_limiter: Arc::new(RateLimiter::new(0)),
         session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
@@ -161,7 +164,11 @@ fn build_ctx_with_mode(
 }
 
 /// Helper: execute and expect an error of a specific type.
-async fn expect_err(handler: &dyn ToolHandler, args: serde_json::Value, ctx: &ToolContext) -> BridgeError {
+async fn expect_err(
+    handler: &dyn ToolHandler,
+    args: serde_json::Value,
+    ctx: &ToolContext,
+) -> BridgeError {
     handler
         .execute(Some(args), ctx)
         .await
@@ -169,7 +176,11 @@ async fn expect_err(handler: &dyn ToolHandler, args: serde_json::Value, ctx: &To
 }
 
 /// Helper: execute and expect `Ok` with `is_error = Some(true)`.
-async fn expect_soft_error(handler: &dyn ToolHandler, args: serde_json::Value, ctx: &ToolContext) -> String {
+async fn expect_soft_error(
+    handler: &dyn ToolHandler,
+    args: serde_json::Value,
+    ctx: &ToolContext,
+) -> String {
     let result = handler
         .execute(Some(args), ctx)
         .await
@@ -302,7 +313,10 @@ async fn test_ssh_exec_multi_unknown_host() {
     .await;
     // May be UnknownHost or McpInvalidRequest depending on impl
     assert!(
-        matches!(err, BridgeError::UnknownHost { .. } | BridgeError::McpInvalidRequest(_)),
+        matches!(
+            err,
+            BridgeError::UnknownHost { .. } | BridgeError::McpInvalidRequest(_)
+        ),
         "Expected host-related error, got: {err:?}"
     );
 }
@@ -313,7 +327,10 @@ async fn test_ssh_exec_multi_schema() {
     let schema = handler.schema();
     assert_eq!(schema.name, "ssh_exec_multi");
     let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
-    assert!(schema_json["properties"].get("hosts").is_some() || schema_json["properties"].get("host").is_some());
+    assert!(
+        schema_json["properties"].get("hosts").is_some()
+            || schema_json["properties"].get("host").is_some()
+    );
 }
 
 // =============================================================================
@@ -351,7 +368,9 @@ async fn test_ssh_health_no_args_returns_pool_info() {
         _ => panic!("Expected Text content"),
     };
     assert!(
-        text.contains("Connection Pool") || text.contains("Configuration") || text.contains("hosts"),
+        text.contains("Connection Pool")
+            || text.contains("Configuration")
+            || text.contains("hosts"),
         "Health should show system info: {text}"
     );
 }
@@ -380,12 +399,7 @@ async fn test_docker_ps_missing_args() {
 async fn test_k8s_get_unknown_host() {
     let ctx = build_permissive_ctx();
     let handler = SshK8sGetHandler::new();
-    let err = expect_err(
-        &handler,
-        json!({"host": "ghost", "resource": "pods"}),
-        &ctx,
-    )
-    .await;
+    let err = expect_err(&handler, json!({"host": "ghost", "resource": "pods"}), &ctx).await;
     assert!(matches!(err, BridgeError::UnknownHost { .. }));
 }
 
@@ -401,12 +415,7 @@ async fn test_k8s_get_missing_args() {
 async fn test_service_status_unknown_host() {
     let ctx = build_permissive_ctx();
     let handler = SshServiceStatusHandler::new();
-    let err = expect_err(
-        &handler,
-        json!({"host": "ghost", "service": "nginx"}),
-        &ctx,
-    )
-    .await;
+    let err = expect_err(&handler, json!({"host": "ghost", "service": "nginx"}), &ctx).await;
     assert!(matches!(err, BridgeError::UnknownHost { .. }));
 }
 
@@ -438,12 +447,7 @@ async fn test_net_connections_unknown_host() {
 async fn test_git_status_unknown_host() {
     let ctx = build_permissive_ctx();
     let handler = SshGitStatusHandler::new();
-    let err = expect_err(
-        &handler,
-        json!({"host": "ghost", "path": "/repo"}),
-        &ctx,
-    )
-    .await;
+    let err = expect_err(&handler, json!({"host": "ghost", "path": "/repo"}), &ctx).await;
     assert!(matches!(err, BridgeError::UnknownHost { .. }));
 }
 
@@ -528,12 +532,7 @@ async fn test_win_event_logs_rejects_linux_host() {
 async fn test_win_process_list_rejects_linux_host() {
     let ctx = build_permissive_ctx();
     let handler = SshWinProcessListHandler::new();
-    let text = expect_soft_error(
-        &handler,
-        json!({"host": "linux-server"}),
-        &ctx,
-    )
-    .await;
+    let text = expect_soft_error(&handler, json!({"host": "linux-server"}), &ctx).await;
     assert!(text.contains("Windows") || text.contains("not available"));
 }
 
@@ -730,7 +729,8 @@ fn test_all_major_tool_schemas_are_valid_json() {
 
         let schema_json = parsed.unwrap();
         assert_eq!(
-            schema_json["type"], "object",
+            schema_json["type"],
+            "object",
             "Schema for '{}' should be type=object",
             handler.name()
         );

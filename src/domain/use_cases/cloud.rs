@@ -67,11 +67,7 @@ impl CloudCommandBuilder {
     ///
     /// Constructs: `aws SERVICE SUBCOMMAND [ARGS] --output json 2>&1`
     #[must_use]
-    pub fn build_aws_cli_command(
-        service: &str,
-        subcommand: &str,
-        args: Option<&str>,
-    ) -> String {
+    pub fn build_aws_cli_command(service: &str, subcommand: &str, args: Option<&str>) -> String {
         let mut cmd = format!("aws {} {}", shell_escape(service), shell_escape(subcommand));
         if let Some(extra) = args {
             cmd.push(' ');
@@ -200,8 +196,11 @@ mod tests {
 
     #[test]
     fn test_build_aws_cli_with_args() {
-        let cmd =
-            CloudCommandBuilder::build_aws_cli_command("ec2", "describe-instances", Some("--region us-east-1"));
+        let cmd = CloudCommandBuilder::build_aws_cli_command(
+            "ec2",
+            "describe-instances",
+            Some("--region us-east-1"),
+        );
         assert!(cmd.contains("aws 'ec2' 'describe-instances'"));
         assert!(cmd.contains("'--region us-east-1'"));
         assert!(cmd.contains("--output json"));

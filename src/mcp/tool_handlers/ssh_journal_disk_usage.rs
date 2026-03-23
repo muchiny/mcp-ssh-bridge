@@ -29,7 +29,8 @@ impl StandardTool for JournalDiskUsageTool {
 
     const NAME: &'static str = "ssh_journal_disk_usage";
 
-    const DESCRIPTION: &'static str = "Show disk space used by the systemd journal on a remote host.";
+    const DESCRIPTION: &'static str =
+        "Show disk space used by the systemd journal on a remote host.";
 
     const SCHEMA: &'static str = r#"{
         "type": "object",
@@ -54,10 +55,7 @@ impl StandardTool for JournalDiskUsageTool {
         }
     }"#;
 
-    fn build_command(
-        _args: &SshJournalDiskUsageArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshJournalDiskUsageArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(JournaldCommandBuilder::build_disk_usage_command())
     }
 }

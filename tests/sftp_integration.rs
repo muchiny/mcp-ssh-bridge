@@ -101,6 +101,7 @@ fn to_host_config(config: &SshTestConfig) -> HostConfig {
         os_type: OsType::Linux,
         shell: None,
         retry: None,
+        protocol: mcp_ssh_bridge::config::Protocol::default(),
     }
 }
 

@@ -157,6 +157,7 @@ mod tests {
             os_type: os,
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

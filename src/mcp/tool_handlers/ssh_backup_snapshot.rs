@@ -77,10 +77,7 @@ impl StandardTool for BackupSnapshotTool {
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
     fn build_command(args: &SshBackupSnapshotArgs, _host_config: &HostConfig) -> Result<String> {
-        BackupAdvancedCommandBuilder::build_snapshot_command(
-            &args.paths,
-            args.label.as_deref(),
-        )
+        BackupAdvancedCommandBuilder::build_snapshot_command(&args.paths, args.label.as_deref())
     }
 }
 
@@ -211,6 +208,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

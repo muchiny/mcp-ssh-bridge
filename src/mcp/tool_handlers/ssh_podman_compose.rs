@@ -105,10 +105,7 @@ mod tests {
         let handler = SshPodmanComposeHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"host": "nonexistent", "action": "ps"})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": "nonexistent", "action": "ps"})), &ctx)
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {

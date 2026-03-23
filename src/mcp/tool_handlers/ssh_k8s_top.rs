@@ -106,11 +106,7 @@ impl StandardTool for K8sTopTool {
         Ok(())
     }
 
-    fn post_process(
-        result: ToolCallResult,
-        args: &SshK8sTopArgs,
-        output: &str,
-    ) -> ToolCallResult {
+    fn post_process(result: ToolCallResult, args: &SshK8sTopArgs, output: &str) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
@@ -128,16 +124,12 @@ impl StandardTool for K8sTopTool {
         for row in &parsed.rows {
             let mut row_map = serde_json::Map::new();
             for (i, h) in parsed.headers.iter().enumerate() {
-                row_map.insert(
-                    h.clone(),
-                    json!(row.get(i).map_or("", String::as_str)),
-                );
+                row_map.insert(h.clone(), json!(row.get(i).map_or("", String::as_str)));
             }
             tbl = tbl.row(Value::Object(row_map));
         }
 
-        let mut refresh_args =
-            json!({"host": &args.host, "resource_type": &args.resource_type});
+        let mut refresh_args = json!({"host": &args.host, "resource_type": &args.resource_type});
         if let Some(ns) = &args.namespace {
             refresh_args["namespace"] = json!(ns);
         }
@@ -173,6 +165,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

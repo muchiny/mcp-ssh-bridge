@@ -60,22 +60,23 @@ impl IncidentCommandBuilder {
     /// * `since` - Optional start time (e.g., "1 hour ago", "2024-01-01 00:00:00")
     /// * `until` - Optional end time
     #[must_use]
-    pub fn build_incident_timeline_command(
-        since: Option<&str>,
-        until: Option<&str>,
-    ) -> String {
-        let since_flag = since.map_or(String::new(), |s| {
-            format!(" --since {}", shell_escape(s))
-        });
-        let until_flag = until.map_or(String::new(), |u| {
-            format!(" --until {}", shell_escape(u))
-        });
+    pub fn build_incident_timeline_command(since: Option<&str>, until: Option<&str>) -> String {
+        let since_flag = since.map_or(String::new(), |s| format!(" --since {}", shell_escape(s)));
+        let until_flag = until.map_or(String::new(), |u| format!(" --until {}", shell_escape(u)));
 
         let timestamp_ref = since.map_or_else(
-            || String::from("$(date -d '1 hour ago' +%Y%m%d%H%M.%S 2>/dev/null || \
-                             date -v-1H +%Y%m%d%H%M.%S 2>/dev/null)"),
-            |s| format!("$(date -d {} +%Y%m%d%H%M.%S 2>/dev/null || echo '000000000000.00')",
-                        shell_escape(s)),
+            || {
+                String::from(
+                    "$(date -d '1 hour ago' +%Y%m%d%H%M.%S 2>/dev/null || \
+                             date -v-1H +%Y%m%d%H%M.%S 2>/dev/null)",
+                )
+            },
+            |s| {
+                format!(
+                    "$(date -d {} +%Y%m%d%H%M.%S 2>/dev/null || echo '000000000000.00')",
+                    shell_escape(s)
+                )
+            },
         );
 
         format!(
@@ -102,10 +103,7 @@ impl IncidentCommandBuilder {
     /// # Errors
     ///
     /// Returns [`BridgeError::CommandDenied`] if the services string is invalid.
-    pub fn build_incident_correlate_command(
-        services: &str,
-        since: Option<&str>,
-    ) -> Result<String> {
+    pub fn build_incident_correlate_command(services: &str, since: Option<&str>) -> Result<String> {
         validate_services(services)?;
 
         let mut service_flags = String::new();
@@ -113,9 +111,7 @@ impl IncidentCommandBuilder {
             let _ = write!(service_flags, " -u {}", shell_escape(s));
         }
 
-        let since_flag = since.map_or(String::new(), |s| {
-            format!(" --since {}", shell_escape(s))
-        });
+        let since_flag = since.map_or(String::new(), |s| format!(" --since {}", shell_escape(s)));
 
         Ok(format!(
             "echo '=== Service Correlation ===' && \
@@ -186,10 +182,7 @@ mod tests {
 
     #[test]
     fn test_timeline_with_since() {
-        let cmd = IncidentCommandBuilder::build_incident_timeline_command(
-            Some("1 hour ago"),
-            None,
-        );
+        let cmd = IncidentCommandBuilder::build_incident_timeline_command(Some("1 hour ago"), None);
         assert!(cmd.contains("--since"));
         assert!(cmd.contains("1 hour ago"));
     }
@@ -240,10 +233,7 @@ mod tests {
 
     #[test]
     fn test_timeline_shell_escapes_since() {
-        let cmd = IncidentCommandBuilder::build_incident_timeline_command(
-            Some("$(whoami)"),
-            None,
-        );
+        let cmd = IncidentCommandBuilder::build_incident_timeline_command(Some("$(whoami)"), None);
         assert!(cmd.contains("'$(whoami)'"));
     }
 
@@ -251,38 +241,32 @@ mod tests {
 
     #[test]
     fn test_correlate_single_service() {
-        let cmd =
-            IncidentCommandBuilder::build_incident_correlate_command("nginx", None).unwrap();
+        let cmd = IncidentCommandBuilder::build_incident_correlate_command("nginx", None).unwrap();
         assert!(cmd.contains("-u 'nginx'"));
         assert!(cmd.contains("Service Correlation"));
     }
 
     #[test]
     fn test_correlate_multiple_services() {
-        let cmd = IncidentCommandBuilder::build_incident_correlate_command(
-            "nginx,postgresql",
-            None,
-        )
-        .unwrap();
+        let cmd =
+            IncidentCommandBuilder::build_incident_correlate_command("nginx,postgresql", None)
+                .unwrap();
         assert!(cmd.contains("-u 'nginx'"));
         assert!(cmd.contains("-u 'postgresql'"));
     }
 
     #[test]
     fn test_correlate_with_since() {
-        let cmd = IncidentCommandBuilder::build_incident_correlate_command(
-            "nginx",
-            Some("1 hour ago"),
-        )
-        .unwrap();
+        let cmd =
+            IncidentCommandBuilder::build_incident_correlate_command("nginx", Some("1 hour ago"))
+                .unwrap();
         assert!(cmd.contains("--since"));
         assert!(cmd.contains("1 hour ago"));
     }
 
     #[test]
     fn test_correlate_invalid_services() {
-        let result =
-            IncidentCommandBuilder::build_incident_correlate_command("bad;service", None);
+        let result = IncidentCommandBuilder::build_incident_correlate_command("bad;service", None);
         assert!(result.is_err());
     }
 
@@ -294,11 +278,9 @@ mod tests {
 
     #[test]
     fn test_correlate_shell_escapes_since() {
-        let cmd = IncidentCommandBuilder::build_incident_correlate_command(
-            "nginx",
-            Some("$(whoami)"),
-        )
-        .unwrap();
+        let cmd =
+            IncidentCommandBuilder::build_incident_correlate_command("nginx", Some("$(whoami)"))
+                .unwrap();
         assert!(cmd.contains("'$(whoami)'"));
     }
 }

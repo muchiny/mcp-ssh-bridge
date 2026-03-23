@@ -173,6 +173,13 @@ pub struct HostConfig {
     /// Per-host retry configuration override
     #[serde(default)]
     pub retry: Option<HostRetryConfig>,
+
+    /// Remote execution protocol (default: ssh).
+    ///
+    /// Determines which adapter is used to connect and execute commands.
+    /// When omitted, defaults to SSH for full backward compatibility.
+    #[serde(default)]
+    pub protocol: Protocol,
 }
 
 /// Per-host retry configuration override
@@ -252,6 +259,18 @@ pub enum ShellType {
     /// `PowerShell` (`pwsh` / `powershell.exe`) -- single-quote with doubling
     #[serde(alias = "pwsh")]
     PowerShell,
+}
+
+/// Remote execution protocol for a host.
+///
+/// Determines which adapter is used to execute commands on the host.
+/// Defaults to `Ssh` for full backward compatibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Protocol {
+    /// SSH (default) — works for Linux, Windows (via OpenSSH), and modern network equipment
+    #[default]
+    Ssh,
 }
 
 const fn default_port() -> u16 {

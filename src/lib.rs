@@ -21,7 +21,10 @@ pub mod ssh;
 pub use config::Config;
 pub use error::{BridgeError, Result};
 pub use mcp::McpServer;
-pub use ports::{SshExecutor, ToolAnnotations, ToolContext, ToolHandler, ToolSchema};
+pub use ports::{
+    ExecutorRouter, RemoteExecutor, SshExecutor, ToolAnnotations, ToolContext, ToolHandler,
+    ToolSchema,
+};
 pub use security::{AuditLogger, Sanitizer};
 
 // Re-exports for fuzzing

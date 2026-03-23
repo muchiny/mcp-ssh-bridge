@@ -170,9 +170,7 @@ impl EntropyDetector {
 
         // UUIDs (8-4-4-4-12 hex format) — common, not secrets
         if token.len() == 36
-            && token
-                .chars()
-                .all(|c| c.is_ascii_hexdigit() || c == '-')
+            && token.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
             && token.chars().filter(|&c| c == '-').count() == 4
         {
             return true;
@@ -210,7 +208,10 @@ mod tests {
     #[test]
     fn test_shannon_entropy_low_for_text() {
         let entropy = EntropyDetector::shannon_entropy("hello world this is normal text");
-        assert!(entropy < 4.5, "English text entropy should be below 4.5, got {entropy}");
+        assert!(
+            entropy < 4.5,
+            "English text entropy should be below 4.5, got {entropy}"
+        );
     }
 
     #[test]

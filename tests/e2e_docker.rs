@@ -22,6 +22,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use mcp_ssh_bridge::ExecutorRouter;
 use mcp_ssh_bridge::config::{
     AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
     LimitsConfig, OsType, SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery,
@@ -31,7 +32,7 @@ use mcp_ssh_bridge::domain::history::HistoryConfig;
 use mcp_ssh_bridge::domain::{CommandHistory, ExecuteCommandUseCase, TunnelManager};
 use mcp_ssh_bridge::ports::protocol::ToolContent;
 use mcp_ssh_bridge::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
-use mcp_ssh_bridge::ssh::{ConnectionPool, SessionManager};
+use mcp_ssh_bridge::ssh::SessionManager;
 use mcp_ssh_bridge::{BridgeError, ToolContext, ToolHandler};
 
 use mcp_ssh_bridge::mcp::tool_handlers::*;
@@ -65,6 +66,7 @@ fn build_docker_ctx() -> ToolContext {
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
 
@@ -115,7 +117,7 @@ fn build_docker_ctx() -> ToolContext {
         sanitizer,
         audit_logger,
         history,
-        connection_pool: Arc::new(ConnectionPool::with_defaults()),
+        connection_pool: Arc::new(ExecutorRouter::with_defaults()),
         execute_use_case,
         rate_limiter: Arc::new(RateLimiter::new(0)),
         session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
@@ -128,7 +130,11 @@ fn build_docker_ctx() -> ToolContext {
 }
 
 /// Helper: execute a tool handler and return the text content.
-async fn exec_tool(handler: &dyn ToolHandler, args: serde_json::Value, ctx: &ToolContext) -> String {
+async fn exec_tool(
+    handler: &dyn ToolHandler,
+    args: serde_json::Value,
+    ctx: &ToolContext,
+) -> String {
     let result = handler
         .execute(Some(args), ctx)
         .await
@@ -167,10 +173,7 @@ async fn require_docker_ssh() -> ToolContext {
     let ctx = build_docker_ctx();
     let handler = SshExecHandler;
     match handler
-        .execute(
-            Some(json!({"host": "docker", "command": "echo ok"})),
-            &ctx,
-        )
+        .execute(Some(json!({"host": "docker", "command": "echo ok"})), &ctx)
         .await
     {
         Ok(result) => {
@@ -244,10 +247,7 @@ async fn test_docker_ssh_exec_nonzero_exit() {
     let ctx = require_docker_ssh().await;
     let handler = SshExecHandler;
     let result = handler
-        .execute(
-            Some(json!({"host": "docker", "command": "false"})),
-            &ctx,
-        )
+        .execute(Some(json!({"host": "docker", "command": "false"})), &ctx)
         .await
         .unwrap();
     // "false" returns exit code 1 — should be reflected in structured content
@@ -287,10 +287,7 @@ async fn test_docker_file_write_and_read() {
         &ctx,
     )
     .await;
-    assert!(
-        !text.is_empty(),
-        "Write should return confirmation"
-    );
+    assert!(!text.is_empty(), "Write should return confirmation");
 
     // Read it back
     let read_handler = SshFileReadHandler::new();
@@ -320,12 +317,7 @@ async fn test_docker_file_write_and_read() {
 async fn test_docker_ls() {
     let ctx = require_docker_ssh().await;
     let handler = SshLsHandler;
-    let text = exec_tool(
-        &handler,
-        json!({"host": "docker", "path": "/tmp"}),
-        &ctx,
-    )
-    .await;
+    let text = exec_tool(&handler, json!({"host": "docker", "path": "/tmp"}), &ctx).await;
     // /tmp always has content on a running system
     assert!(!text.is_empty(), "ls /tmp should return content");
 }
@@ -374,12 +366,7 @@ async fn test_docker_find() {
 async fn test_docker_process_list() {
     let ctx = require_docker_ssh().await;
     let handler = SshProcessListHandler::new();
-    let text = exec_tool(
-        &handler,
-        json!({"host": "docker"}),
-        &ctx,
-    )
-    .await;
+    let text = exec_tool(&handler, json!({"host": "docker"}), &ctx).await;
     // Should contain at least sshd or some process
     assert!(!text.is_empty(), "Process list should not be empty");
 }
@@ -389,12 +376,7 @@ async fn test_docker_process_list() {
 async fn test_docker_net_interfaces() {
     let ctx = require_docker_ssh().await;
     let handler = SshNetInterfacesHandler::new();
-    let text = exec_tool(
-        &handler,
-        json!({"host": "docker"}),
-        &ctx,
-    )
-    .await;
+    let text = exec_tool(&handler, json!({"host": "docker"}), &ctx).await;
     // Should have at least lo or eth0
     assert!(
         text.contains("lo") || text.contains("eth") || text.contains("inet"),
@@ -407,12 +389,7 @@ async fn test_docker_net_interfaces() {
 async fn test_docker_disk_usage() {
     let ctx = require_docker_ssh().await;
     let handler = SshDiskUsageHandler;
-    let text = exec_tool(
-        &handler,
-        json!({"host": "docker"}),
-        &ctx,
-    )
-    .await;
+    let text = exec_tool(&handler, json!({"host": "docker"}), &ctx).await;
     assert!(!text.is_empty(), "Disk usage should return data");
 }
 
@@ -460,10 +437,7 @@ async fn test_docker_command_denied_by_blacklist() {
 
     let handler = SshExecHandler;
     let err = handler
-        .execute(
-            Some(json!({"host": "docker", "command": "rm -rf /"})),
-            &ctx,
-        )
+        .execute(Some(json!({"host": "docker", "command": "rm -rf /"})), &ctx)
         .await
         .unwrap_err();
     assert!(matches!(err, BridgeError::CommandDenied { .. }));
@@ -556,14 +530,12 @@ async fn test_docker_git_init_and_status() {
 
     // Use git_status tool
     let handler = SshGitStatusHandler::new();
-    let text = exec_tool(
-        &handler,
-        json!({"host": "docker", "path": &git_dir}),
-        &ctx,
-    )
-    .await;
+    let text = exec_tool(&handler, json!({"host": "docker", "path": &git_dir}), &ctx).await;
     assert!(
-        text.contains("branch") || text.contains("master") || text.contains("main") || text.contains("Initial"),
+        text.contains("branch")
+            || text.contains("master")
+            || text.contains("main")
+            || text.contains("Initial"),
         "Git status should show branch info: {text}"
     );
 

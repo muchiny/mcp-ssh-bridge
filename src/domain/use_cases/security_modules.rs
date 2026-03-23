@@ -2,7 +2,6 @@
 //!
 //! Builds commands for `SELinux` and `AppArmor` status and management.
 
-
 use crate::config::ShellType;
 
 fn shell_escape(s: &str) -> String {
@@ -21,10 +20,7 @@ impl SecurityModulesCommandBuilder {
 
     /// Build `SELinux` booleans list/set command.
     #[must_use]
-    pub fn build_selinux_booleans_command(
-        name: Option<&str>,
-        value: Option<bool>,
-    ) -> String {
+    pub fn build_selinux_booleans_command(name: Option<&str>, value: Option<bool>) -> String {
         match (name, value) {
             (Some(n), Some(v)) => {
                 let val = if v { "on" } else { "off" };
@@ -38,7 +34,8 @@ impl SecurityModulesCommandBuilder {
     /// Build `AppArmor` status command.
     #[must_use]
     pub fn build_apparmor_status_command() -> String {
-        "aa-status 2>/dev/null || apparmor_status 2>/dev/null || echo 'AppArmor not available'".to_string()
+        "aa-status 2>/dev/null || apparmor_status 2>/dev/null || echo 'AppArmor not available'"
+            .to_string()
     }
 
     /// Build `AppArmor` profiles list command.
@@ -81,14 +78,20 @@ mod tests {
 
     #[test]
     fn test_selinux_booleans_get() {
-        let cmd = SecurityModulesCommandBuilder::build_selinux_booleans_command(Some("httpd_can_network_connect"), None);
+        let cmd = SecurityModulesCommandBuilder::build_selinux_booleans_command(
+            Some("httpd_can_network_connect"),
+            None,
+        );
         assert!(cmd.contains("getsebool"));
         assert!(cmd.contains("httpd_can_network_connect"));
     }
 
     #[test]
     fn test_selinux_booleans_set() {
-        let cmd = SecurityModulesCommandBuilder::build_selinux_booleans_command(Some("httpd_can_network_connect"), Some(true));
+        let cmd = SecurityModulesCommandBuilder::build_selinux_booleans_command(
+            Some("httpd_can_network_connect"),
+            Some(true),
+        );
         assert!(cmd.contains("setsebool"));
         assert!(cmd.contains("on"));
     }

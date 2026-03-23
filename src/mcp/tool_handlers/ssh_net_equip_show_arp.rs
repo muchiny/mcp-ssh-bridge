@@ -68,7 +68,9 @@ impl StandardTool for NetEquipShowArpTool {
             .equipment_type
             .as_deref()
             .map_or(EquipmentType::Generic, EquipmentType::from_str_loose);
-        Ok(NetworkEquipmentCommandBuilder::build_show_arp_command(eq_type))
+        Ok(NetworkEquipmentCommandBuilder::build_show_arp_command(
+            eq_type,
+        ))
     }
 }
 

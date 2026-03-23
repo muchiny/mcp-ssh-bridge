@@ -81,14 +81,9 @@ impl LogAggregationCommandBuilder {
         let files = log_files.unwrap_or(DEFAULT_LOG_FILES);
         let escaped_pattern = shell_escape(pattern);
 
-        let mut journal_cmd = format!(
-            "journalctl --no-pager -q --grep {escaped_pattern}"
-        );
+        let mut journal_cmd = format!("journalctl --no-pager -q --grep {escaped_pattern}");
         if let Some(since_val) = since {
-            journal_cmd = format!(
-                "{journal_cmd} --since {}",
-                shell_escape(since_val)
-            );
+            journal_cmd = format!("{journal_cmd} --since {}", shell_escape(since_val));
         }
 
         Ok(format!(
@@ -120,10 +115,7 @@ impl LogAggregationCommandBuilder {
     /// # Errors
     ///
     /// Returns an error if the line count is invalid.
-    pub fn build_log_tail_command(
-        log_files: Option<&str>,
-        lines: Option<u64>,
-    ) -> Result<String> {
+    pub fn build_log_tail_command(log_files: Option<&str>, lines: Option<u64>) -> Result<String> {
         let n = lines.unwrap_or(50);
         validate_lines(n)?;
 
@@ -210,10 +202,8 @@ mod tests {
 
     #[test]
     fn test_search_defaults() {
-        let cmd = LogAggregationCommandBuilder::build_log_search_command(
-            "error", None, None,
-        )
-        .unwrap();
+        let cmd =
+            LogAggregationCommandBuilder::build_log_search_command("error", None, None).unwrap();
         assert!(cmd.contains("journalctl"));
         assert!(cmd.contains("--grep 'error'"));
         assert!(cmd.contains("grep -r 'error'"));
@@ -277,9 +267,9 @@ mod tests {
 
     #[test]
     fn test_aggregate_custom_files() {
-        let cmd = LogAggregationCommandBuilder::build_log_aggregate_command(
-            Some("/var/log/nginx/access.log"),
-        );
+        let cmd = LogAggregationCommandBuilder::build_log_aggregate_command(Some(
+            "/var/log/nginx/access.log",
+        ));
         assert!(cmd.contains("/var/log/nginx/access.log"));
     }
 
@@ -294,25 +284,21 @@ mod tests {
 
     #[test]
     fn test_tail_custom_lines() {
-        let cmd =
-            LogAggregationCommandBuilder::build_log_tail_command(None, Some(200)).unwrap();
+        let cmd = LogAggregationCommandBuilder::build_log_tail_command(None, Some(200)).unwrap();
         assert!(cmd.contains("tail -n 200"));
     }
 
     #[test]
     fn test_tail_custom_files() {
-        let cmd = LogAggregationCommandBuilder::build_log_tail_command(
-            Some("/var/log/app.log"),
-            None,
-        )
-        .unwrap();
+        let cmd =
+            LogAggregationCommandBuilder::build_log_tail_command(Some("/var/log/app.log"), None)
+                .unwrap();
         assert!(cmd.contains("/var/log/app.log"));
     }
 
     #[test]
     fn test_tail_invalid_lines() {
-        let result =
-            LogAggregationCommandBuilder::build_log_tail_command(None, Some(6000));
+        let result = LogAggregationCommandBuilder::build_log_tail_command(None, Some(6000));
         assert!(result.is_err());
     }
 
@@ -324,8 +310,7 @@ mod tests {
 
     #[test]
     fn test_tail_max_lines() {
-        let cmd =
-            LogAggregationCommandBuilder::build_log_tail_command(None, Some(5000)).unwrap();
+        let cmd = LogAggregationCommandBuilder::build_log_tail_command(None, Some(5000)).unwrap();
         assert!(cmd.contains("tail -n 5000"));
     }
 }

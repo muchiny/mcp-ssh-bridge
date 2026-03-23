@@ -137,7 +137,8 @@ mod tests {
 
     #[test]
     fn test_compose() {
-        let cmd = PodmanCommandBuilder::build_compose_command("up -d", Some("docker-compose.prod.yml"));
+        let cmd =
+            PodmanCommandBuilder::build_compose_command("up -d", Some("docker-compose.prod.yml"));
         assert!(cmd.contains("podman compose"));
         assert!(cmd.contains("-f"));
         assert!(cmd.contains("up -d"));

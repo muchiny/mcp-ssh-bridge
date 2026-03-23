@@ -62,10 +62,7 @@ impl StandardTool for TemplateListTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn build_command(
-        _args: &SshTemplateListArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshTemplateListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(TemplateCommandBuilder::build_template_list_command())
     }
 }
@@ -114,8 +111,7 @@ mod tests {
         assert!(!handler.description().is_empty());
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_template_list");
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("host")));
     }
@@ -149,8 +145,7 @@ mod tests {
     fn test_schema_optional_fields() {
         let handler = SshTemplateListHandler::new();
         let schema = handler.schema();
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let props = schema_json["properties"].as_object().unwrap();
         assert!(props.contains_key("timeout_seconds"));
         assert!(props.contains_key("max_output"));
@@ -194,6 +189,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshTemplateListArgs {
             host: "s".to_string(),

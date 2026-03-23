@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use mcp_ssh_bridge::ExecutorRouter;
 use mcp_ssh_bridge::config::{
     AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
     LimitsConfig, OsType, SecurityConfig, SecurityMode, SessionConfig, SshConfigDiscovery,
@@ -17,7 +18,7 @@ use mcp_ssh_bridge::domain::{ExecuteCommandUseCase, TunnelManager};
 use mcp_ssh_bridge::mcp::registry::create_filtered_registry;
 use mcp_ssh_bridge::ports::ToolContext;
 use mcp_ssh_bridge::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
-use mcp_ssh_bridge::ssh::{ConnectionPool, SessionManager};
+use mcp_ssh_bridge::ssh::SessionManager;
 
 use serde_json::json;
 
@@ -41,6 +42,7 @@ fn create_config_with_host() -> Config {
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
     Config {
@@ -84,7 +86,7 @@ fn create_tool_context(config: &Config) -> ToolContext {
         sanitizer,
         audit_logger,
         history,
-        connection_pool: Arc::new(ConnectionPool::with_defaults()),
+        connection_pool: Arc::new(ExecutorRouter::with_defaults()),
         execute_use_case,
         rate_limiter: Arc::new(RateLimiter::new(0)), // Disabled
         session_manager: Arc::new(SessionManager::new(SessionConfig::default())),

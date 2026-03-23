@@ -18,11 +18,7 @@ impl FileOpsCommandBuilder {
     ///
     /// Constructs: `sed -n '{start},{end}p' {path}` or `cat {path}`
     #[must_use]
-    pub fn build_read_command(
-        path: &str,
-        offset: Option<u64>,
-        limit: Option<u64>,
-    ) -> String {
+    pub fn build_read_command(path: &str, offset: Option<u64>, limit: Option<u64>) -> String {
         let escaped = shell_escape(path);
         match (offset, limit) {
             (Some(off), Some(lim)) => {
@@ -39,11 +35,7 @@ impl FileOpsCommandBuilder {
     ///
     /// Constructs: `cat > {path} << 'MCPEOF'\n{content}\nMCPEOF` or append variant
     #[must_use]
-    pub fn build_write_command(
-        path: &str,
-        content: &str,
-        append: bool,
-    ) -> String {
+    pub fn build_write_command(path: &str, content: &str, append: bool) -> String {
         let escaped = shell_escape(path);
         let operator = if append { ">>" } else { ">" };
         // Use printf for safe content transfer (handles special chars)
@@ -56,11 +48,7 @@ impl FileOpsCommandBuilder {
     ///
     /// Constructs: `chmod [-R] {mode} {path}`
     #[must_use]
-    pub fn build_chmod_command(
-        path: &str,
-        mode: &str,
-        recursive: bool,
-    ) -> String {
+    pub fn build_chmod_command(path: &str, mode: &str, recursive: bool) -> String {
         let escaped = shell_escape(path);
         let mode_escaped = shell_escape(mode);
         let recursive_flag = if recursive { "-R " } else { "" };

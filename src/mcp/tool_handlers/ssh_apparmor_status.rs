@@ -55,10 +55,7 @@ impl StandardTool for ApparmorStatusTool {
         }
     }"#;
 
-    fn build_command(
-        _args: &SshApparmorStatusArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshApparmorStatusArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SecurityModulesCommandBuilder::build_apparmor_status_command())
     }
 }

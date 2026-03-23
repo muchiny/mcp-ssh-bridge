@@ -109,9 +109,7 @@ impl PerformanceCommandBuilder {
     pub fn build_io_trace_command(device: Option<&str>, duration: u64) -> String {
         if let Some(dev) = device {
             let escaped = shell_escape(dev);
-            format!(
-                "iostat -x {escaped} 1 {duration} 2>/dev/null || cat /proc/diskstats"
-            )
+            format!("iostat -x {escaped} 1 {duration} 2>/dev/null || cat /proc/diskstats")
         } else {
             format!("iostat -x 1 {duration} 2>/dev/null || cat /proc/diskstats")
         }
@@ -145,17 +143,11 @@ impl PerformanceCommandBuilder {
     #[must_use]
     pub fn build_benchmark_command(bench_type: &str) -> String {
         match bench_type {
-            "cpu" => {
-                "dd if=/dev/zero bs=1M count=256 2>/dev/null | md5sum".to_string()
-            }
-            "io" => {
-                "dd if=/dev/zero of=/tmp/bench_test bs=1M count=256 conv=fdatasync 2>&1 \
+            "cpu" => "dd if=/dev/zero bs=1M count=256 2>/dev/null | md5sum".to_string(),
+            "io" => "dd if=/dev/zero of=/tmp/bench_test bs=1M count=256 conv=fdatasync 2>&1 \
                  && rm -f /tmp/bench_test"
-                    .to_string()
-            }
-            "memory" => {
-                "dd if=/dev/zero of=/dev/null bs=1M count=1024 2>&1".to_string()
-            }
+                .to_string(),
+            "memory" => "dd if=/dev/zero of=/dev/null bs=1M count=1024 2>&1".to_string(),
             _ => format!("echo 'Unknown benchmark type: {bench_type}'"),
         }
     }
@@ -291,20 +283,16 @@ mod tests {
 
     #[test]
     fn test_build_latency_test_mtr() {
-        let cmd = PerformanceCommandBuilder::build_latency_test_command(
-            "example.com",
-            10,
-            Some("mtr"),
-        )
-        .unwrap();
+        let cmd =
+            PerformanceCommandBuilder::build_latency_test_command("example.com", 10, Some("mtr"))
+                .unwrap();
         assert!(cmd.contains("mtr --report -c 10"));
         assert!(cmd.contains("example.com"));
     }
 
     #[test]
     fn test_build_latency_test_invalid_target() {
-        let result =
-            PerformanceCommandBuilder::build_latency_test_command("; rm -rf /", 5, None);
+        let result = PerformanceCommandBuilder::build_latency_test_command("; rm -rf /", 5, None);
         assert!(result.is_err());
     }
 

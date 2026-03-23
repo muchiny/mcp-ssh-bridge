@@ -79,10 +79,7 @@ impl StandardTool for ContainerLogStatsTool {
         "required": ["host", "container"]
     }"#;
 
-    fn build_command(
-        args: &SshContainerLogStatsArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshContainerLogStatsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(ContainerLogCommandBuilder::build_log_stats_command(
             args.docker_bin.as_deref(),
             &args.container,
@@ -201,10 +198,7 @@ mod tests {
         let handler = SshContainerLogStatsHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"host": 123, "container": "nginx"})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": 123, "container": "nginx"})), &ctx)
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -246,6 +240,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

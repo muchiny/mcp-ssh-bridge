@@ -3,7 +3,6 @@
 //! Builds commands for network devices (Cisco IOS, `JunOS`, `MikroTik`, Fortinet, generic).
 //! Network equipment uses non-POSIX shells, so commands are sent as-is without shell escaping.
 
-
 /// Equipment vendor/OS type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EquipmentType {
@@ -57,7 +56,10 @@ impl NetworkEquipmentCommandBuilder {
 
     /// Build show interfaces command.
     #[must_use]
-    pub fn build_show_interfaces_command(equipment: EquipmentType, interface: Option<&str>) -> String {
+    pub fn build_show_interfaces_command(
+        equipment: EquipmentType,
+        interface: Option<&str>,
+    ) -> String {
         match equipment {
             EquipmentType::Cisco => {
                 if let Some(i) = interface {
@@ -161,83 +163,140 @@ mod tests {
     fn test_equipment_type_parse() {
         assert_eq!(EquipmentType::from_str_loose("cisco"), EquipmentType::Cisco);
         assert_eq!(EquipmentType::from_str_loose("IOS"), EquipmentType::Cisco);
-        assert_eq!(EquipmentType::from_str_loose("juniper"), EquipmentType::Juniper);
-        assert_eq!(EquipmentType::from_str_loose("mikrotik"), EquipmentType::MikroTik);
-        assert_eq!(EquipmentType::from_str_loose("fortinet"), EquipmentType::Fortinet);
-        assert_eq!(EquipmentType::from_str_loose("unknown"), EquipmentType::Generic);
+        assert_eq!(
+            EquipmentType::from_str_loose("juniper"),
+            EquipmentType::Juniper
+        );
+        assert_eq!(
+            EquipmentType::from_str_loose("mikrotik"),
+            EquipmentType::MikroTik
+        );
+        assert_eq!(
+            EquipmentType::from_str_loose("fortinet"),
+            EquipmentType::Fortinet
+        );
+        assert_eq!(
+            EquipmentType::from_str_loose("unknown"),
+            EquipmentType::Generic
+        );
     }
 
     #[test]
     fn test_show_run_cisco() {
-        let cmd = NetworkEquipmentCommandBuilder::build_show_run_command(EquipmentType::Cisco, None);
+        let cmd =
+            NetworkEquipmentCommandBuilder::build_show_run_command(EquipmentType::Cisco, None);
         assert_eq!(cmd, "show running-config");
     }
 
     #[test]
     fn test_show_run_cisco_section() {
-        let cmd = NetworkEquipmentCommandBuilder::build_show_run_command(EquipmentType::Cisco, Some("interface"));
+        let cmd = NetworkEquipmentCommandBuilder::build_show_run_command(
+            EquipmentType::Cisco,
+            Some("interface"),
+        );
         assert!(cmd.contains("section interface"));
     }
 
     #[test]
     fn test_show_run_juniper() {
-        let cmd = NetworkEquipmentCommandBuilder::build_show_run_command(EquipmentType::Juniper, None);
+        let cmd =
+            NetworkEquipmentCommandBuilder::build_show_run_command(EquipmentType::Juniper, None);
         assert!(cmd.contains("display set"));
     }
 
     #[test]
     fn test_show_run_mikrotik() {
-        let cmd = NetworkEquipmentCommandBuilder::build_show_run_command(EquipmentType::MikroTik, None);
+        let cmd =
+            NetworkEquipmentCommandBuilder::build_show_run_command(EquipmentType::MikroTik, None);
         assert_eq!(cmd, "/export");
     }
 
     #[test]
     fn test_show_interfaces_cisco() {
-        let cmd = NetworkEquipmentCommandBuilder::build_show_interfaces_command(EquipmentType::Cisco, None);
+        let cmd = NetworkEquipmentCommandBuilder::build_show_interfaces_command(
+            EquipmentType::Cisco,
+            None,
+        );
         assert!(cmd.contains("ip interface brief"));
     }
 
     #[test]
     fn test_show_interfaces_cisco_specific() {
-        let cmd = NetworkEquipmentCommandBuilder::build_show_interfaces_command(EquipmentType::Cisco, Some("GigabitEthernet0/1"));
+        let cmd = NetworkEquipmentCommandBuilder::build_show_interfaces_command(
+            EquipmentType::Cisco,
+            Some("GigabitEthernet0/1"),
+        );
         assert!(cmd.contains("GigabitEthernet0/1"));
     }
 
     #[test]
     fn test_show_routes() {
-        assert!(NetworkEquipmentCommandBuilder::build_show_routes_command(EquipmentType::Cisco).contains("ip route"));
-        assert!(NetworkEquipmentCommandBuilder::build_show_routes_command(EquipmentType::Juniper).contains("show route"));
-        assert!(NetworkEquipmentCommandBuilder::build_show_routes_command(EquipmentType::MikroTik).contains("/ip route"));
+        assert!(
+            NetworkEquipmentCommandBuilder::build_show_routes_command(EquipmentType::Cisco)
+                .contains("ip route")
+        );
+        assert!(
+            NetworkEquipmentCommandBuilder::build_show_routes_command(EquipmentType::Juniper)
+                .contains("show route")
+        );
+        assert!(
+            NetworkEquipmentCommandBuilder::build_show_routes_command(EquipmentType::MikroTik)
+                .contains("/ip route")
+        );
     }
 
     #[test]
     fn test_show_arp() {
-        assert!(NetworkEquipmentCommandBuilder::build_show_arp_command(EquipmentType::Cisco).contains("show arp"));
-        assert!(NetworkEquipmentCommandBuilder::build_show_arp_command(EquipmentType::MikroTik).contains("/ip arp"));
+        assert!(
+            NetworkEquipmentCommandBuilder::build_show_arp_command(EquipmentType::Cisco)
+                .contains("show arp")
+        );
+        assert!(
+            NetworkEquipmentCommandBuilder::build_show_arp_command(EquipmentType::MikroTik)
+                .contains("/ip arp")
+        );
     }
 
     #[test]
     fn test_show_version() {
-        assert!(NetworkEquipmentCommandBuilder::build_show_version_command(EquipmentType::Cisco).contains("show version"));
-        assert!(NetworkEquipmentCommandBuilder::build_show_version_command(EquipmentType::MikroTik).contains("resource print"));
+        assert!(
+            NetworkEquipmentCommandBuilder::build_show_version_command(EquipmentType::Cisco)
+                .contains("show version")
+        );
+        assert!(
+            NetworkEquipmentCommandBuilder::build_show_version_command(EquipmentType::MikroTik)
+                .contains("resource print")
+        );
     }
 
     #[test]
     fn test_config_cisco() {
-        let cmd = NetworkEquipmentCommandBuilder::build_config_command(EquipmentType::Cisco, "interface Gi0/1\nno shutdown");
+        let cmd = NetworkEquipmentCommandBuilder::build_config_command(
+            EquipmentType::Cisco,
+            "interface Gi0/1\nno shutdown",
+        );
         assert!(cmd.starts_with("configure terminal"));
         assert!(cmd.ends_with("end"));
     }
 
     #[test]
     fn test_config_juniper() {
-        let cmd = NetworkEquipmentCommandBuilder::build_config_command(EquipmentType::Juniper, "set interfaces ge-0/0/0 disable");
+        let cmd = NetworkEquipmentCommandBuilder::build_config_command(
+            EquipmentType::Juniper,
+            "set interfaces ge-0/0/0 disable",
+        );
         assert!(cmd.contains("commit"));
     }
 
     #[test]
     fn test_save() {
-        assert_eq!(NetworkEquipmentCommandBuilder::build_save_command(EquipmentType::Cisco), "write memory");
-        assert!(NetworkEquipmentCommandBuilder::build_save_command(EquipmentType::Juniper).contains("rescue save"));
+        assert_eq!(
+            NetworkEquipmentCommandBuilder::build_save_command(EquipmentType::Cisco),
+            "write memory"
+        );
+        assert!(
+            NetworkEquipmentCommandBuilder::build_save_command(EquipmentType::Juniper)
+                .contains("rescue save")
+        );
     }
 }

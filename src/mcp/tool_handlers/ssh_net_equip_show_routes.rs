@@ -71,7 +71,9 @@ impl StandardTool for NetEquipShowRoutesTool {
             .equipment_type
             .as_deref()
             .map_or(EquipmentType::Generic, EquipmentType::from_str_loose);
-        Ok(NetworkEquipmentCommandBuilder::build_show_routes_command(eq_type))
+        Ok(NetworkEquipmentCommandBuilder::build_show_routes_command(
+            eq_type,
+        ))
     }
 }
 

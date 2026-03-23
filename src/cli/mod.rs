@@ -9,7 +9,10 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-pub use runner::{run_config_diff, run_download, run_exec, run_history, run_list_tools, run_status, run_upload, run_validate};
+pub use runner::{
+    run_config_diff, run_download, run_exec, run_history, run_list_tools, run_status, run_upload,
+    run_validate,
+};
 
 /// MCP SSH Bridge - Secure SSH access to air-gapped environments
 #[derive(Parser)]

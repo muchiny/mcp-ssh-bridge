@@ -135,7 +135,10 @@ mod tests {
         let handler = SshPostgresqlQueryHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(Some(json!({"host": "nonexistent", "query": "SELECT 1"})), &ctx)
+            .execute(
+                Some(json!({"host": "nonexistent", "query": "SELECT 1"})),
+                &ctx,
+            )
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {

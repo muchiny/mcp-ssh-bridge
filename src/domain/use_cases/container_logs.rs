@@ -62,10 +62,7 @@ impl ContainerLogCommandBuilder {
         }
         if pattern.len() > 500 {
             return Err(BridgeError::CommandDenied {
-                reason: format!(
-                    "Search pattern too long ({} chars, max 500)",
-                    pattern.len()
-                ),
+                reason: format!("Search pattern too long ({} chars, max 500)", pattern.len()),
             });
         }
         // Reject shell injection characters
@@ -201,10 +198,7 @@ impl ContainerLogCommandBuilder {
     ///
     /// Constructs: `{docker} inspect --format '{{json .State.Health}}' {container}`
     #[must_use]
-    pub fn build_health_history_command(
-        docker_bin: Option<&str>,
-        container: &str,
-    ) -> String {
+    pub fn build_health_history_command(docker_bin: Option<&str>, container: &str) -> String {
         let prefix = docker_detect_prefix(docker_bin);
         let escaped_container = shell_escape(container);
         format!("{prefix}inspect --format '{{{{json .State.Health}}}}' {escaped_container}")
@@ -369,11 +363,8 @@ mod tests {
 
     #[test]
     fn test_build_log_stats_basic() {
-        let cmd = ContainerLogCommandBuilder::build_log_stats_command(
-            Some("docker"),
-            "nginx",
-            None,
-        );
+        let cmd =
+            ContainerLogCommandBuilder::build_log_stats_command(Some("docker"), "nginx", None);
         assert!(cmd.contains("docker logs"));
         assert!(cmd.contains("nginx"));
         assert!(cmd.contains("wc -l"));
@@ -397,12 +388,8 @@ mod tests {
 
     #[test]
     fn test_build_events_defaults() {
-        let cmd = ContainerLogCommandBuilder::build_events_command(
-            Some("docker"),
-            None,
-            None,
-            None,
-        );
+        let cmd =
+            ContainerLogCommandBuilder::build_events_command(Some("docker"), None, None, None);
         assert!(cmd.contains("docker events"));
         assert!(cmd.contains("--since"));
         assert!(cmd.contains("1h"));
@@ -429,12 +416,7 @@ mod tests {
 
     #[test]
     fn test_build_events_auto_detect() {
-        let cmd = ContainerLogCommandBuilder::build_events_command(
-            None,
-            None,
-            None,
-            None,
-        );
+        let cmd = ContainerLogCommandBuilder::build_events_command(None, None, None, None);
         assert!(cmd.contains("command -v docker"));
     }
 
@@ -442,10 +424,7 @@ mod tests {
 
     #[test]
     fn test_build_health_history_basic() {
-        let cmd = ContainerLogCommandBuilder::build_health_history_command(
-            Some("docker"),
-            "nginx",
-        );
+        let cmd = ContainerLogCommandBuilder::build_health_history_command(Some("docker"), "nginx");
         assert!(cmd.contains("docker inspect"));
         assert!(cmd.contains("State.Health"));
         assert!(cmd.contains("nginx"));
@@ -453,20 +432,15 @@ mod tests {
 
     #[test]
     fn test_build_health_history_podman() {
-        let cmd = ContainerLogCommandBuilder::build_health_history_command(
-            Some("podman"),
-            "webapp",
-        );
+        let cmd =
+            ContainerLogCommandBuilder::build_health_history_command(Some("podman"), "webapp");
         assert!(cmd.contains("podman inspect"));
         assert!(cmd.contains("webapp"));
     }
 
     #[test]
     fn test_build_health_history_auto_detect() {
-        let cmd = ContainerLogCommandBuilder::build_health_history_command(
-            None,
-            "my-container",
-        );
+        let cmd = ContainerLogCommandBuilder::build_health_history_command(None, "my-container");
         assert!(cmd.contains("command -v docker"));
         assert!(cmd.contains("my-container"));
     }

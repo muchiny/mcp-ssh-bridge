@@ -79,10 +79,7 @@ impl StandardTool for LogTailMultiTool {
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
     fn build_command(args: &SshLogTailMultiArgs, _host_config: &HostConfig) -> Result<String> {
-        LogAggregationCommandBuilder::build_log_tail_command(
-            args.log_files.as_deref(),
-            args.lines,
-        )
+        LogAggregationCommandBuilder::build_log_tail_command(args.log_files.as_deref(), args.lines)
     }
 }
 
@@ -185,9 +182,7 @@ mod tests {
     async fn test_invalid_json_type() {
         let handler = SshLogTailMultiHandler::new();
         let ctx = create_test_context();
-        let result = handler
-            .execute(Some(json!({"host": 123})), &ctx)
-            .await;
+        let result = handler.execute(Some(json!({"host": 123})), &ctx).await;
         assert!(result.is_err());
         match result.unwrap_err() {
             BridgeError::McpInvalidRequest(_) => {}
@@ -210,6 +205,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

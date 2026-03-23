@@ -68,10 +68,7 @@ impl StandardTool for PostgresqlStatusTool {
         "required": ["host"]
     }"#;
 
-    fn build_command(
-        args: &SshPostgresqlStatusArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshPostgresqlStatusArgs, _host_config: &HostConfig) -> Result<String> {
         let user = args.db_user.as_deref().unwrap_or("postgres");
         let port = args.db_port.unwrap_or(5432);
         let escaped_user = shell_escape(user);

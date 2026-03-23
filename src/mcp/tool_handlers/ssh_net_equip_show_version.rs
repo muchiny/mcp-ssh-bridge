@@ -72,7 +72,9 @@ impl StandardTool for NetEquipShowVersionTool {
             .equipment_type
             .as_deref()
             .map_or(EquipmentType::Generic, EquipmentType::from_str_loose);
-        Ok(NetworkEquipmentCommandBuilder::build_show_version_command(eq_type))
+        Ok(NetworkEquipmentCommandBuilder::build_show_version_command(
+            eq_type,
+        ))
     }
 }
 

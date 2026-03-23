@@ -80,10 +80,7 @@ impl StandardTool for CapacityTrendTool {
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
     fn build_command(args: &SshCapacityTrendArgs, _host_config: &HostConfig) -> Result<String> {
-        CapacityCommandBuilder::build_capacity_trend_command(
-            args.resource.as_deref(),
-            args.days,
-        )
+        CapacityCommandBuilder::build_capacity_trend_command(args.resource.as_deref(), args.days)
     }
 }
 
@@ -216,6 +213,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

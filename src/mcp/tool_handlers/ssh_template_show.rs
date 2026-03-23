@@ -72,10 +72,7 @@ impl StandardTool for TemplateShowTool {
         validate_template_name(&args.template_name)
     }
 
-    fn build_command(
-        args: &SshTemplateShowArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshTemplateShowArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(TemplateCommandBuilder::build_template_show_command(
             &args.template_name,
         ))
@@ -129,8 +126,7 @@ mod tests {
         assert!(!handler.description().is_empty());
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_template_show");
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("host")));
         assert!(required.contains(&json!("template_name")));
@@ -171,8 +167,7 @@ mod tests {
     fn test_schema_optional_fields() {
         let handler = SshTemplateShowHandler::new();
         let schema = handler.schema();
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let props = schema_json["properties"].as_object().unwrap();
         assert!(props.contains_key("timeout_seconds"));
         assert!(props.contains_key("max_output"));
@@ -221,6 +216,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshTemplateShowArgs {
             host: "s".to_string(),

@@ -51,12 +51,11 @@ impl ToolHandler for SshRecordingStopHandler {
     }
 
     async fn execute(&self, args: Option<Value>, ctx: &ToolContext) -> Result<ToolCallResult> {
-        let args: Args = serde_json::from_value(
-            args.ok_or_else(|| BridgeError::McpMissingParam {
+        let args: Args =
+            serde_json::from_value(args.ok_or_else(|| BridgeError::McpMissingParam {
                 param: "arguments".to_string(),
-            })?,
-        )
-        .map_err(|e| BridgeError::McpInvalidRequest(format!("Invalid arguments: {e}")))?;
+            })?)
+            .map_err(|e| BridgeError::McpInvalidRequest(format!("Invalid arguments: {e}")))?;
 
         let recorder = ctx.session_recorder.as_ref().ok_or_else(|| {
             BridgeError::McpInvalidRequest("Session recording is not enabled".to_string())
@@ -77,7 +76,11 @@ impl ToolHandler for SshRecordingStopHandler {
             info.host,
             info.event_count,
             info.file_path,
-            if info.hash_chain_enabled { "enabled" } else { "disabled" }
+            if info.hash_chain_enabled {
+                "enabled"
+            } else {
+                "disabled"
+            }
         )))
     }
 }

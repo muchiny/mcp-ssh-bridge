@@ -78,10 +78,7 @@ impl StandardTool for TemplateDiffTool {
         validate_dest_path(&args.current_path)
     }
 
-    fn build_command(
-        args: &SshTemplateDiffArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshTemplateDiffArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(TemplateCommandBuilder::build_template_diff_command(
             &args.content,
             &args.current_path,
@@ -140,8 +137,7 @@ mod tests {
         assert!(!handler.description().is_empty());
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_template_diff");
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("host")));
         assert!(required.contains(&json!("content")));
@@ -187,8 +183,7 @@ mod tests {
     fn test_schema_optional_fields() {
         let handler = SshTemplateDiffHandler::new();
         let schema = handler.schema();
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let props = schema_json["properties"].as_object().unwrap();
         assert!(props.contains_key("timeout_seconds"));
         assert!(props.contains_key("max_output"));
@@ -241,6 +236,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshTemplateDiffArgs {
             host: "s".to_string(),
@@ -272,6 +268,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshTemplateDiffArgs {
             host: "s".to_string(),

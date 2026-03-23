@@ -5,6 +5,8 @@
 
 pub mod completions;
 mod connector;
+mod executor;
+mod executor_router;
 mod prompts;
 pub mod protocol;
 mod resources;
@@ -13,6 +15,8 @@ mod tools;
 
 pub use completions::CompletionProvider;
 pub use connector::{SshClientTrait, SshConnector};
+pub use executor::RemoteExecutor;
+pub use executor_router::ExecutorRouter;
 pub use prompts::PromptHandler;
 pub use protocol::{
     AppAction, AppContent, EmbeddedResource, PromptArgument, PromptContent, PromptMessage,

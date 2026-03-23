@@ -5,8 +5,8 @@
 
 use std::collections::HashMap;
 use std::fmt::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Application-wide metrics collector
 pub struct Metrics {

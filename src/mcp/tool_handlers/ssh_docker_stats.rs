@@ -122,10 +122,7 @@ impl StandardTool for DockerStatsTool {
         let pids_idx = parsed.headers.iter().position(|h| h == "pids");
 
         for row in &parsed.rows {
-            let get = |idx: Option<usize>| {
-                idx.and_then(|i| row.get(i))
-                    .map_or("", String::as_str)
-            };
+            let get = |idx: Option<usize>| idx.and_then(|i| row.get(i)).map_or("", String::as_str);
             let name = get(name_idx);
             if !name.is_empty() {
                 tbl = tbl
@@ -288,6 +285,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

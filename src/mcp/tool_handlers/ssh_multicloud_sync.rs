@@ -62,10 +62,7 @@ impl StandardTool for MulticloudSyncTool {
                 "required": ["host"]
             }"#;
 
-    fn build_command(
-        _args: &SshMulticloudSyncArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshMulticloudSyncArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(MulticloudCommandBuilder::build_multicloud_sync_command())
     }
 }
