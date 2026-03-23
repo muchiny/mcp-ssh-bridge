@@ -18,6 +18,15 @@ pub mod ports;
 pub mod security;
 pub mod ssh;
 
+#[cfg(feature = "grpc")]
+pub mod grpc_exec;
+#[cfg(feature = "netconf")]
+pub mod netconf;
+#[cfg(feature = "telnet")]
+pub mod telnet;
+#[cfg(feature = "winrm")]
+pub mod winrm;
+
 pub use config::Config;
 pub use error::{BridgeError, Result};
 pub use mcp::McpServer;

@@ -1,22 +1,21 @@
 //! Executor Router — Protocol-aware dispatcher
 //!
 //! `ExecutorRouter` wraps the SSH `ConnectionPool` and dispatches connections
-//! based on the `protocol` field in each host's configuration. For Phase 1,
-//! only SSH is supported; future protocol adapters (`WinRM`, Telnet, NETCONF,
-//! gRPC, Serial) will be added as feature-gated variants.
+//! based on the `protocol` field in each host's configuration. Non-SSH
+//! protocol adapters (`WinRM`, Telnet, NETCONF, gRPC) are feature-gated.
 //!
 //! The router exposes the same public API as `ConnectionPool`, enabling a
 //! clean cut-over in `ToolContext` without changing any of the 337 tool handlers.
 
 use crate::config::{HostConfig, LimitsConfig, Protocol};
 use crate::error::Result;
-use crate::ssh::{ConnectionPool, PoolConfig, PoolStats, PooledConnectionGuard};
+use crate::ssh::{CommandOutput, ConnectionPool, PoolConfig, PoolStats, PooledConnectionGuard};
 
 /// Protocol-aware connection router.
 ///
 /// Holds one connection pool per protocol backend. For SSH hosts (the default),
-/// connections are delegated to the inner `ConnectionPool`. Future protocol
-/// adapters will each have their own pool/manager added here behind feature flags.
+/// connections are delegated to the inner `ConnectionPool`. Non-SSH adapters
+/// create standalone connections behind feature flags.
 pub struct ExecutorRouter {
     ssh_pool: ConnectionPool,
 }
@@ -41,18 +40,17 @@ impl ExecutorRouter {
     /// Get or create a connection to the specified host.
     ///
     /// Dispatches to the appropriate protocol backend based on
-    /// `host_config.protocol`. Currently only SSH is supported.
+    /// `host_config.protocol`.
     ///
     /// # Errors
     ///
-    /// Returns an error if the connection cannot be established or if
-    /// the host uses an unsupported protocol.
+    /// Returns an error if the connection cannot be established.
     pub async fn get_connection(
         &self,
         host_name: &str,
         host_config: &HostConfig,
         limits: &LimitsConfig,
-    ) -> Result<PooledConnectionGuard<'_>> {
+    ) -> Result<ConnectionGuard<'_>> {
         self.get_connection_with_jump(host_name, host_config, limits, None)
             .await
     }
@@ -71,22 +69,46 @@ impl ExecutorRouter {
         host_config: &HostConfig,
         limits: &LimitsConfig,
         jump_host: Option<(&str, &HostConfig)>,
-    ) -> Result<PooledConnectionGuard<'_>> {
+    ) -> Result<ConnectionGuard<'_>> {
         match host_config.protocol {
             Protocol::Ssh => {
-                self.ssh_pool
+                let guard = self
+                    .ssh_pool
                     .get_connection_with_jump(host_name, host_config, limits, jump_host)
-                    .await
-            } // Future protocols will be dispatched here:
-              // Protocol::WinRm => self.winrm_pool.get_connection(...),
-              // Protocol::Telnet => self.telnet_pool.get_connection(...),
+                    .await?;
+                Ok(ConnectionGuard::Ssh(guard))
+            }
+            #[cfg(feature = "winrm")]
+            Protocol::WinRm => {
+                let conn = crate::winrm::WinRmConnection::new(host_name, host_config, limits)?;
+                Ok(ConnectionGuard::WinRm(conn))
+            }
+            #[cfg(feature = "telnet")]
+            Protocol::Telnet => {
+                let conn = crate::telnet::TelnetConnection::connect(host_name, host_config, limits)
+                    .await?;
+                Ok(ConnectionGuard::Telnet(conn))
+            }
+            #[cfg(feature = "netconf")]
+            Protocol::Netconf => {
+                let conn =
+                    crate::netconf::NetconfConnection::connect(host_name, host_config, limits)
+                        .await?;
+                Ok(ConnectionGuard::Netconf(conn))
+            }
+            #[cfg(feature = "grpc")]
+            Protocol::Grpc => {
+                let conn =
+                    crate::grpc_exec::GrpcConnection::connect(host_name, host_config, limits)
+                        .await?;
+                Ok(ConnectionGuard::Grpc(conn))
+            }
         }
     }
 
     /// Clean up idle and expired connections across all protocol pools.
     pub async fn cleanup(&self) {
         self.ssh_pool.cleanup().await;
-        // Future: self.winrm_pool.cleanup().await;
     }
 
     /// Get statistics for the SSH connection pool.
@@ -103,6 +125,68 @@ impl ExecutorRouter {
     /// Close all connections across all protocol pools.
     pub async fn close_all(&self) {
         self.ssh_pool.close_all().await;
+    }
+}
+
+/// Unified connection guard for all supported protocols.
+///
+/// Each tool handler calls `conn.exec(command, limits)` and
+/// `conn.mark_failed()` — this enum dispatches to the correct
+/// protocol adapter transparently.
+pub enum ConnectionGuard<'a> {
+    /// SSH connection (pooled, returned to pool on drop).
+    Ssh(PooledConnectionGuard<'a>),
+    /// `WinRM` connection (HTTP/SOAP, stateless).
+    #[cfg(feature = "winrm")]
+    WinRm(crate::winrm::WinRmConnection),
+    /// Telnet connection (persistent TCP session).
+    #[cfg(feature = "telnet")]
+    Telnet(crate::telnet::TelnetConnection),
+    /// NETCONF session (RFC 6241 over SSH).
+    #[cfg(feature = "netconf")]
+    Netconf(crate::netconf::NetconfConnection),
+    /// gRPC channel (HTTP/2).
+    #[cfg(feature = "grpc")]
+    Grpc(crate::grpc_exec::GrpcConnection),
+}
+
+impl ConnectionGuard<'_> {
+    /// Execute a command using this connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the command execution fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the SSH connection has already been taken.
+    pub async fn exec(&mut self, command: &str, limits: &LimitsConfig) -> Result<CommandOutput> {
+        match self {
+            Self::Ssh(guard) => guard.exec(command, limits).await,
+            #[cfg(feature = "winrm")]
+            Self::WinRm(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "telnet")]
+            Self::Telnet(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "netconf")]
+            Self::Netconf(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "grpc")]
+            Self::Grpc(conn) => conn.exec(command, limits).await,
+        }
+    }
+
+    /// Mark this connection as failed (won't be returned to pool).
+    pub fn mark_failed(&mut self) {
+        match self {
+            Self::Ssh(guard) => guard.mark_failed(),
+            #[cfg(feature = "winrm")]
+            Self::WinRm(conn) => conn.mark_failed(),
+            #[cfg(feature = "telnet")]
+            Self::Telnet(conn) => conn.mark_failed(),
+            #[cfg(feature = "netconf")]
+            Self::Netconf(conn) => conn.mark_failed(),
+            #[cfg(feature = "grpc")]
+            Self::Grpc(conn) => conn.mark_failed(),
+        }
     }
 }
 

@@ -268,9 +268,22 @@ pub enum ShellType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Protocol {
-    /// SSH (default) — works for Linux, Windows (via OpenSSH), and modern network equipment
+    /// SSH (default) — works for Linux, Windows (via `OpenSSH`), and modern network equipment
     #[default]
     Ssh,
+    /// `WinRM` — Windows Remote Management (SOAP/WS-Man over HTTP/HTTPS)
+    #[cfg(feature = "winrm")]
+    #[serde(alias = "WinRM")]
+    WinRm,
+    /// Telnet — legacy network equipment (Cisco IOS, switches, PLCs)
+    #[cfg(feature = "telnet")]
+    Telnet,
+    /// NETCONF — modern network device configuration (RFC 6241 over SSH)
+    #[cfg(feature = "netconf")]
+    Netconf,
+    /// gRPC — cloud-native remote execution via gRPC service
+    #[cfg(feature = "grpc")]
+    Grpc,
 }
 
 const fn default_port() -> u16 {
