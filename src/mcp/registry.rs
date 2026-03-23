@@ -127,7 +127,12 @@ pub fn tool_group(tool_name: &str) -> &'static str {
         "ssh_tunnel_create" | "ssh_tunnel_list" | "ssh_tunnel_close" => "tunnels",
         "ssh_ls" | "ssh_find" => "directory",
         "ssh_db_query" | "ssh_db_dump" | "ssh_db_restore" => "database",
-        "ssh_backup_create" | "ssh_backup_list" | "ssh_backup_restore" => "backup",
+        "ssh_backup_create"
+        | "ssh_backup_list"
+        | "ssh_backup_restore"
+        | "ssh_backup_snapshot"
+        | "ssh_backup_verify"
+        | "ssh_backup_schedule" => "backup",
         "ssh_docker_ps"
         | "ssh_docker_logs"
         | "ssh_docker_inspect"
@@ -197,7 +202,6 @@ pub fn tool_group(tool_name: &str) -> &'static str {
         "ssh_incident_timeline" | "ssh_incident_correlate" => "incident",
         "ssh_log_search_multi" | "ssh_log_aggregate" | "ssh_log_tail_multi" => "log_aggregation",
         "ssh_key_generate" | "ssh_key_distribute" | "ssh_key_audit" => "key_management",
-        "ssh_backup_snapshot" | "ssh_backup_verify" | "ssh_backup_schedule" => "backup",
         "ssh_webhook_send" | "ssh_notify" => "chatops",
         "ssh_template_list"
         | "ssh_template_show"
@@ -3041,6 +3045,622 @@ mod tests {
         assert!(registry.get("ssh_win_process_kill").is_none());
         assert!(registry.get("ssh_win_process_top").is_none());
         assert!(registry.get("ssh_win_process_by_name").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_directory() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("directory".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 2 directory tools
+        assert_eq!(registry.len(), 335);
+        assert!(registry.get("ssh_ls").is_none());
+        assert!(registry.get("ssh_find").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_database() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("database".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 database tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_db_query").is_none());
+        assert!(registry.get("ssh_db_dump").is_none());
+        assert!(registry.get("ssh_db_restore").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_backup() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("backup".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 6 backup tools
+        assert_eq!(registry.len(), 331);
+        assert!(registry.get("ssh_backup_create").is_none());
+        assert!(registry.get("ssh_backup_list").is_none());
+        assert!(registry.get("ssh_backup_restore").is_none());
+        assert!(registry.get("ssh_backup_snapshot").is_none());
+        assert!(registry.get("ssh_backup_verify").is_none());
+        assert!(registry.get("ssh_backup_schedule").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_cron_analysis() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("cron_analysis".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 cron_analysis tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_cron_analyze").is_none());
+        assert!(registry.get("ssh_cron_history").is_none());
+        assert!(registry.get("ssh_at_jobs").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_performance() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("performance".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 4 performance tools
+        assert_eq!(registry.len(), 333);
+        assert!(registry.get("ssh_perf_trace").is_none());
+        assert!(registry.get("ssh_io_trace").is_none());
+        assert!(registry.get("ssh_latency_test").is_none());
+        assert!(registry.get("ssh_benchmark").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_container_logs() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("container_logs".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 4 container_logs tools
+        assert_eq!(registry.len(), 333);
+        assert!(registry.get("ssh_container_log_search").is_none());
+        assert!(registry.get("ssh_container_log_stats").is_none());
+        assert!(registry.get("ssh_container_events").is_none());
+        assert!(registry.get("ssh_container_health_history").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_network_security() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("network_security".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 4 network_security tools
+        assert_eq!(registry.len(), 333);
+        assert!(registry.get("ssh_port_scan").is_none());
+        assert!(registry.get("ssh_ssl_audit").is_none());
+        assert!(registry.get("ssh_network_capture").is_none());
+        assert!(registry.get("ssh_fail2ban_status").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_compliance() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("compliance".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 4 compliance tools
+        assert_eq!(registry.len(), 333);
+        assert!(registry.get("ssh_cis_benchmark").is_none());
+        assert!(registry.get("ssh_stig_check").is_none());
+        assert!(registry.get("ssh_compliance_score").is_none());
+        assert!(registry.get("ssh_compliance_report").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_alerting() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("alerting".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 alerting tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_alert_set").is_none());
+        assert!(registry.get("ssh_alert_list").is_none());
+        assert!(registry.get("ssh_alert_check").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_capacity() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("capacity".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 capacity tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_capacity_collect").is_none());
+        assert!(registry.get("ssh_capacity_trend").is_none());
+        assert!(registry.get("ssh_capacity_predict").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_incident() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("incident".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 2 incident tools
+        assert_eq!(registry.len(), 335);
+        assert!(registry.get("ssh_incident_timeline").is_none());
+        assert!(registry.get("ssh_incident_correlate").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_log_aggregation() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("log_aggregation".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 log_aggregation tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_log_search_multi").is_none());
+        assert!(registry.get("ssh_log_aggregate").is_none());
+        assert!(registry.get("ssh_log_tail_multi").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_key_management() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("key_management".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 key_management tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_key_generate").is_none());
+        assert!(registry.get("ssh_key_distribute").is_none());
+        assert!(registry.get("ssh_key_audit").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_chatops() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("chatops".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 2 chatops tools
+        assert_eq!(registry.len(), 335);
+        assert!(registry.get("ssh_webhook_send").is_none());
+        assert!(registry.get("ssh_notify").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_templates() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("templates".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 5 templates tools
+        assert_eq!(registry.len(), 332);
+        assert!(registry.get("ssh_template_list").is_none());
+        assert!(registry.get("ssh_template_show").is_none());
+        assert!(registry.get("ssh_template_apply").is_none());
+        assert!(registry.get("ssh_template_validate").is_none());
+        assert!(registry.get("ssh_template_diff").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_pty() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("pty".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 pty tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_pty_exec").is_none());
+        assert!(registry.get("ssh_pty_interact").is_none());
+        assert!(registry.get("ssh_pty_resize").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_cloud() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("cloud".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 4 cloud tools
+        assert_eq!(registry.len(), 333);
+        assert!(registry.get("ssh_aws_cli").is_none());
+        assert!(registry.get("ssh_cloud_metadata").is_none());
+        assert!(registry.get("ssh_cloud_tags").is_none());
+        assert!(registry.get("ssh_cloud_cost").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_inventory() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("inventory".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 inventory tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_discover_hosts").is_none());
+        assert!(registry.get("ssh_inventory_sync").is_none());
+        assert!(registry.get("ssh_host_tags").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_multicloud() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("multicloud".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 multicloud tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_multicloud_list").is_none());
+        assert!(registry.get("ssh_multicloud_sync").is_none());
+        assert!(registry.get("ssh_multicloud_compare").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_postgresql() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("postgresql".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 2 postgresql tools
+        assert_eq!(registry.len(), 335);
+        assert!(registry.get("ssh_postgresql_query").is_none());
+        assert!(registry.get("ssh_postgresql_status").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_mysql() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("mysql".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 2 mysql tools
+        assert_eq!(registry.len(), 335);
+        assert!(registry.get("ssh_mysql_query").is_none());
+        assert!(registry.get("ssh_mysql_status").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_apache() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("apache".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 2 apache tools
+        assert_eq!(registry.len(), 335);
+        assert!(registry.get("ssh_apache_status").is_none());
+        assert!(registry.get("ssh_apache_vhosts").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_letsencrypt() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("letsencrypt".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 1 letsencrypt tool
+        assert_eq!(registry.len(), 336);
+        assert!(registry.get("ssh_letsencrypt_status").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_mongodb() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("mongodb".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 1 mongodb tool
+        assert_eq!(registry.len(), 336);
+        assert!(registry.get("ssh_mongodb_status").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_diagnostics() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("diagnostics".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 diagnostics tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_diagnose").is_none());
+        assert!(registry.get("ssh_incident_triage").is_none());
+        assert!(registry.get("ssh_compare_state").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_runbooks() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("runbooks".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 runbooks tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_runbook_list").is_none());
+        assert!(registry.get("ssh_runbook_execute").is_none());
+        assert!(registry.get("ssh_runbook_validate").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_recording() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("recording".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 5 recording tools
+        assert_eq!(registry.len(), 332);
+        assert!(registry.get("ssh_recording_start").is_none());
+        assert!(registry.get("ssh_recording_stop").is_none());
+        assert!(registry.get("ssh_recording_list").is_none());
+        assert!(registry.get("ssh_recording_replay").is_none());
+        assert!(registry.get("ssh_recording_verify").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_orchestration() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("orchestration".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 orchestration tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_canary_exec").is_none());
+        assert!(registry.get("ssh_rolling_exec").is_none());
+        assert!(registry.get("ssh_fleet_diff").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_drift() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("drift".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 drift tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_env_snapshot").is_none());
+        assert!(registry.get("ssh_env_diff").is_none());
+        assert!(registry.get("ssh_env_drift").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_security_scan() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("security_scan".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 3 security_scan tools
+        assert_eq!(registry.len(), 334);
+        assert!(registry.get("ssh_sbom_generate").is_none());
+        assert!(registry.get("ssh_vuln_scan").is_none());
+        assert!(registry.get("ssh_compliance_check").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_file_ops() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("file_ops".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 8 file_ops tools
+        assert_eq!(registry.len(), 329);
+        assert!(registry.get("ssh_file_read").is_none());
+        assert!(registry.get("ssh_file_write").is_none());
+        assert!(registry.get("ssh_file_chmod").is_none());
+        assert!(registry.get("ssh_file_chown").is_none());
+        assert!(registry.get("ssh_file_stat").is_none());
+        assert!(registry.get("ssh_file_diff").is_none());
+        assert!(registry.get("ssh_file_patch").is_none());
+        assert!(registry.get("ssh_file_template").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_user_management() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("user_management".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 8 user_management tools
+        assert_eq!(registry.len(), 329);
+        assert!(registry.get("ssh_user_list").is_none());
+        assert!(registry.get("ssh_user_info").is_none());
+        assert!(registry.get("ssh_user_add").is_none());
+        assert!(registry.get("ssh_user_modify").is_none());
+        assert!(registry.get("ssh_user_delete").is_none());
+        assert!(registry.get("ssh_group_list").is_none());
+        assert!(registry.get("ssh_group_add").is_none());
+        assert!(registry.get("ssh_group_delete").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_storage() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("storage".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 7 storage tools
+        assert_eq!(registry.len(), 330);
+        assert!(registry.get("ssh_storage_lsblk").is_none());
+        assert!(registry.get("ssh_storage_df").is_none());
+        assert!(registry.get("ssh_storage_mount").is_none());
+        assert!(registry.get("ssh_storage_umount").is_none());
+        assert!(registry.get("ssh_storage_lvm").is_none());
+        assert!(registry.get("ssh_storage_fdisk").is_none());
+        assert!(registry.get("ssh_storage_fstab").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_journald() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("journald".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 4 journald tools
+        assert_eq!(registry.len(), 333);
+        assert!(registry.get("ssh_journal_query").is_none());
+        assert!(registry.get("ssh_journal_follow").is_none());
+        assert!(registry.get("ssh_journal_boots").is_none());
+        assert!(registry.get("ssh_journal_disk_usage").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_systemd_timers() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("systemd_timers".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 5 systemd_timers tools
+        assert_eq!(registry.len(), 332);
+        assert!(registry.get("ssh_timer_list").is_none());
+        assert!(registry.get("ssh_timer_info").is_none());
+        assert!(registry.get("ssh_timer_enable").is_none());
+        assert!(registry.get("ssh_timer_disable").is_none());
+        assert!(registry.get("ssh_timer_trigger").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_security_modules() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("security_modules".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 5 security_modules tools
+        assert_eq!(registry.len(), 332);
+        assert!(registry.get("ssh_selinux_status").is_none());
+        assert!(registry.get("ssh_selinux_booleans").is_none());
+        assert!(registry.get("ssh_apparmor_status").is_none());
+        assert!(registry.get("ssh_apparmor_profiles").is_none());
+        assert!(registry.get("ssh_security_audit").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_network_equipment() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("network_equipment".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 8 network_equipment tools
+        assert_eq!(registry.len(), 329);
+        assert!(registry.get("ssh_net_equip_show_run").is_none());
+        assert!(registry.get("ssh_net_equip_show_interfaces").is_none());
+        assert!(registry.get("ssh_net_equip_show_routes").is_none());
+        assert!(registry.get("ssh_net_equip_show_arp").is_none());
+        assert!(registry.get("ssh_net_equip_show_version").is_none());
+        assert!(registry.get("ssh_net_equip_show_vlans").is_none());
+        assert!(registry.get("ssh_net_equip_config").is_none());
+        assert!(registry.get("ssh_net_equip_save").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_podman() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("podman".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 6 podman tools
+        assert_eq!(registry.len(), 331);
+        assert!(registry.get("ssh_podman_ps").is_none());
+        assert!(registry.get("ssh_podman_logs").is_none());
+        assert!(registry.get("ssh_podman_inspect").is_none());
+        assert!(registry.get("ssh_podman_exec").is_none());
+        assert!(registry.get("ssh_podman_images").is_none());
+        assert!(registry.get("ssh_podman_compose").is_none());
+        assert!(registry.get("ssh_exec").is_some());
+    }
+
+    #[test]
+    fn test_filtered_registry_disable_ldap() {
+        let mut groups = std::collections::HashMap::new();
+        groups.insert("ldap".to_string(), false);
+        let config = ToolGroupsConfig { groups };
+
+        let registry = create_filtered_registry(&config);
+        // 337 total minus 5 ldap tools
+        assert_eq!(registry.len(), 332);
+        assert!(registry.get("ssh_ldap_search").is_none());
+        assert!(registry.get("ssh_ldap_user_info").is_none());
+        assert!(registry.get("ssh_ldap_group_members").is_none());
+        assert!(registry.get("ssh_ldap_add").is_none());
+        assert!(registry.get("ssh_ldap_modify").is_none());
         assert!(registry.get("ssh_exec").is_some());
     }
 

@@ -4,6 +4,8 @@
 //! via SSH. Supports executing commands with PTY allocation, resizing
 //! terminals, and sending input to sessions.
 
+use std::fmt::Write;
+
 use crate::config::ShellType;
 use crate::error::{BridgeError, Result};
 
@@ -22,18 +24,12 @@ const MAX_DIMENSION: u32 = 500;
 pub fn validate_dimensions(rows: u32, cols: u32) -> Result<()> {
     if rows == 0 || rows > MAX_DIMENSION {
         return Err(BridgeError::CommandDenied {
-            reason: format!(
-                "Invalid rows value {}: must be between 1 and {}",
-                rows, MAX_DIMENSION
-            ),
+            reason: format!("Invalid rows value {rows}: must be between 1 and {MAX_DIMENSION}"),
         });
     }
     if cols == 0 || cols > MAX_DIMENSION {
         return Err(BridgeError::CommandDenied {
-            reason: format!(
-                "Invalid cols value {}: must be between 1 and {}",
-                cols, MAX_DIMENSION
-            ),
+            reason: format!("Invalid cols value {cols}: must be between 1 and {MAX_DIMENSION}"),
         });
     }
     Ok(())
@@ -67,10 +63,10 @@ impl PtyCommandBuilder {
         let mut cmd = String::new();
 
         if let (Some(r), Some(c)) = (rows, cols) {
-            cmd.push_str(&format!("stty rows {r} cols {c}; "));
+            let _ = write!(cmd, "stty rows {r} cols {c}; ");
         }
 
-        cmd.push_str(&format!("script -q -c {escaped} /dev/null"));
+        let _ = write!(cmd, "script -q -c {escaped} /dev/null");
         cmd
     }
 

@@ -92,7 +92,6 @@ impl InventoryCommandBuilder {
     pub fn build_host_tags_command(action: &str, tags: Option<&str>) -> String {
         let tags_file = "/etc/host-tags";
         match action {
-            "list" => format!("cat {tags_file} 2>/dev/null || echo 'No tags file found'"),
             "add" => {
                 if let Some(t) = tags {
                     format!(
@@ -115,6 +114,7 @@ impl InventoryCommandBuilder {
                     format!("cat {tags_file} 2>/dev/null || echo 'No tags file found'")
                 }
             }
+            // "list" and all other actions
             _ => format!("cat {tags_file} 2>/dev/null || echo 'No tags file found'"),
         }
     }

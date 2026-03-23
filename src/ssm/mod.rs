@@ -68,12 +68,14 @@ impl SsmConnection {
         let client = SsmClient::new(&config);
 
         // Document name from description or detect from OS type
-        let document = host_config.description.clone().unwrap_or_else(|| {
-            match host_config.os_type {
-                OsType::Windows => DEFAULT_WINDOWS_DOCUMENT.to_string(),
-                OsType::Linux => DEFAULT_LINUX_DOCUMENT.to_string(),
-            }
-        });
+        let document =
+            host_config
+                .description
+                .clone()
+                .unwrap_or_else(|| match host_config.os_type {
+                    OsType::Windows => DEFAULT_WINDOWS_DOCUMENT.to_string(),
+                    OsType::Linux => DEFAULT_LINUX_DOCUMENT.to_string(),
+                });
 
         info!(
             host = %host_name,

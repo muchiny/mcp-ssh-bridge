@@ -1,6 +1,6 @@
 [package]
 name = "mcp-ssh-bridge"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2024"
 rust-version = "1.94"
 description = "MCP server that bridges Claude Code to air-gapped environments via SSH"
@@ -16,6 +16,9 @@ documentation = "https://docs.rs/mcp-ssh-bridge"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["hyper-util", "prost", "quick-xml", "tower"]
 
 [features]
 default = ["cli"]
@@ -56,7 +59,7 @@ all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "sn
 tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "process", "time", "fs", "io-std", "macros", "sync"] }
 
 # SSH
-russh = "0.57"
+russh = "0.58"
 russh-sftp = "2.1"
 
 # Serialization
@@ -109,8 +112,8 @@ tokio-stream = { version = "0.1", optional = true }
 mimalloc = { version = "0.1", default-features = false, optional = true }
 
 # WinRM adapter (optional) — SOAP/WS-Man over HTTPS
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"], optional = true }
-quick-xml = { version = "0.37", features = ["serialize"], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"], optional = true }
+quick-xml = { version = "0.39", features = ["serialize"], optional = true }
 
 # Telnet adapter (optional) — legacy network equipment
 mini-telnet = { version = "0.1", optional = true }
@@ -119,12 +122,12 @@ mini-telnet = { version = "0.1", optional = true }
 netconf-rs = { version = "0.2", optional = true }
 
 # gRPC adapter (optional) — cloud-native remote execution
-tonic = { version = "0.12", optional = true }
-prost = { version = "0.13", optional = true }
+tonic = { version = "0.14", optional = true }
+prost = { version = "0.14", optional = true }
 
 # Kubernetes Exec adapter (optional) — direct pod exec via K8s API
-kube = { version = "0.98", default-features = false, features = ["client", "rustls-tls", "ws"], optional = true }
-k8s-openapi = { version = "0.24", features = ["v1_32"], optional = true }
+kube = { version = "3.1", default-features = false, features = ["client", "rustls-tls", "ws"], optional = true }
+k8s-openapi = { version = "0.27", features = ["v1_32"], optional = true }
 
 # Serial adapter (optional) — serial port communication (PLCs, embedded, console)
 tokio-serial = { version = "5.4", optional = true }
@@ -137,13 +140,13 @@ aws-sdk-ssm = { version = "1", optional = true }
 aws-config = { version = "1", features = ["behavior-version-latest"], optional = true }
 
 # ZeroMQ adapter (optional) — fleet-scale messaging (SaltStack model)
-zeromq = { version = "0.4", optional = true }
+zeromq = { version = "0.5", optional = true }
 
 # NATS adapter (optional) — event-driven messaging
-async-nats = { version = "0.38", optional = true }
+async-nats = { version = "0.46", optional = true }
 
 # MQTT adapter (optional) — IoT/Edge messaging
-rumqttc = { version = "0.24", optional = true }
+rumqttc = { version = "0.25", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

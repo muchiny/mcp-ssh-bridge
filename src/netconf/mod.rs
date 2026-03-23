@@ -1,6 +1,6 @@
-//! NETCONF protocol adapter — RFC 6241 network configuration
+//! `NETCONF` protocol adapter — RFC 6241 network configuration
 //!
-//! Implements remote network device configuration via the NETCONF protocol,
+//! Implements remote network device configuration via the `NETCONF` protocol,
 //! over SSH (RFC 6242). Used for modern network equipment
 //! (Juniper, Cisco IOS XE, Nokia, etc.).
 //!
@@ -128,10 +128,11 @@ impl NetconfConnection {
             reason: format!("NETCONF operation failed: {e}"),
         })?;
 
+        #[allow(clippy::cast_possible_truncation)]
         let duration_ms = start.elapsed().as_millis() as u64;
 
         let has_error = response.contains("<rpc-error");
-        let exit_code = if has_error { 1 } else { 0 };
+        let exit_code = u32::from(has_error);
 
         Ok(CommandOutput {
             stdout: response,

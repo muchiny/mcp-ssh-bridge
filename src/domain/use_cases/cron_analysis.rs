@@ -18,12 +18,12 @@ fn shell_escape(s: &str) -> String {
 ///
 /// Returns [`BridgeError::CommandDenied`] if `lines` exceeds 5000.
 pub fn validate_cron_lines(lines: Option<u64>) -> Result<()> {
-    if let Some(n) = lines {
-        if n > 5000 {
-            return Err(BridgeError::CommandDenied {
-                reason: format!("lines must be <= 5000, got {n}"),
-            });
-        }
+    if let Some(n) = lines
+        && n > 5000
+    {
+        return Err(BridgeError::CommandDenied {
+            reason: format!("lines must be <= 5000, got {n}"),
+        });
     }
     Ok(())
 }

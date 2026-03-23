@@ -286,7 +286,7 @@ mod tests {
     fn test_trend_defaults() {
         let cmd = CapacityCommandBuilder::build_capacity_trend_command(None, None).unwrap();
         assert!(cmd.contains("sar"));
-        assert!(cmd.contains("7"));
+        assert!(cmd.contains('7'));
     }
 
     #[test]

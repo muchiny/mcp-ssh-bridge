@@ -35,7 +35,7 @@ fn benchmark_registry_list(c: &mut Criterion) {
     let tool_groups = ToolGroupsConfig::default();
     let registry = create_filtered_registry(&tool_groups);
 
-    c.bench_function("registry: list_tools (197 tools)", |b| {
+    c.bench_function("registry: list_tools (337 tools)", |b| {
         b.iter(|| registry.list_tools());
     });
 }
@@ -43,7 +43,7 @@ fn benchmark_registry_list(c: &mut Criterion) {
 fn benchmark_registry_creation(c: &mut Criterion) {
     let tool_groups = ToolGroupsConfig::default();
 
-    c.bench_function("registry: create_filtered_registry (197 tools)", |b| {
+    c.bench_function("registry: create_filtered_registry (337 tools)", |b| {
         b.iter(|| create_filtered_registry(black_box(&tool_groups)));
     });
 }

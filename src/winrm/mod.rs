@@ -127,6 +127,7 @@ impl WinRmConnection {
             reason: format!("WinRM response read error: {e}"),
         })?;
 
+        #[allow(clippy::cast_possible_truncation)]
         let duration_ms = start.elapsed().as_millis() as u64;
 
         if !status.is_success() {
@@ -177,7 +178,7 @@ fn build_winrm_command_envelope(endpoint: &str, command: &str) -> String {
     )
 }
 
-/// Parse a WinRM SOAP response to extract stdout, stderr, and exit code.
+/// Parse a `WinRM` SOAP response to extract stdout, stderr, and exit code.
 fn parse_winrm_response(body: &str) -> (String, String, u32) {
     // Simplified parsing — extract text content from known SOAP elements.
     // A production implementation would use quick-xml for proper parsing.
@@ -270,26 +271,26 @@ mod tests {
 
     #[test]
     fn test_parse_winrm_response_with_exit_code() {
-        let body = r#"<ExitCode>42</ExitCode>"#;
+        let body = "<ExitCode>42</ExitCode>";
         let (_, _, exit_code) = parse_winrm_response(body);
         assert_eq!(exit_code, 42);
     }
 
     #[test]
     fn test_extract_xml_value() {
-        let xml = r#"<foo>bar</foo>"#;
+        let xml = "<foo>bar</foo>";
         assert_eq!(extract_xml_value(xml, "foo"), Some("bar".to_string()));
     }
 
     #[test]
     fn test_extract_xml_value_empty() {
-        let xml = r#"<foo></foo>"#;
+        let xml = "<foo></foo>";
         assert_eq!(extract_xml_value(xml, "foo"), None);
     }
 
     #[test]
     fn test_extract_xml_value_missing() {
-        let xml = r#"<baz>qux</baz>"#;
+        let xml = "<baz>qux</baz>";
         assert_eq!(extract_xml_value(xml, "foo"), None);
     }
 }

@@ -6,7 +6,7 @@
 //!
 //! These complement the unit tests in `src/mcp/server.rs` (63+ tests)
 //! and `tests/mcp_protocol.rs` (type serialization) by focusing on
-//! specification-level compliance across all 197 tools.
+//! specification-level compliance across all 337 tools.
 
 use mcp_ssh_bridge::config::ToolGroupsConfig;
 use mcp_ssh_bridge::mcp::protocol::{
@@ -161,7 +161,7 @@ fn all_tools_have_valid_json_schema() {
     let registry = create_filtered_registry(&tool_groups);
     let tools = registry.list_tools();
 
-    assert_eq!(tools.len(), 258, "Expected 258 tools in default registry");
+    assert_eq!(tools.len(), 337, "Expected 337 tools in default registry");
 
     for tool in &tools {
         // Name must be non-empty and snake_case

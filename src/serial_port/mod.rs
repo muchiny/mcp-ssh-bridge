@@ -39,6 +39,7 @@ impl SerialConnection {
     /// # Errors
     ///
     /// Returns an error if the serial port cannot be opened.
+    #[allow(clippy::unused_async)]
     pub async fn connect(
         host_name: &str,
         host_config: &HostConfig,
@@ -126,6 +127,7 @@ impl SerialConnection {
         })
         .await;
 
+        #[allow(clippy::cast_possible_truncation)]
         let duration_ms = start.elapsed().as_millis() as u64;
 
         match read_result {

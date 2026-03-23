@@ -63,6 +63,7 @@ impl ExecutorRouter {
     /// # Errors
     ///
     /// Returns an error if the connection cannot be established.
+    #[allow(clippy::too_many_lines)]
     pub async fn get_connection_with_jump(
         &self,
         host_name: &str,
@@ -132,27 +133,28 @@ impl ExecutorRouter {
             }
             #[cfg(feature = "azure")]
             Protocol::Azure => {
-                let conn =
-                    crate::cloud_exec::azure::AzureRunConnection::connect(
-                        host_name, host_config, limits,
-                    )
-                    .await?;
+                let conn = crate::cloud_exec::azure::AzureRunConnection::connect(
+                    host_name,
+                    host_config,
+                    limits,
+                )
+                .await?;
                 Ok(ConnectionGuard::Azure(conn))
             }
             #[cfg(feature = "gcp")]
             Protocol::Gcp => {
-                let conn =
-                    crate::cloud_exec::gcp::GcpRunConnection::connect(
-                        host_name, host_config, limits,
-                    )
-                    .await?;
+                let conn = crate::cloud_exec::gcp::GcpRunConnection::connect(
+                    host_name,
+                    host_config,
+                    limits,
+                )
+                .await?;
                 Ok(ConnectionGuard::Gcp(conn))
             }
             #[cfg(feature = "zeromq")]
             Protocol::ZeroMq => {
                 let conn =
-                    crate::zmq_exec::ZmqConnection::connect(host_name, host_config, limits)
-                        .await?;
+                    crate::zmq_exec::ZmqConnection::connect(host_name, host_config, limits).await?;
                 Ok(ConnectionGuard::ZeroMq(conn))
             }
             #[cfg(feature = "nats")]
@@ -199,6 +201,7 @@ impl ExecutorRouter {
 /// Each tool handler calls `conn.exec(command, limits)` and
 /// `conn.mark_failed()` — this enum dispatches to the correct
 /// protocol adapter transparently.
+#[allow(clippy::large_enum_variant)]
 pub enum ConnectionGuard<'a> {
     /// SSH connection (pooled, returned to pool on drop).
     Ssh(PooledConnectionGuard<'a>),
@@ -232,7 +235,7 @@ pub enum ConnectionGuard<'a> {
     /// GCP OS Command (`gcloud` CLI).
     #[cfg(feature = "gcp")]
     Gcp(crate::cloud_exec::gcp::GcpRunConnection),
-    /// ZeroMQ REQ/REP (fleet-scale messaging).
+    /// `ZeroMQ` REQ/REP (fleet-scale messaging).
     #[cfg(feature = "zeromq")]
     ZeroMq(crate::zmq_exec::ZmqConnection),
     /// NATS request/reply (event-driven messaging).

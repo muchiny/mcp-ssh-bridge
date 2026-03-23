@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MCP SSH Bridge is a Rust MCP server that enables Claude Code to securely execute commands on air-gapped environments via SSH. JSON-RPC over stdio, strict security controls. **337 tools** across **57 groups** (42 Linux, 13 Windows, 2 cross-platform).
+MCP SSH Bridge is a Rust MCP server that enables Claude Code to securely execute commands on air-gapped environments via SSH. JSON-RPC over stdio, strict security controls. **337 tools** across **74 groups** (59 Linux, 13 Windows, 2 cross-platform).
 
 ## Build Commands
 
@@ -98,20 +98,20 @@ config/
 dxt/                              # 🆕 DXT packaging (Claude Desktop extension)
 ```
 
-## Tool Groups Reference (57 groups, 337 tools)
+## Tool Groups Reference (74 groups, 337 tools)
 
 Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 
 ### Core Infrastructure (Linux)
 | Group | Tools | Use when… |
 |-------|-------|-----------|
-| `core` | `exec`, `exec_multi`, `sync`, `tail`, `find`, `disk_usage`, `status`, `health`, `history`, `output_fetch` | Running arbitrary commands, system info |
-| `file_transfer` | `upload`, `download`, `file_read`, `file_write`, `file_stat` | Moving/reading/writing files |
-| `file_ops` | `file_chmod`, `file_chown`, `file_diff`, `file_patch`, `file_template` | File manipulation (permissions, diff, patch, templates) |
+| `core` | `exec`, `exec_multi`, `status`, `health`, `history`, `output_fetch` | Running arbitrary commands, system info |
+| `file_transfer` | `upload`, `download`, `sync` | Moving files between hosts |
+| `file_ops` | `file_read`, `file_write`, `file_chmod`, `file_chown`, `file_stat`, `file_diff`, `file_patch`, `file_template` | File reading/writing/manipulation |
 | `sessions` | `session_create`, `session_exec`, `session_close`, `session_list` | Persistent tmux sessions |
-| `directory` | `ls` | Directory listing |
+| `directory` | `ls`, `find` | Directory listing & file search |
 | `process` | `process_list`, `process_kill`, `process_top` | Process management |
-| `monitoring` | `metrics`, `metrics_multi`, `storage_df`, `tail` | System monitoring & metrics |
+| `monitoring` | `metrics`, `metrics_multi`, `tail`, `disk_usage` | System monitoring & metrics |
 | `network` | `net_connections`, `net_interfaces`, `net_routes`, `net_ping`, `net_traceroute`, `net_dns` | Network diagnostics |
 | `systemd` | `service_status`, `service_start`, `service_stop`, `service_restart`, `service_enable`, `service_disable`, `service_logs`, `service_list`, `service_daemon_reload` | Systemd service management |
 | `systemd_timers` | `timer_list`, `timer_info`, `timer_enable`, `timer_disable`, `timer_trigger` | Systemd timer management |
@@ -232,8 +232,28 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 
 ```toml
 default = ["cli"]
-cli = ["dep:clap"]       # CLI binary (disable for lib-only)
-mimalloc = ["dep:mimalloc"]
+cli = ["dep:clap", "dep:clap_complete"]  # CLI binary (disable for lib-only)
+http = [...]                              # HTTP/SSE transport (axum)
+mimalloc = ["dep:mimalloc"]               # Memory allocator
+
+# Protocol adapters (Tier 1 — air-gapped)
+winrm = [...]   telnet = [...]   netconf = [...]   grpc = [...]
+
+# Protocol adapters (Tier 2 — infrastructure)
+k8s-exec = [...]   serial = [...]   snmp = [...]
+
+# Protocol adapters (Tier 3 — cloud, non air-gapped)
+ssm = [...]   azure = [...]   gcp = []
+cloud = ["ssm", "azure", "gcp"]
+
+# Protocol adapters (Tier 4 — messaging)
+zeromq = [...]   nats = [...]   mqtt = [...]
+messaging = ["zeromq", "nats", "mqtt"]
+
+# Bundles
+full = ["cli", "mimalloc", "http"]
+air-gapped = ["winrm", "telnet", "netconf"]
+all-protocols = [...]  # All protocol adapters
 ```
 
 ## Key Principles
@@ -259,7 +279,14 @@ Key sections: `hosts`, `security`, `limits`, `audit`, `tool_groups`, `recording`
 
 ## Known Advisories
 
-RUSTSEC-2023-0071 (Marvin Attack on RSA) ignored — transitive dep from russh, no upstream fix, safe for local CLI.
+6 advisories ignored in `deny.toml` — all transitive, no upstream fix available:
+
+- RUSTSEC-2023-0071 — Marvin Attack on RSA (russh)
+- RUSTSEC-2026-0044 — aws-lc-sys X.509 bypass (aws-sdk)
+- RUSTSEC-2026-0048 — aws-lc-sys CRL logic error (aws-sdk)
+- RUSTSEC-2026-0049 — rustls-webpki CRL matching (russh/aws-sdk/rumqttc)
+- RUSTSEC-2021-0153 — encoding crate unmaintained (mini-telnet)
+- RUSTSEC-2025-0134 — rustls-pemfile unmaintained (kube/rumqttc/async-nats)
 
 ## Path-Scoped Rules
 

@@ -24,7 +24,7 @@ mcp/
 ├── 📄 history.rs          -> 📜 Re-exports from domain/history.rs
 ├── 📄 resource_registry.rs -> 📊 ResourceRegistry + create_default_resource_registry()
 ├── 📄 standard_tool.rs    -> 🏭 StandardTool trait + generic execution pipeline
-├── 🔧 tool_handlers/      -> 🛠️ Tool implementations (337 tools across 57 groups)
+├── 🔧 tool_handlers/      -> 🛠️ Tool implementations (337 tools across 74 groups)
 │   ├── 📄 mod.rs
 │   ├── 📄 utils.rs
 │   │
@@ -1216,7 +1216,7 @@ cargo test mcp::tool_handlers::
 | 📋 `test_list_tools` | List generation for MCP |
 | ❌ `test_execute_unknown_tool` | Error if tool unknown |
 | ✅ `test_execute_registered_tool` | Successful execution |
-| 🔢 `test_default_registry_has_all_tools` | Verifies all 197 default tools |
+| 🔢 `test_default_registry_has_all_tools` | Verifies all 337 default tools |
 | 📊 `test_len_and_is_empty` | Counters |
 
 ### 💬 PromptRegistry Tests

@@ -5,6 +5,8 @@
 //! configuration templates for common services (nginx, apache, postgresql,
 //! mysql, redis).
 
+use std::fmt::Write;
+
 use crate::config::ShellType;
 use crate::error::{BridgeError, Result};
 
@@ -43,9 +45,8 @@ pub fn validate_template_name(name: &str) -> Result<()> {
     {
         return Err(BridgeError::CommandDenied {
             reason: format!(
-                "Invalid template name '{}': only alphanumeric characters, hyphens, \
-                 and underscores are allowed",
-                name
+                "Invalid template name '{name}': only alphanumeric characters, hyphens, \
+                 and underscores are allowed"
             ),
         });
     }
@@ -84,15 +85,12 @@ pub fn validate_dest_path(path: &str) -> Result<()> {
     }
     if !path.starts_with('/') {
         return Err(BridgeError::CommandDenied {
-            reason: format!(
-                "Destination path '{}' must be absolute (start with /)",
-                path
-            ),
+            reason: format!("Destination path '{path}' must be absolute (start with /)"),
         });
     }
     if path.contains("..") {
         return Err(BridgeError::CommandDenied {
-            reason: format!("Path traversal not allowed: '{}' contains '..'", path),
+            reason: format!("Path traversal not allowed: '{path}' contains '..'"),
         });
     }
     Ok(())
@@ -132,13 +130,12 @@ impl TemplateCommandBuilder {
         let escaped_dest = shell_escape(dest);
         let mut cmd = String::new();
         if backup {
-            cmd.push_str(&format!(
-                "cp {escaped_dest} {escaped_dest}.bak 2>/dev/null; "
-            ));
+            let _ = write!(cmd, "cp {escaped_dest} {escaped_dest}.bak 2>/dev/null; ");
         }
-        cmd.push_str(&format!(
+        let _ = write!(
+            cmd,
             "cat > {escaped_dest} << 'TEMPLATE_EOF'\n{content}\nTEMPLATE_EOF"
-        ));
+        );
         cmd
     }
 

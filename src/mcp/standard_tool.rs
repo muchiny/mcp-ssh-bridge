@@ -1,7 +1,7 @@
 //! Standard Tool Handler
 //!
 //! Generic handler that implements the common 16-step execution pipeline
-//! shared by ~170 of the 197 tool handlers. Each standard tool only needs
+//! shared by ~170 of the 337 tool handlers. Each standard tool only needs
 //! to define its args struct, schema, and `build_command` function.
 
 use std::marker::PhantomData;

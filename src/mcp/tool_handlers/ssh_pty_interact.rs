@@ -1,6 +1,6 @@
 //! Handler for the `ssh_pty_interact` tool.
 //!
-//! Sends input to a PTY session on a remote host. Since StandardTool cannot
+//! Sends input to a PTY session on a remote host. Since `StandardTool` cannot
 //! maintain persistent sessions, this is implemented as a simple command
 //! that pipes input via echo.
 

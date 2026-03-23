@@ -1,6 +1,6 @@
-//! ChatOps Command Builder
+//! `ChatOps` Command Builder
 //!
-//! Builds webhook and notification commands for ChatOps integration
+//! Builds webhook and notification commands for `ChatOps` integration
 //! via SSH.
 
 use crate::config::ShellType;
@@ -59,7 +59,7 @@ pub fn validate_payload(payload: &str) -> Result<()> {
     Ok(())
 }
 
-/// Builds ChatOps commands for remote execution.
+/// Builds `ChatOps` commands for remote execution.
 pub struct ChatOpsCommandBuilder;
 
 impl ChatOpsCommandBuilder {

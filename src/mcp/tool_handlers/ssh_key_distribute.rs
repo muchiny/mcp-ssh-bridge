@@ -1,6 +1,6 @@
 //! Handler for the `ssh_key_distribute` tool.
 //!
-//! Distributes (appends) an SSH public key to a remote host's authorized_keys.
+//! Distributes (appends) an SSH public key to a remote host's `authorized_keys`.
 
 use serde::Deserialize;
 

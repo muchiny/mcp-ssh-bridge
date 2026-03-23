@@ -35,7 +35,7 @@ fmt-check:
 
 # Security audit (requires cargo-audit: cargo install cargo-audit)
 audit:
-	@command -v cargo-audit >/dev/null 2>&1 && cargo-audit audit || echo "cargo-audit not installed, skipping"
+	@command -v cargo-deny >/dev/null 2>&1 && cargo deny check advisories || (command -v cargo-audit >/dev/null 2>&1 && cargo-audit audit || echo "neither cargo-deny nor cargo-audit installed, skipping")
 
 # License and dependency check
 deny:
@@ -90,11 +90,11 @@ setup:
 
 # Code coverage report (requires cargo-tarpaulin: cargo install cargo-tarpaulin)
 coverage:
-	@command -v cargo-tarpaulin >/dev/null 2>&1 && cargo tarpaulin --engine llvm --all-features --out Html --output-dir coverage && echo "Coverage report: coverage/tarpaulin-report.html" || echo "cargo-tarpaulin not installed, run: cargo install cargo-tarpaulin"
+	@command -v cargo-tarpaulin >/dev/null 2>&1 && cargo tarpaulin --engine llvm --out Html --output-dir coverage && echo "Coverage report: coverage/tarpaulin-report.html" || echo "cargo-tarpaulin not installed, run: cargo install cargo-tarpaulin"
 
 # Code coverage with minimum threshold (fail if below)
 coverage-check:
-	@command -v cargo-tarpaulin >/dev/null 2>&1 && cargo tarpaulin --engine llvm --all-features --out xml --output-dir coverage --fail-under 50 || echo "cargo-tarpaulin not installed, run: cargo install cargo-tarpaulin"
+	@command -v cargo-tarpaulin >/dev/null 2>&1 && cargo tarpaulin --engine llvm --out xml --output-dir coverage --fail-under 50 || echo "cargo-tarpaulin not installed, run: cargo install cargo-tarpaulin"
 
 # Mutation testing (security module only - fast)
 mutants:

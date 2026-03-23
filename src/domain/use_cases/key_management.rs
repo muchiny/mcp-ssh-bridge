@@ -36,7 +36,7 @@ pub fn validate_key_type(key_type: &str) -> Result<()> {
 ///
 /// Returns [`BridgeError::CommandDenied`] if the bit length is invalid.
 pub fn validate_bits(bits: u32) -> Result<()> {
-    if bits < 256 || bits > 16384 {
+    if !(256..=16384).contains(&bits) {
         return Err(BridgeError::CommandDenied {
             reason: format!("Invalid key bit length {bits}: must be between 256 and 16384"),
         });

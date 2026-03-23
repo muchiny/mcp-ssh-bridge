@@ -4,6 +4,8 @@
 //! Supports AWS CLI invocation, cloud metadata detection, tag retrieval,
 //! and cost analysis.
 
+use std::fmt::Write;
+
 use crate::config::ShellType;
 use crate::error::{BridgeError, Result};
 
@@ -126,10 +128,11 @@ impl CloudCommandBuilder {
              --granularity DAILY --metrics BlendedCost"
         );
         if let Some(svc) = service {
-            cmd.push_str(&format!(
+            let _ = write!(
+                cmd,
                 " --filter '{{\"Dimensions\":{{\"Key\":\"SERVICE\",\"Values\":[{}]}}}}'",
                 shell_escape(svc)
-            ));
+            );
         }
         cmd.push_str(" --output json 2>&1");
         cmd

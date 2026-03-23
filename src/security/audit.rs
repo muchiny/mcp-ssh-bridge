@@ -1039,4 +1039,45 @@ mod tests {
         assert!(logs_contain("Audit: command failed"));
         assert!(logs_contain("Connection refused"));
     }
+
+    // ============== Tests to catch previously-missed mutations ==============
+
+    #[test]
+    fn test_cleanup_old_files_respects_cutoff_boundary() {
+        use std::fs;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let audit_path = temp_dir.path().join("audit.log");
+
+        // Create a file and backdate it to 31 days ago
+        let old_file = temp_dir.path().join("old_audit.log");
+        fs::write(&old_file, "old data").unwrap();
+        let old_time = filetime::FileTime::from_system_time(
+            std::time::SystemTime::now() - std::time::Duration::from_secs(31 * 86400),
+        );
+        filetime::set_file_mtime(&old_file, old_time).unwrap();
+
+        // Create a recent file (today)
+        let recent_file = temp_dir.path().join("recent_audit.log");
+        fs::write(&recent_file, "recent data").unwrap();
+
+        let config = AuditConfig {
+            enabled: true,
+            path: audit_path,
+            retain_days: 30,
+            ..Default::default()
+        };
+
+        let (logger, _task) = AuditLogger::new(&config).unwrap();
+        logger.cleanup_old_files();
+
+        // Old file (31 days) should be removed (31 > 30)
+        assert!(
+            !old_file.exists(),
+            "File older than retain_days should be cleaned up"
+        );
+
+        // Recent file should remain
+        assert!(recent_file.exists(), "Recent file should not be cleaned up");
+    }
 }

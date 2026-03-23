@@ -257,4 +257,49 @@ mod tests {
         assert!(RbacEnforcer::glob_match("exact_match", "exact_match"));
         assert!(!RbacEnforcer::glob_match("exact_match", "not_exact_match"));
     }
+
+    // ============== Tests to catch previously-missed mutations ==============
+
+    #[test]
+    fn test_default_role_name_value() {
+        assert_eq!(
+            default_role_name(),
+            "default",
+            "default_role_name must return 'default'"
+        );
+    }
+
+    #[test]
+    fn test_default_allow_all_value() {
+        let result = default_allow_all();
+        assert_eq!(
+            result,
+            vec!["*".to_string()],
+            "default_allow_all must return vec![\"*\"]"
+        );
+    }
+
+    #[test]
+    fn test_default_role_has_wildcard_access() {
+        let role = Role::default();
+        assert_eq!(role.allowed_tools, vec!["*"]);
+        assert_eq!(role.allowed_hosts, vec!["*"]);
+        assert!(role.denied_tools.is_empty());
+        assert!(role.denied_hosts.is_empty());
+    }
+
+    #[test]
+    fn test_rbac_config_deserialize_uses_defaults() {
+        let yaml = r"
+enabled: true
+roles:
+  admin:
+    description: Full access
+";
+        let config: RbacConfig = serde_saphyr::from_str(yaml).unwrap();
+        assert_eq!(config.default_role, "default");
+        let admin = config.roles.get("admin").unwrap();
+        assert_eq!(admin.allowed_tools, vec!["*"]);
+        assert_eq!(admin.allowed_hosts, vec!["*"]);
+    }
 }

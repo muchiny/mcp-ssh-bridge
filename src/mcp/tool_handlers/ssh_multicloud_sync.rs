@@ -121,7 +121,7 @@ mod tests {
         let json = json!({
             "host": "server1",
             "timeout_seconds": 120,
-            "max_output": 100000,
+            "max_output": 100_000,
             "save_output": "/tmp/multicloud.json"
         });
         let args: SshMulticloudSyncArgs = serde_json::from_value(json).unwrap();

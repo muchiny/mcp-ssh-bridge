@@ -1,10 +1,11 @@
 //! SNMP protocol adapter — network device monitoring
 //!
 //! Implements SNMP `GET`, `WALK`, and `GETNEXT` operations for querying
-//! network devices (routers, switches, printers, UPS, etc.) via SNMPv2c.
+//! network devices (routers, switches, printers, UPS, etc.) via `SNMPv2c`.
 //!
 //! Feature-gated behind `snmp`.
 
+use std::fmt::Write;
 use std::time::{Duration, Instant};
 
 use tracing::{debug, info, warn};
@@ -40,6 +41,7 @@ impl SnmpConnection {
     /// # Errors
     ///
     /// Returns an error if the configuration is invalid.
+    #[allow(clippy::unused_async)]
     pub async fn connect(
         host_name: &str,
         host_config: &HostConfig,
@@ -112,6 +114,7 @@ impl SnmpConnection {
                     reason: format!("SNMP task join failed: {e}"),
                 })?;
 
+        #[allow(clippy::cast_possible_truncation)]
         let duration_ms = start.elapsed().as_millis() as u64;
 
         match result {
@@ -187,7 +190,7 @@ fn snmp_operation(
 
             let mut output = String::new();
             for (oid_resp, value) in response.varbinds {
-                output.push_str(&format!("{oid_resp} = {}\n", format_value(&value)));
+                let _ = writeln!(output, "{oid_resp} = {}", format_value(&value));
             }
             Ok(output)
         }
@@ -198,7 +201,7 @@ fn snmp_operation(
 
             let mut output = String::new();
             for (oid_resp, value) in response.varbinds {
-                output.push_str(&format!("{oid_resp} = {}\n", format_value(&value)));
+                let _ = writeln!(output, "{oid_resp} = {}", format_value(&value));
             }
             Ok(output)
         }
@@ -221,7 +224,7 @@ fn snmp_operation(
                         done = true;
                         break;
                     }
-                    output.push_str(&format!("{resp_str} = {}\n", format_value(&value)));
+                    let _ = writeln!(output, "{resp_str} = {}", format_value(&value));
                     current_oid = parse_oid(&resp_str).unwrap_or_default();
                     done = false;
                 }

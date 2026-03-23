@@ -164,9 +164,9 @@ mod tests {
     #[test]
     fn test_empty_config() {
         let config = default_config();
-        let out = build_instructions(&config, 197);
+        let out = build_instructions(&config, 337);
 
-        assert!(out.contains("197 tools"));
+        assert!(out.contains("337 tools"));
         assert!(out.contains("HOSTS: None configured"));
         assert!(out.contains("standard mode"));
         assert!(!out.contains("DISABLED GROUPS"));
@@ -207,7 +207,7 @@ mod tests {
     fn test_strict_mode() {
         let mut config = default_config();
         config.security.mode = SecurityMode::Strict;
-        let out = build_instructions(&config, 197);
+        let out = build_instructions(&config, 337);
         assert!(out.contains("strict mode (only whitelisted commands allowed)"));
     }
 
@@ -215,7 +215,7 @@ mod tests {
     fn test_permissive_mode() {
         let mut config = default_config();
         config.security.mode = SecurityMode::Permissive;
-        let out = build_instructions(&config, 197);
+        let out = build_instructions(&config, 337);
         assert!(out.contains("permissive mode"));
     }
 
@@ -244,7 +244,7 @@ mod tests {
         config.limits.command_timeout_seconds = 60;
         config.limits.max_output_chars = 80_000;
 
-        let out = build_instructions(&config, 197);
+        let out = build_instructions(&config, 337);
 
         assert!(out.contains("60s command timeout"));
         assert!(out.contains("80000 char output limit"));
@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn test_static_guidance_present() {
         let config = default_config();
-        let out = build_instructions(&config, 197);
+        let out = build_instructions(&config, 337);
 
         assert!(out.contains("WORKFLOW: Call ssh_status"));
         assert!(out.contains("PREFER SPECIALIZED TOOLS"));

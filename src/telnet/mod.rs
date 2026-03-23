@@ -1,7 +1,7 @@
 //! Telnet protocol adapter — legacy network equipment
 //!
 //! Implements remote command execution over Telnet, primarily for
-//! legacy network devices (Cisco IOS, Juniper, MikroTik, etc.)
+//! legacy network devices (Cisco IOS, Juniper, `MikroTik`, etc.)
 //! that do not support SSH.
 //!
 //! Feature-gated behind `telnet`.
@@ -111,6 +111,7 @@ impl TelnetConnection {
                 reason: format!("Telnet exec failed: {e}"),
             })?;
 
+        #[allow(clippy::cast_possible_truncation)]
         let duration_ms = start.elapsed().as_millis() as u64;
 
         // Telnet doesn't have separate stdout/stderr or exit codes.

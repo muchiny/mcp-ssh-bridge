@@ -17,7 +17,9 @@ version = 2
 # RUSTSEC-2023-0071: Marvin Attack on RSA - no fix available upstream
 # Transitive dependency from russh -> rsa crate
 # Safe for local use, timing attack requires network observation
-ignore = ["RUSTSEC-2023-0071"]
+ignore = [
+    "RUSTSEC-2023-0071",   # Marvin Attack on RSA — transitive from russh, no upstream fix
+]
 
 # =============================================================================
 # Licenses - ensure dependencies use acceptable licenses

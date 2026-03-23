@@ -316,4 +316,71 @@ mod tests {
         let result = detector.redact(input);
         assert_eq!(result, input, "Version strings should not be redacted");
     }
+
+    // ============== Tests to catch previously-missed mutations ==============
+
+    #[test]
+    fn test_is_enabled_true_when_enabled() {
+        let detector = EntropyDetector::new(4.0, 16, Vec::new(), true);
+        assert!(detector.is_enabled(), "Enabled detector should return true");
+    }
+
+    #[test]
+    fn test_is_enabled_false_when_disabled() {
+        let detector = EntropyDetector::disabled();
+        assert!(
+            !detector.is_enabled(),
+            "Disabled detector should return false"
+        );
+    }
+
+    #[test]
+    fn test_redact_boundary_min_length_exact() {
+        // Token exactly at min_length should be analyzed
+        let detector = EntropyDetector::new(3.0, 8, Vec::new(), true);
+
+        // High-entropy 8-char token (exactly at min_length)
+        let input = "key=Xk9Z2mQ1";
+        let _result_8 = detector.redact(input);
+        // The token "Xk9Z2mQ1" is 8 chars — should be checked
+
+        // Token of 7 chars (below min_length) — must be skipped
+        let input_short = "key=Xk9Z2mQ";
+        let result_7 = detector.redact(input_short);
+        assert_eq!(
+            result_7, input_short,
+            "Token below min_length should not be redacted"
+        );
+    }
+
+    #[test]
+    fn test_redact_text_shorter_than_min_length_skipped() {
+        let detector = EntropyDetector::new(4.0, 100, Vec::new(), true);
+        // Entire text is shorter than min_length
+        let input = "short text";
+        let result = detector.redact(input);
+        assert_eq!(
+            result, input,
+            "Text shorter than min_length should pass through"
+        );
+    }
+
+    #[test]
+    fn test_enabled_detector_redacts_but_disabled_does_not() {
+        let enabled = EntropyDetector::new(4.0, 16, Vec::new(), true);
+        let disabled = EntropyDetector::new(4.0, 16, Vec::new(), false);
+        let input = "TOKEN=a8Kz9xQ2m4Fp7Lw1Bn3Yd5Rj6Gt0Hv";
+
+        let result_enabled = enabled.redact(input);
+        let result_disabled = disabled.redact(input);
+
+        assert_ne!(
+            result_enabled, input,
+            "Enabled detector should redact high-entropy"
+        );
+        assert_eq!(
+            result_disabled, input,
+            "Disabled detector should not redact"
+        );
+    }
 }

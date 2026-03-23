@@ -105,10 +105,10 @@ classDiagram
     ToolHandler <|.. SshStatusHandler
     ToolHandler <|.. SshDockerPsHandler
 
-    note for ToolHandler "... and 334 more implementations (337 total across 57 groups)"
+    note for ToolHandler "... and 334 more implementations (337 total across 74 groups)"
 ```
 
-#### 🐧 Linux Groups (34 groups, 176 tools)
+#### 🐧 Linux Groups (59 groups)
 
 | Group | Count | Examples |
 |-------|-------|---------|

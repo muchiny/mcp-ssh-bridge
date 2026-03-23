@@ -8,7 +8,7 @@
 [![MCP](https://img.shields.io/badge/MCP-2025--11--25-blueviolet?style=flat-square)](https://modelcontextprotocol.io)
 
 **A Rust MCP server that lets Claude Code securely execute commands on remote servers via SSH.**
-**337 tools across 57 groups — Linux, Windows, Docker, Kubernetes, Podman, LDAP, network equipment, and more.**
+**337 tools across 74 groups — Linux, Windows, Docker, Kubernetes, Podman, LDAP, network equipment, and more.**
 
 </div>
 
@@ -355,7 +355,7 @@ Use `ssh_recording_start` / `ssh_recording_stop` to control recordings, `ssh_rec
 
 ## 🧰 Tool groups
 
-The 337 tools are organized in 57 groups. All groups are enabled by default. Disable groups you don't need to reduce the MCP context sent to the LLM:
+The 337 tools are organized in 74 groups. All groups are enabled by default. Disable groups you don't need to reduce the MCP context sent to the LLM:
 
 ```yaml
 tool_groups:
@@ -365,7 +365,7 @@ tool_groups:
     database: false          # Disable db query/dump/restore
     esxi: false              # Disable VMware ESXi tools
     windows_services: false  # Disable Windows service management
-    # ... see config.example.yaml for all 57 groups
+    # ... see config.example.yaml for all 74 groups
 ```
 
 ### 🐧 Linux groups (42 groups, 256 tools)

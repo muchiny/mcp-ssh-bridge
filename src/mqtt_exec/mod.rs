@@ -172,11 +172,8 @@ impl MqttConnection {
                 });
             }
 
-            let poll_result = tokio::time::timeout(
-                Duration::from_secs(1),
-                self.eventloop.poll(),
-            )
-            .await;
+            let poll_result =
+                tokio::time::timeout(Duration::from_secs(1), self.eventloop.poll()).await;
 
             let event = match poll_result {
                 Ok(Ok(event)) => event,
@@ -262,7 +259,10 @@ mod tests {
         let bytes = serde_json::to_vec(&request).unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(parsed["cmd"].as_str().unwrap(), "hostname");
-        assert_eq!(parsed["response_topic"].as_str().unwrap(), "mcp/resp/device-01");
+        assert_eq!(
+            parsed["response_topic"].as_str().unwrap(),
+            "mcp/resp/device-01"
+        );
     }
 
     #[test]

@@ -104,7 +104,7 @@ impl ComplianceCommandBuilder {
     ///
     /// Produces a compound command that checks:
     /// - File permissions on sensitive files
-    /// - SSH hardening settings in sshd_config
+    /// - SSH hardening settings in `sshd_config`
     /// - Kernel security parameters via sysctl
     /// - Password policy configuration
     /// - Audit rules
@@ -372,7 +372,7 @@ mod tests {
         let result = validate_cis_level(5);
         match result.unwrap_err() {
             BridgeError::CommandDenied { reason } => {
-                assert!(reason.contains("5"));
+                assert!(reason.contains('5'));
                 assert!(reason.contains("1 or 2"));
             }
             other => panic!("Expected CommandDenied, got: {other:?}"),

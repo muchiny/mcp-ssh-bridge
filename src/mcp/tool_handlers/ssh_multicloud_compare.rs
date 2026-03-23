@@ -151,7 +151,7 @@ mod tests {
             "provider1": "aws",
             "provider2": "azure",
             "timeout_seconds": 120,
-            "max_output": 100000,
+            "max_output": 100_000,
             "save_output": "/tmp/compare.json"
         });
         let args: SshMulticloudCompareArgs = serde_json::from_value(json).unwrap();

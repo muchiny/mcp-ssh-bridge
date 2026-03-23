@@ -117,7 +117,8 @@ impl NatsConnection {
 
         let response = tokio::time::timeout(
             REQUEST_TIMEOUT,
-            self.client.request(self.target_subject.clone(), payload.into()),
+            self.client
+                .request(self.target_subject.clone(), payload.into()),
         )
         .await
         .map_err(|_| BridgeError::SshExec {
