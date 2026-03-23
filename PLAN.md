@@ -15,6 +15,7 @@ Chaque feature suit le pattern hexagonal existant :
 5. **Tests** : Minimum par tool : `test_missing_arguments`, `test_unknown_host`, `test_schema`, `test_args_deserialization`, `test_build_command_*`
 
 Fichiers modifiés pour CHAQUE nouveau tool :
+
 - `src/mcp/tool_handlers/mod.rs` — `mod` + `pub use`
 - `src/mcp/registry.rs` — import, `all_handlers`, `tool_group()`, `tool_annotations()`, assertion count
 - `src/domain/use_cases/mod.rs` — `pub mod`
@@ -35,6 +36,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_at_jobs` | Gérer les jobs `at` (atq, at -c) |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/cron_analysis.rs` — `CronAnalysisCommandBuilder`
 - `src/mcp/tool_handlers/ssh_cron_analyze.rs`
 - `src/mcp/tool_handlers/ssh_cron_history.rs`
@@ -52,6 +54,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_benchmark` | Benchmarks rapides CPU/IO/réseau (sysbench/fio/dd) |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/performance.rs` — `PerformanceCommandBuilder`
 - `src/mcp/tool_handlers/ssh_perf_trace.rs`
 - `src/mcp/tool_handlers/ssh_io_trace.rs`
@@ -71,6 +74,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_container_health_history` | Historique des health checks |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/container_logs.rs` — `ContainerLogCommandBuilder`
 - `src/mcp/tool_handlers/ssh_container_log_search.rs`
 - `src/mcp/tool_handlers/ssh_container_log_stats.rs`
@@ -102,6 +106,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_fail2ban_status` | État de fail2ban/denyhosts par jail |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/network_security.rs` — `NetworkSecurityCommandBuilder`
 - `src/mcp/tool_handlers/ssh_port_scan.rs`
 - `src/mcp/tool_handlers/ssh_ssl_audit.rs`
@@ -121,6 +126,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_compliance_report` | Rapport de conformité structuré (JSON/texte) |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/compliance.rs` — `ComplianceCommandBuilder`
 - `src/mcp/tool_handlers/ssh_cis_benchmark.rs`
 - `src/mcp/tool_handlers/ssh_stig_check.rs`
@@ -153,6 +159,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_cloud_cost` | Coûts de l'instance (aws ce get-cost-and-usage) |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/cloud.rs` — `CloudCommandBuilder`
 - `src/mcp/tool_handlers/ssh_aws_cli.rs`
 - `src/mcp/tool_handlers/ssh_cloud_metadata.rs`
@@ -170,6 +177,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_host_tags` | Gérer les tags sur les hosts pour filtrage |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/inventory.rs` — `InventoryCommandBuilder`
 - `src/mcp/tool_handlers/ssh_discover_hosts.rs`
 - `src/mcp/tool_handlers/ssh_inventory_sync.rs` — multi-host (pattern `ssh_exec_multi.rs`)
@@ -186,6 +194,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_multicloud_compare` | Comparer les inventaires entre providers |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/multicloud.rs` — `MulticloudCommandBuilder`
 - `src/mcp/tool_handlers/ssh_multicloud_list.rs`
 - `src/mcp/tool_handlers/ssh_multicloud_sync.rs`
@@ -214,6 +223,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_alert_check` | Vérifier tous les seuils maintenant — via SSH |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/alerting.rs` — `AlertingCommandBuilder`
 - `src/domain/alerting.rs` — `AlertDefinition`, `AlertStore` (stockage local `~/.config/mcp-ssh-bridge/alerts.json`)
 - `src/mcp/tool_handlers/ssh_alert_set.rs` — handler custom (pas StandardTool)
@@ -232,6 +242,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_capacity_predict` | Données brutes pour que le LLM extrapole les tendances |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/capacity.rs` — `CapacityCommandBuilder`
 - `src/mcp/tool_handlers/ssh_capacity_collect.rs`
 - `src/mcp/tool_handlers/ssh_capacity_trend.rs`
@@ -247,6 +258,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_incident_correlate` | Corréler par services spécifiques |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/incident.rs` — `IncidentCommandBuilder`
 - `src/mcp/tool_handlers/ssh_incident_timeline.rs`
 - `src/mcp/tool_handlers/ssh_incident_correlate.rs`
@@ -274,6 +286,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_log_tail_multi` | Tail des logs récents de N hosts simultanément |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/log_aggregation.rs` — `LogAggregationCommandBuilder`
 - `src/mcp/tool_handlers/ssh_log_search_multi.rs` — pattern `ssh_exec_multi.rs`
 - `src/mcp/tool_handlers/ssh_log_aggregate.rs`
@@ -290,6 +303,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_key_audit` | Auditer les clés autorisées (âge, type, longueur) |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/key_management.rs` — `KeyManagementCommandBuilder`
 - `src/mcp/tool_handlers/ssh_key_generate.rs`
 - `src/mcp/tool_handlers/ssh_key_distribute.rs`
@@ -306,6 +320,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_backup_schedule` | Créer un cron job de backup périodique |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/backup_advanced.rs` — `BackupAdvancedCommandBuilder`
 - `src/mcp/tool_handlers/ssh_backup_snapshot.rs`
 - `src/mcp/tool_handlers/ssh_backup_verify.rs`
@@ -321,6 +336,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_notify` | Notification formatée Slack/Teams avec contexte |
 
 **Nouveaux fichiers** :
+
 - `src/domain/use_cases/chatops.rs` — `ChatOpsCommandBuilder`
 - `src/mcp/tool_handlers/ssh_webhook_send.rs`
 - `src/mcp/tool_handlers/ssh_notify.rs`
@@ -352,6 +368,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 | `ssh_template_diff` | Comparer template rendu vs config actuelle |
 
 **Nouveaux fichiers** :
+
 - `src/domain/template.rs` — `ConfigTemplate`, `TemplateLibrary` (substitution `{{variable}}`, pas de dépendance externe)
 - `src/domain/use_cases/templates.rs` — `TemplateCommandBuilder`
 - `src/mcp/tool_handlers/ssh_template_list.rs`
@@ -373,6 +390,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 Pas de nouveaux tools — c'est un renforcement sécurité au niveau protocole.
 
 **Fichiers modifiés** :
+
 - `src/security/validator.rs` — `validate_path_in_roots(path, roots)`
 - `src/mcp/standard_tool.rs` — Nouveau const `ENFORCE_ROOTS: bool = false;`, les tools fichier le mettent à `true`
 - `src/mcp/server.rs` — Handler `roots/list_changed` pour mise à jour dynamique
@@ -399,6 +417,7 @@ Pas de nouveaux tools — c'est un renforcement sécurité au niveau protocole.
 | `ssh_pty_resize` | Redimensionner le terminal (SIGWINCH) |
 
 **Nouveaux fichiers** :
+
 - `src/ports/ssh.rs` — Étend `SshExecutor` avec `async fn execute_pty()`
 - `src/ssh/client.rs` — Implémente `execute_pty` via `channel.request_pty()` de russh
 - `src/domain/use_cases/pty.rs` — `PtyCommandBuilder`
@@ -409,6 +428,7 @@ Pas de nouveaux tools — c'est un renforcement sécurité au niveau protocole.
 
 **Groupe** : `pty` — **DÉSACTIVÉ par défaut**
 **Points critiques** :
+
 - Timeout hard obligatoire (les sessions PTY peuvent bloquer)
 - Bypass la validation de commandes → opt-in explicite requis
 - L'entropie de détection de secrets doit gérer les séquences ANSI

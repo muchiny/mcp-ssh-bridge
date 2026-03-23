@@ -5,6 +5,7 @@
 Runbooks are **YAML-defined multi-step operational procedures** that codify common sysadmin tasks into repeatable, auditable workflows. Instead of remembering a sequence of diagnostic and remediation commands, you define them once in a YAML file and execute them through MCP SSH Bridge.
 
 Each runbook consists of:
+
 - **Parameters** with types, defaults, and descriptions
 - **Steps** that are executed sequentially, with support for conditional logic, output capture, user confirmation, and rollback commands
 - **Template variables** (`{{ variable }}`) that get resolved from parameters before execution

@@ -36,9 +36,9 @@ JSON wrapping of command output adds token overhead through key repetition, esca
 **Format:** TSV (tab-separated values) + MCP App Table component
 
 ```
-NAMES	IMAGE	STATUS	PORTS
-web	nginx:latest	Up 2 hours	0.0.0.0:80->80/tcp
-cache	redis:7	Up 3 hours	6379/tcp
+NAMES    IMAGE           STATUS       PORTS
+web      nginx:latest    Up 2 hours   0.0.0.0:80->80/tcp
+cache    redis:7         Up 3 hours   6379/tcp
 ```
 
 The `content[0]` is TSV text (for AI consumption), and `content[1]` is an interactive App Table (for UI rendering with actions like Logs, Inspect, Refresh).

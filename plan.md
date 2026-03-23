@@ -18,6 +18,7 @@
 | MCP complet (Tools, Resources, Prompts, Sampling, Tasks, OAuth, HTTP) | ✅ | Tout implémenté |
 
 **Ce qui est ABSENT** (confirmé par recherche) :
+
 - Entropy-based secrets detection
 - Session recording / hash-chain audit
 - Intelligent diagnostics (ssh_diagnose)
@@ -36,12 +37,14 @@
 ### 1.1 Secrets Detection par Entropie
 
 **Fichiers à modifier :**
+
 - `src/security/sanitizer.rs` — ajouter module entropie dans le pipeline existant
 - `src/security/entropy.rs` — **NOUVEAU** : calcul Shannon entropy par token
 - `src/config/types.rs` — ajouter `entropy_threshold: f64` dans `SanitizeConfig`
 - `config/config.example.yaml` — documenter le nouveau champ
 
 **Logique :**
+
 ```
 Pour chaque token (mot séparé par espace/newline) dans l'output :
   1. Si longueur >= 16 caractères
@@ -53,6 +56,7 @@ Pour chaque token (mot séparé par espace/newline) dans l'output :
 **Intégration :** S'insère dans `Sanitizer::sanitize()` APRÈS les patterns regex (tier 1-5) et AVANT le retour. Zéro impact sur le pipeline existant si désactivé.
 
 **Config YAML :**
+
 ```yaml
 security:
   sanitize:
@@ -69,6 +73,7 @@ security:
 ### 1.2 Session Recording & Hash-Chain Audit
 
 **Fichiers NOUVEAUX :**
+
 - `src/security/recording.rs` — SessionRecorder (format asciinema v2 + hash chain)
 - `src/mcp/tool_handlers/ssh_recording_start.rs`
 - `src/mcp/tool_handlers/ssh_recording_stop.rs`
@@ -77,12 +82,14 @@ security:
 - `src/mcp/tool_handlers/ssh_recording_verify.rs`
 
 **Fichiers à modifier :**
+
 - `src/mcp/tool_handlers/mod.rs` — exports
 - `src/mcp/registry.rs` — nouveau groupe `recording` + annotations
 - `src/config/types.rs` — `RecordingConfig` struct
 - `config/config.example.yaml` — section recording
 
 **Format asciinema v2 :**
+
 ```json
 {"version": 2, "width": 80, "height": 24, "timestamp": 1234567890}
 [0.5, "o", "$ whoami\r\n"]
@@ -94,6 +101,7 @@ security:
 **Groupe : `recording`** (5 tools, read-only sauf start/stop)
 
 **Config YAML :**
+
 ```yaml
 recording:
   enabled: false
@@ -114,18 +122,21 @@ recording:
 ### 2.1 Intelligent Diagnostics
 
 **Fichiers NOUVEAUX :**
+
 - `src/domain/use_cases/diagnostics.rs` — DiagnosticsCommandBuilder
 - `src/mcp/tool_handlers/ssh_diagnose.rs`
 - `src/mcp/tool_handlers/ssh_incident_triage.rs`
 - `src/mcp/tool_handlers/ssh_compare_state.rs`
 
 **Fichiers à modifier :**
+
 - `src/domain/use_cases/mod.rs` — export
 - `src/mcp/tool_handlers/mod.rs` — exports
 - `src/mcp/registry.rs` — nouveau groupe `diagnostics` + annotations
 - `config/config.example.yaml` — section diagnostics
 
 **`ssh_diagnose` — Un seul appel collecte :**
+
 ```bash
 # Exécuté comme UN script compound via ssh_exec
 uptime && free -m && df -h && top -bn1 | head -20 && \
@@ -152,6 +163,7 @@ Retourne un JSON structuré (utilise `outputSchema` existant) avec sections : cp
 ### 2.2 Runbook Engine
 
 **Fichiers NOUVEAUX :**
+
 - `src/domain/runbook.rs` — Runbook model (Step, Condition, Rollback)
 - `src/domain/use_cases/runbook_engine.rs` — RunbookExecutor
 - `src/mcp/tool_handlers/ssh_runbook_list.rs`
@@ -166,6 +178,7 @@ Retourne un JSON structuré (utilise `outputSchema` existant) avec sections : cp
   - `config/runbooks/log_rotation.yaml`
 
 **Fichiers à modifier :**
+
 - `src/domain/mod.rs` — export runbook module
 - `src/mcp/tool_handlers/mod.rs` — exports
 - `src/mcp/registry.rs` — nouveau groupe `runbooks` + annotations
@@ -174,6 +187,7 @@ Retourne un JSON structuré (utilise `outputSchema` existant) avec sections : cp
 - `Cargo.toml` — **aucune nouvelle dep** (serde_yaml déjà via serde-saphir)
 
 **Format Runbook YAML :**
+
 ```yaml
 name: disk_full_recovery
 description: "Recover from disk full condition"
@@ -216,18 +230,21 @@ steps:
 ### 3.1 Advanced Multi-Host
 
 **Fichiers NOUVEAUX :**
+
 - `src/domain/use_cases/orchestration.rs` — OrchestrationEngine
 - `src/mcp/tool_handlers/ssh_canary_exec.rs`
 - `src/mcp/tool_handlers/ssh_rolling_exec.rs`
 - `src/mcp/tool_handlers/ssh_fleet_diff.rs`
 
 **Fichiers à modifier :**
+
 - `src/domain/use_cases/mod.rs` — export
 - `src/mcp/tool_handlers/mod.rs` — exports
 - `src/mcp/registry.rs` — nouveau groupe `orchestration` + annotations
 - `config/config.example.yaml` — section orchestration
 
 **`ssh_canary_exec` :**
+
 ```json
 {
   "hosts": ["web1", "web2", "web3", "web4", "web5"],
@@ -238,9 +255,11 @@ steps:
   "proceed_on_success": true
 }
 ```
+
 Logique : exécute sur canary_count hosts → health_check → si OK, exécute sur le reste → health_check global.
 
 **`ssh_rolling_exec` :**
+
 ```json
 {
   "hosts": ["web1", "web2", "web3", "web4"],
@@ -254,6 +273,7 @@ Logique : exécute sur canary_count hosts → health_check → si OK, exécute s
 ```
 
 **`ssh_fleet_diff` :**
+
 ```json
 {
   "hosts": ["web1", "web2", "web3", "web4"],
@@ -261,6 +281,7 @@ Logique : exécute sur canary_count hosts → health_check → si OK, exécute s
   "reference_host": "web1"
 }
 ```
+
 Retourne : quels hosts ont un output identique à la référence, lesquels divergent, avec le diff.
 
 **Groupe : `orchestration`** (3 tools : canary=destructive, rolling=destructive, fleet_diff=read-only)
@@ -274,12 +295,14 @@ Retourne : quels hosts ont un output identique à la référence, lesquels diver
 ### 4.1 Environment Drift Detection
 
 **Fichiers NOUVEAUX :**
+
 - `src/domain/use_cases/drift.rs` — SnapshotBuilder, DriftDetector
 - `src/mcp/tool_handlers/ssh_env_snapshot.rs`
 - `src/mcp/tool_handlers/ssh_env_diff.rs`
 - `src/mcp/tool_handlers/ssh_env_drift.rs`
 
 **Fichiers à modifier :**
+
 - `src/domain/use_cases/mod.rs` — export
 - `src/mcp/tool_handlers/mod.rs` — exports
 - `src/mcp/registry.rs` — nouveau groupe `drift` + annotations
@@ -287,6 +310,7 @@ Retourne : quels hosts ont un output identique à la référence, lesquels diver
 - `config/config.example.yaml` — section drift
 
 **`ssh_env_snapshot` collecte :**
+
 - Packages installés + versions (`dpkg -l` ou `rpm -qa`)
 - Services actifs (`systemctl list-units --state=active`)
 - Ports ouverts (`ss -tunapl`)
@@ -307,12 +331,14 @@ Stocke en JSON local avec timestamp + SHA256 du snapshot.
 ### 4.2 File Diff / Patch / Template
 
 **Fichiers NOUVEAUX :**
+
 - `src/domain/use_cases/file_advanced.rs` — FileAdvancedCommandBuilder
 - `src/mcp/tool_handlers/ssh_file_diff.rs`
 - `src/mcp/tool_handlers/ssh_file_patch.rs`
 - `src/mcp/tool_handlers/ssh_file_template.rs`
 
 **Fichiers à modifier :**
+
 - `src/domain/use_cases/mod.rs` — export
 - `src/mcp/tool_handlers/mod.rs` — exports
 - `src/mcp/registry.rs` — ajouter au groupe existant `file_ops`
@@ -330,24 +356,28 @@ Stocke en JSON local avec timestamp + SHA256 du snapshot.
 ### 4.3 SBOM & Vulnerability Scanning (Remote)
 
 **Fichiers NOUVEAUX :**
+
 - `src/domain/use_cases/sbom.rs` — SbomCommandBuilder
 - `src/mcp/tool_handlers/ssh_sbom_generate.rs`
 - `src/mcp/tool_handlers/ssh_vuln_scan.rs`
 - `src/mcp/tool_handlers/ssh_compliance_check.rs`
 
 **Fichiers à modifier :**
+
 - `src/domain/use_cases/mod.rs` — export
 - `src/mcp/tool_handlers/mod.rs` — exports
 - `src/mcp/registry.rs` — nouveau groupe `security_scan` + annotations
 - `config/config.example.yaml` — section security_scan
 
 **`ssh_sbom_generate` :**
+
 ```bash
 # Détecte le package manager et génère l'inventaire
 dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' 2>/dev/null || \
 rpm -qa --queryformat '%{NAME}\t%{VERSION}-%{RELEASE}\t%{ARCH}\n' 2>/dev/null || \
 apk list -I 2>/dev/null
 ```
+
 Retourne JSON structuré (outputSchema).
 
 **`ssh_vuln_scan` :** Croise l'inventaire packages avec une commande locale (`apt list --upgradable` / `yum updateinfo list sec` / `apk audit`). Pas de base CVE embarquée — utilise les outils natifs du système.
@@ -364,9 +394,11 @@ Retourne JSON structuré (outputSchema).
 ### 5.1 MCP Server Card
 
 **Fichier NOUVEAU :**
+
 - `.well-known/mcp/server-card.json` — statique, commité dans le repo
 
 **Contenu :**
+
 ```json
 {
   "name": "mcp-ssh-bridge",
@@ -398,12 +430,14 @@ Retourne JSON structuré (outputSchema).
 ### 5.2 DXT Packaging (Claude Desktop Extension)
 
 **Fichiers NOUVEAUX :**
+
 - `dxt/manifest.json` — DXT manifest
 - `dxt/icon.png` — icône 512x512
 - `dxt/README.md` — description pour le marketplace
 - `Makefile` — nouvelle target `make dxt`
 
 **`dxt/manifest.json` :**
+
 ```json
 {
   "dxt_version": "0.1",
@@ -422,18 +456,20 @@ Retourne JSON structuré (outputSchema).
 ```
 
 **Intégration release :** Ajouter dans `release.yml` un step qui :
+
 1. Copie le binaire + manifest.json + icon dans un dossier
 2. Zip le tout en `.dxt`
 3. Upload comme artifact de release
 
 **Makefile target :**
+
 ```makefile
 dxt: release
-	@mkdir -p dist/dxt
-	cp target/release/mcp-ssh-bridge dist/dxt/
-	cp dxt/manifest.json dxt/icon.png dist/dxt/
-	cd dist && zip -r mcp-ssh-bridge.dxt dxt/
-	@echo "DXT package: dist/mcp-ssh-bridge.dxt"
+    @mkdir -p dist/dxt
+    cp target/release/mcp-ssh-bridge dist/dxt/
+    cp dxt/manifest.json dxt/icon.png dist/dxt/
+    cd dist && zip -r mcp-ssh-bridge.dxt dxt/
+    @echo "DXT package: dist/mcp-ssh-bridge.dxt"
 ```
 
 ---
@@ -441,6 +477,7 @@ dxt: release
 ### 5.3 Mise à jour Release Pipeline
 
 **Fichiers à modifier :**
+
 - `.github/workflows/release.yml` — ajouter :
   - Step DXT packaging (par plateforme)
   - Step server-card.json dans les assets

@@ -5,6 +5,7 @@
 **DXT (Desktop Extension)** is Claude Desktop's one-click install format for MCP servers. A `.dxt` file is a ZIP archive containing a binary, a manifest, and an icon that Claude Desktop can install directly — no manual configuration needed.
 
 When a user opens a `.dxt` file, Claude Desktop automatically:
+
 1. Extracts the binary to its extensions directory
 2. Reads the manifest to register the MCP server
 3. Makes all tools available immediately via stdio transport
@@ -64,12 +65,14 @@ make dxt
 ```
 
 This runs the following steps:
+
 1. Builds an optimized release binary (`make release`)
 2. Creates `dist/dxt/` directory
 3. Copies the release binary, `manifest.json`, and `icon.svg` into it
 4. Zips the directory into `dist/mcp-ssh-bridge.dxt`
 
 The output package is at:
+
 ```
 dist/mcp-ssh-bridge.dxt
 ```
