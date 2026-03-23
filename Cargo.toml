@@ -34,10 +34,16 @@ k8s-exec = ["dep:kube", "dep:k8s-openapi"]
 serial = ["dep:tokio-serial"]
 snmp = ["dep:snmp"]
 
+# Protocol adapters (Tier 3 — Cloud-only, non air-gapped)
+ssm = ["dep:aws-sdk-ssm", "dep:aws-config"]
+azure = ["dep:reqwest"]
+gcp = []
+cloud = ["ssm", "azure", "gcp"]
+
 # Bundles
 full = ["cli", "mimalloc", "http"]
 air-gapped = ["winrm", "telnet", "netconf"]
-all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "snmp"]
+all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "snmp", "ssm", "azure", "gcp"]
 
 [dependencies]
 # Async runtime (explicit features instead of "full" for smaller binary)
@@ -119,6 +125,10 @@ tokio-serial = { version = "5.4", optional = true }
 
 # SNMP adapter (optional) — SNMP v1/v2c network monitoring
 snmp = { version = "0.2", optional = true }
+
+# AWS SSM adapter (optional) — cloud command execution via Systems Manager
+aws-sdk-ssm = { version = "1", optional = true }
+aws-config = { version = "1", features = ["behavior-version-latest"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"

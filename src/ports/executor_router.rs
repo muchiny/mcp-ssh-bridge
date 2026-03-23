@@ -124,6 +124,30 @@ impl ExecutorRouter {
                         .await?;
                 Ok(ConnectionGuard::Snmp(conn))
             }
+            #[cfg(feature = "ssm")]
+            Protocol::Ssm => {
+                let conn =
+                    crate::ssm::SsmConnection::connect(host_name, host_config, limits).await?;
+                Ok(ConnectionGuard::Ssm(conn))
+            }
+            #[cfg(feature = "azure")]
+            Protocol::Azure => {
+                let conn =
+                    crate::cloud_exec::azure::AzureRunConnection::connect(
+                        host_name, host_config, limits,
+                    )
+                    .await?;
+                Ok(ConnectionGuard::Azure(conn))
+            }
+            #[cfg(feature = "gcp")]
+            Protocol::Gcp => {
+                let conn =
+                    crate::cloud_exec::gcp::GcpRunConnection::connect(
+                        host_name, host_config, limits,
+                    )
+                    .await?;
+                Ok(ConnectionGuard::Gcp(conn))
+            }
         }
     }
 
@@ -178,6 +202,15 @@ pub enum ConnectionGuard<'a> {
     /// SNMP session (v1/v2c UDP).
     #[cfg(feature = "snmp")]
     Snmp(crate::snmp_client::SnmpConnection),
+    /// AWS SSM (Systems Manager `SendCommand`).
+    #[cfg(feature = "ssm")]
+    Ssm(crate::ssm::SsmConnection),
+    /// Azure Run Command (REST API).
+    #[cfg(feature = "azure")]
+    Azure(crate::cloud_exec::azure::AzureRunConnection),
+    /// GCP OS Command (`gcloud` CLI).
+    #[cfg(feature = "gcp")]
+    Gcp(crate::cloud_exec::gcp::GcpRunConnection),
 }
 
 impl ConnectionGuard<'_> {
@@ -207,6 +240,12 @@ impl ConnectionGuard<'_> {
             Self::Serial(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "snmp")]
             Self::Snmp(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "ssm")]
+            Self::Ssm(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "azure")]
+            Self::Azure(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "gcp")]
+            Self::Gcp(conn) => conn.exec(command, limits).await,
         }
     }
 
@@ -228,6 +267,12 @@ impl ConnectionGuard<'_> {
             Self::Serial(conn) => conn.mark_failed(),
             #[cfg(feature = "snmp")]
             Self::Snmp(conn) => conn.mark_failed(),
+            #[cfg(feature = "ssm")]
+            Self::Ssm(conn) => conn.mark_failed(),
+            #[cfg(feature = "azure")]
+            Self::Azure(conn) => conn.mark_failed(),
+            #[cfg(feature = "gcp")]
+            Self::Gcp(conn) => conn.mark_failed(),
         }
     }
 }

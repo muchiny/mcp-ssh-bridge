@@ -294,6 +294,15 @@ pub enum Protocol {
     /// SNMP — Simple Network Management Protocol (v1/v2c) for network devices
     #[cfg(feature = "snmp")]
     Snmp,
+    /// AWS SSM — Systems Manager `SendCommand` for EC2 instances
+    #[cfg(feature = "ssm")]
+    Ssm,
+    /// Azure Run Command — execute commands on Azure VMs via REST API
+    #[cfg(feature = "azure")]
+    Azure,
+    /// GCP OS Command — execute commands on GCP VMs via `gcloud` CLI
+    #[cfg(feature = "gcp")]
+    Gcp,
 }
 
 const fn default_port() -> u16 {

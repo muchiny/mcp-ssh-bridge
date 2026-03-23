@@ -30,6 +30,10 @@ pub mod serial_port;
 pub mod snmp_client;
 #[cfg(feature = "telnet")]
 pub mod telnet;
+#[cfg(feature = "ssm")]
+pub mod ssm;
+#[cfg(any(feature = "azure", feature = "gcp"))]
+pub mod cloud_exec;
 #[cfg(feature = "winrm")]
 pub mod winrm;
 

@@ -187,12 +187,30 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 - Nouveau groupe d'outils : `snmp` (get, walk, set, table)
 - Feature : `snmp = ["dep:csnmp"]`
 
-### Phase 4 : Cloud Adapters (feature-gated, opt-in)
+### Phase 4 : Cloud Adapters (feature-gated, opt-in) ✅ DONE
 
-- SSM Adapter (`src/ssm/`) — `aws-sdk-ssm`
-- Azure Run Command (`src/cloud_exec/azure.rs`)
-- GCP OS Command (`src/cloud_exec/gcp.rs`)
-- Feature : `cloud = ["ssm"]`, `ssm = ["dep:aws-sdk-ssm", "dep:aws-config"]`
+**4.1 — AWS SSM Adapter** (`src/ssm/mod.rs`)
+- Uses `aws-sdk-ssm` + `aws-config` crates
+- `SendCommand` → poll `GetCommandInvocation` pattern
+- Auto-detects document: `AWS-RunShellScript` (Linux) / `AWS-RunPowerShellScript` (Windows)
+- Host mapping: `hostname` → instance ID, `user` → region, `description` → document
+- Feature: `ssm = ["dep:aws-sdk-ssm", "dep:aws-config"]`
+
+**4.2 — Azure Run Command Adapter** (`src/cloud_exec/azure.rs`)
+- Uses `reqwest` for Azure Compute Management REST API
+- Supports sync (200) and async (202 + Location polling) responses
+- Auth via Azure CLI (`az account get-access-token`) or `AZURE_ACCESS_TOKEN` env var
+- Host mapping: `hostname` → VM name, `user` → resource group, `description` → subscription ID
+- Feature: `azure = ["dep:reqwest"]` (shares reqwest with WinRM)
+
+**4.3 — GCP OS Command Adapter** (`src/cloud_exec/gcp.rs`)
+- Wraps `gcloud compute ssh --command` CLI (no direct Run Command API in GCP)
+- Uses IAP tunneling for secure access
+- Auto-detects project/zone from `gcloud config` if not specified
+- Host mapping: `hostname` → instance name, `user` → project ID, `description` → zone
+- Feature: `gcp = []` (no extra deps, uses gcloud CLI)
+
+**Bundle**: `cloud = ["ssm", "azure", "gcp"]`
 
 ### Phase 5 : Messaging-based Adapters (nécessite agent distant)
 
@@ -221,7 +239,9 @@ snmp = ["dep:csnmp"]
 
 # Tier 3 — Cloud-only (non air-gapped)
 ssm = ["dep:aws-sdk-ssm", "dep:aws-config"]
-cloud = ["ssm"]
+azure = ["dep:reqwest"]
+gcp = []
+cloud = ["ssm", "azure", "gcp"]
 
 # Tier 4 — Messaging (requires remote agent)
 zeromq = ["dep:zeromq"]
@@ -230,7 +250,7 @@ mqtt = ["dep:rumqttc"]
 
 # Bundles
 air-gapped = ["winrm", "telnet", "netconf", "serial", "snmp"]
-all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "snmp", "ssm", "zeromq", "nats", "mqtt"]
+all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "snmp", "ssm", "azure", "gcp", "zeromq", "nats", "mqtt"]
 ```
 
 ## Exemple YAML Multi-Protocol
