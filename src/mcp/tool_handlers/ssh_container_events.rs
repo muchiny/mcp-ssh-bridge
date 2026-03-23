@@ -86,10 +86,7 @@ impl StandardTool for ContainerEventsTool {
         "required": ["host"]
     }"#;
 
-    fn build_command(
-        args: &SshContainerEventsArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshContainerEventsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(ContainerLogCommandBuilder::build_events_command(
             args.docker_bin.as_deref(),
             args.since.as_deref(),
@@ -209,9 +206,7 @@ mod tests {
     async fn test_invalid_json_type() {
         let handler = SshContainerEventsHandler::new();
         let ctx = create_test_context();
-        let result = handler
-            .execute(Some(json!({"host": 123})), &ctx)
-            .await;
+        let result = handler.execute(Some(json!({"host": 123})), &ctx).await;
         assert!(result.is_err());
         match result.unwrap_err() {
             BridgeError::McpInvalidRequest(_) => {}
@@ -238,6 +233,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

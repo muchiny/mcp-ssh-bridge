@@ -82,10 +82,7 @@ impl StandardTool for MulticloudCompareTool {
         Ok(())
     }
 
-    fn build_command(
-        args: &SshMulticloudCompareArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshMulticloudCompareArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(MulticloudCommandBuilder::build_multicloud_compare_command(
             &args.provider1,
             &args.provider2,

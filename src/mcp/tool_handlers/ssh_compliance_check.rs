@@ -8,7 +8,7 @@ use serde::Deserialize;
 use crate::config::HostConfig;
 use crate::domain::use_cases::sbom::SbomCommandBuilder;
 use crate::error::Result;
-use crate::mcp::standard_tool::{impl_common_args, StandardTool, StandardToolHandler};
+use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 
 #[derive(Debug, Deserialize)]
 pub struct SshComplianceCheckArgs {
@@ -66,10 +66,7 @@ impl StandardTool for ComplianceCheckTool {
         "required": ["host"]
     }"#;
 
-    fn build_command(
-        args: &SshComplianceCheckArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshComplianceCheckArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SbomCommandBuilder::build_compliance_command(
             args.profile.as_deref().unwrap_or("cis-level1"),
         ))
@@ -83,8 +80,8 @@ mod tests {
     use super::*;
     use crate::config::{HostConfig, HostKeyVerification, OsType};
     use crate::error::BridgeError;
-    use crate::ports::mock::create_test_context;
     use crate::ports::ToolHandler;
+    use crate::ports::mock::create_test_context;
     use serde_json::json;
 
     fn test_host_config() -> HostConfig {
@@ -102,6 +99,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

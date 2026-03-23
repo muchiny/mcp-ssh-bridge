@@ -185,10 +185,7 @@ mod tests {
         let handler = SshKeyDistributeHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"host": 123, "public_key": 456})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": 123, "public_key": 456})), &ctx)
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -212,6 +209,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

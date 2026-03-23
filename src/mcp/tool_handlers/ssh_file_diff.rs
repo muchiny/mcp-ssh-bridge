@@ -7,7 +7,7 @@ use serde::Deserialize;
 use crate::config::HostConfig;
 use crate::domain::use_cases::file_advanced::FileAdvancedCommandBuilder;
 use crate::error::Result;
-use crate::mcp::standard_tool::{impl_common_args, StandardTool, StandardToolHandler};
+use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 
 #[derive(Debug, Deserialize)]
 pub struct SshFileDiffArgs {
@@ -76,10 +76,7 @@ impl StandardTool for FileDiffTool {
         "required": ["host", "file1", "file2"]
     }"#;
 
-    fn build_command(
-        args: &SshFileDiffArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshFileDiffArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(FileAdvancedCommandBuilder::build_diff_command(
             &args.file1,
             &args.file2,
@@ -95,8 +92,8 @@ mod tests {
     use super::*;
     use crate::config::{HostConfig, HostKeyVerification, OsType};
     use crate::error::BridgeError;
-    use crate::ports::mock::create_test_context;
     use crate::ports::ToolHandler;
+    use crate::ports::mock::create_test_context;
     use serde_json::json;
 
     fn test_host_config() -> HostConfig {
@@ -114,6 +111,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

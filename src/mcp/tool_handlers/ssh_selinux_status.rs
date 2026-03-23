@@ -55,10 +55,7 @@ impl StandardTool for SelinuxStatusTool {
         }
     }"#;
 
-    fn build_command(
-        _args: &SshSelinuxStatusArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshSelinuxStatusArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SecurityModulesCommandBuilder::build_selinux_status_command())
     }
 }

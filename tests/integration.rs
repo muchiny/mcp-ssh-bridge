@@ -39,6 +39,7 @@ fn create_test_config() -> Config {
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
 
@@ -58,6 +59,7 @@ fn create_test_config() -> Config {
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
 
@@ -467,6 +469,7 @@ fn test_proxy_jump_config() {
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
 
@@ -490,6 +493,7 @@ fn test_proxy_jump_config() {
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
 
@@ -535,6 +539,7 @@ fn test_proxy_jump_resolution() {
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
 
@@ -554,6 +559,7 @@ fn test_proxy_jump_resolution() {
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: mcp_ssh_bridge::config::Protocol::default(),
         },
     );
 
@@ -595,6 +601,7 @@ fn test_proxy_jump_chain_detection() {
         os_type: OsType::Linux,
         shell: None,
         retry: None,
+        protocol: mcp_ssh_bridge::config::Protocol::default(),
     };
 
     let host_without_jump = HostConfig {
@@ -611,6 +618,7 @@ fn test_proxy_jump_chain_detection() {
         os_type: OsType::Linux,
         shell: None,
         retry: None,
+        protocol: mcp_ssh_bridge::config::Protocol::default(),
     };
 
     assert!(host_with_jump.proxy_jump.is_some());

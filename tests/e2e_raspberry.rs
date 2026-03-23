@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use mcp_ssh_bridge::ExecutorRouter;
 use mcp_ssh_bridge::config::{
     AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,
     LimitsConfig, OsType, SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
@@ -23,7 +24,7 @@ use mcp_ssh_bridge::config::{
 use mcp_ssh_bridge::domain::history::HistoryConfig;
 use mcp_ssh_bridge::domain::{CommandHistory, ExecuteCommandUseCase, TunnelManager};
 use mcp_ssh_bridge::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
-use mcp_ssh_bridge::ssh::{ConnectionPool, SessionManager};
+use mcp_ssh_bridge::ssh::SessionManager;
 use mcp_ssh_bridge::{ToolContext, ToolHandler};
 
 use mcp_ssh_bridge::mcp::tool_handlers::*;
@@ -113,6 +114,7 @@ fn to_host_config(config: &SshTestConfig) -> HostConfig {
         os_type: OsType::Linux,
         shell: None,
         retry: None,
+        protocol: mcp_ssh_bridge::config::Protocol::default(),
     }
 }
 
@@ -169,7 +171,7 @@ fn build_ctx(host_config: HostConfig) -> ToolContext {
         sanitizer,
         audit_logger,
         history,
-        connection_pool: Arc::new(ConnectionPool::with_defaults()),
+        connection_pool: Arc::new(ExecutorRouter::with_defaults()),
         execute_use_case,
         rate_limiter: Arc::new(RateLimiter::new(0)),
         session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
@@ -1015,7 +1017,7 @@ async fn test_security_command_denied() {
         sanitizer,
         audit_logger,
         history,
-        connection_pool: Arc::new(ConnectionPool::with_defaults()),
+        connection_pool: Arc::new(ExecutorRouter::with_defaults()),
         execute_use_case,
         rate_limiter: Arc::new(RateLimiter::new(0)),
         session_manager: Arc::new(SessionManager::new(SessionConfig::default())),

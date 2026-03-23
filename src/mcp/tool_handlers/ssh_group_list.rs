@@ -33,8 +33,7 @@ impl StandardTool for GroupListTool {
 
     const NAME: &'static str = "ssh_group_list";
 
-    const DESCRIPTION: &'static str =
-        "List all groups on a remote Linux host using getent.";
+    const DESCRIPTION: &'static str = "List all groups on a remote Linux host using getent.";
 
     const SCHEMA: &'static str = r#"{
         "type": "object",

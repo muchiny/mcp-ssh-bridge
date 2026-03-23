@@ -18,9 +18,10 @@ use crate::error::{BridgeError, Result};
 use crate::mcp::apps::dashboard;
 use crate::mcp::protocol::ToolCallResult;
 use crate::ports::CommandOutput;
+use crate::ports::ExecutorRouter;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::security::RateLimiter;
-use crate::ssh::{ConnectionPool, is_retryable_error, with_retry_if};
+use crate::ssh::{is_retryable_error, with_retry_if};
 
 /// Metric types that can be collected
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
@@ -335,7 +336,7 @@ async fn collect_from_host(
     host_name: String,
     command: String,
     config: Arc<Config>,
-    connection_pool: Arc<ConnectionPool>,
+    connection_pool: Arc<ExecutorRouter>,
     rate_limiter: Arc<RateLimiter>,
     cancel_token: tokio_util::sync::CancellationToken,
     timeout_seconds: Option<u64>,
@@ -498,6 +499,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
         hosts.insert(
@@ -519,6 +521,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
         hosts.insert(
@@ -540,6 +543,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
         crate::ports::mock::create_test_context_with_hosts(hosts)

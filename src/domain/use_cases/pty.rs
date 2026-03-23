@@ -62,11 +62,7 @@ impl PtyCommandBuilder {
     /// Wraps the command with `script -q -c 'COMMAND' /dev/null` for PTY
     /// emulation. Optionally sets terminal dimensions first.
     #[must_use]
-    pub fn build_pty_exec_command(
-        command: &str,
-        rows: Option<u32>,
-        cols: Option<u32>,
-    ) -> String {
+    pub fn build_pty_exec_command(command: &str, rows: Option<u32>, cols: Option<u32>) -> String {
         let escaped = shell_escape(command);
         let mut cmd = String::new();
 
@@ -218,15 +214,13 @@ mod tests {
 
     #[test]
     fn test_exec_command_injection() {
-        let cmd =
-            PtyCommandBuilder::build_pty_exec_command("test; rm -rf /", None, None);
+        let cmd = PtyCommandBuilder::build_pty_exec_command("test; rm -rf /", None, None);
         assert!(cmd.contains("'test; rm -rf /'"));
     }
 
     #[test]
     fn test_exec_command_with_quotes() {
-        let cmd =
-            PtyCommandBuilder::build_pty_exec_command("echo 'hello world'", None, None);
+        let cmd = PtyCommandBuilder::build_pty_exec_command("echo 'hello world'", None, None);
         assert!(cmd.contains("script -q -c"));
         assert!(cmd.contains("hello world"));
     }
@@ -262,11 +256,7 @@ mod tests {
 
     #[test]
     fn test_exec_command_newline_escaped() {
-        let cmd = PtyCommandBuilder::build_pty_exec_command(
-            "echo hello\necho world",
-            None,
-            None,
-        );
+        let cmd = PtyCommandBuilder::build_pty_exec_command("echo hello\necho world", None, None);
         assert!(cmd.contains("script -q -c"));
     }
 }

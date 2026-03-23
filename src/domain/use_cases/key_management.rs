@@ -111,7 +111,7 @@ impl KeyManagementCommandBuilder {
          else \
            echo 'No authorized_keys file found'; \
          fi"
-            .to_string()
+        .to_string()
     }
 
     /// Build a command to distribute (append) a public key to a remote host.
@@ -141,10 +141,7 @@ impl KeyManagementCommandBuilder {
     /// # Errors
     ///
     /// Returns an error if the key type or bit length is invalid.
-    pub fn build_key_generate_command(
-        key_type: Option<&str>,
-        bits: Option<u32>,
-    ) -> Result<String> {
+    pub fn build_key_generate_command(key_type: Option<&str>, bits: Option<u32>) -> Result<String> {
         let kt = key_type.unwrap_or("ed25519");
         validate_key_type(kt)?;
 
@@ -236,9 +233,7 @@ mod tests {
     fn test_validate_public_key_valid() {
         assert!(validate_public_key("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5 user@host").is_ok());
         assert!(validate_public_key("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQ user@host").is_ok());
-        assert!(
-            validate_public_key("ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTI user@host").is_ok()
-        );
+        assert!(validate_public_key("ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTI user@host").is_ok());
     }
 
     #[test]
@@ -302,8 +297,7 @@ mod tests {
 
     #[test]
     fn test_distribute_invalid_key() {
-        let result =
-            KeyManagementCommandBuilder::build_key_distribute_command("not-a-valid-key");
+        let result = KeyManagementCommandBuilder::build_key_distribute_command("not-a-valid-key");
         assert!(result.is_err());
     }
 
@@ -326,8 +320,7 @@ mod tests {
 
     #[test]
     fn test_generate_defaults() {
-        let cmd =
-            KeyManagementCommandBuilder::build_key_generate_command(None, None).unwrap();
+        let cmd = KeyManagementCommandBuilder::build_key_generate_command(None, None).unwrap();
         assert!(cmd.contains("ssh-keygen"));
         assert!(cmd.contains("ed25519"));
         assert!(cmd.contains("/tmp/mcp_generated_key"));
@@ -336,41 +329,34 @@ mod tests {
 
     #[test]
     fn test_generate_rsa_with_bits() {
-        let cmd = KeyManagementCommandBuilder::build_key_generate_command(
-            Some("rsa"),
-            Some(4096),
-        )
-        .unwrap();
+        let cmd = KeyManagementCommandBuilder::build_key_generate_command(Some("rsa"), Some(4096))
+            .unwrap();
         assert!(cmd.contains("-t 'rsa'"));
         assert!(cmd.contains("-b 4096"));
     }
 
     #[test]
     fn test_generate_invalid_type() {
-        let result =
-            KeyManagementCommandBuilder::build_key_generate_command(Some("dsa"), None);
+        let result = KeyManagementCommandBuilder::build_key_generate_command(Some("dsa"), None);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_generate_invalid_bits() {
-        let result =
-            KeyManagementCommandBuilder::build_key_generate_command(Some("rsa"), Some(64));
+        let result = KeyManagementCommandBuilder::build_key_generate_command(Some("rsa"), Some(64));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_generate_shows_fingerprint() {
-        let cmd =
-            KeyManagementCommandBuilder::build_key_generate_command(None, None).unwrap();
+        let cmd = KeyManagementCommandBuilder::build_key_generate_command(None, None).unwrap();
         assert!(cmd.contains("Key Fingerprint"));
         assert!(cmd.contains("ssh-keygen -lf"));
     }
 
     #[test]
     fn test_generate_cleans_up_old_key() {
-        let cmd =
-            KeyManagementCommandBuilder::build_key_generate_command(None, None).unwrap();
+        let cmd = KeyManagementCommandBuilder::build_key_generate_command(None, None).unwrap();
         assert!(cmd.contains("rm -f /tmp/mcp_generated_key"));
     }
 }

@@ -74,10 +74,7 @@ impl StandardTool for ComplianceReportTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn build_command(
-        args: &SshComplianceReportArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshComplianceReportArgs, _host_config: &HostConfig) -> Result<String> {
         ComplianceCommandBuilder::build_compliance_report_command(args.format.as_deref())
     }
 }

@@ -76,10 +76,7 @@ impl StandardTool for IncidentCorrelateTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn build_command(
-        args: &SshIncidentCorrelateArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshIncidentCorrelateArgs, _host_config: &HostConfig) -> Result<String> {
         IncidentCommandBuilder::build_incident_correlate_command(
             &args.services,
             args.since.as_deref(),
@@ -219,6 +216,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

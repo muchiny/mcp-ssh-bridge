@@ -88,10 +88,7 @@ impl StandardTool for NetworkCaptureTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn build_command(
-        args: &SshNetworkCaptureArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshNetworkCaptureArgs, _host_config: &HostConfig) -> Result<String> {
         let count = args.count.unwrap_or(100);
         NetworkSecurityCommandBuilder::build_network_capture_command(
             args.interface.as_deref(),

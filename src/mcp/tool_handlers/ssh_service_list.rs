@@ -103,10 +103,7 @@ impl StandardTool for ServiceListTool {
         let sub_idx = parsed.headers.iter().position(|h| h == "sub");
 
         for row in &parsed.rows {
-            let get = |idx: Option<usize>| {
-                idx.and_then(|i| row.get(i))
-                    .map_or("", String::as_str)
-            };
+            let get = |idx: Option<usize>| idx.and_then(|i| row.get(i)).map_or("", String::as_str);
             let unit = get(unit_idx);
             if !unit.is_empty() {
                 tbl = tbl.row(json!({

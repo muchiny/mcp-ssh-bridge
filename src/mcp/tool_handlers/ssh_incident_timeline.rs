@@ -77,10 +77,7 @@ impl StandardTool for IncidentTimelineTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn build_command(
-        args: &SshIncidentTimelineArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshIncidentTimelineArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(IncidentCommandBuilder::build_incident_timeline_command(
             args.since.as_deref(),
             args.until.as_deref(),
@@ -217,6 +214,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

@@ -123,10 +123,7 @@ mod tests {
         let handler = SshAlertCheckHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"host": "nonexistent", "metric": "cpu"})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": "nonexistent", "metric": "cpu"})), &ctx)
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -230,6 +227,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

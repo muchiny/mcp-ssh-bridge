@@ -72,13 +72,8 @@ impl StandardTool for Fail2banStatusTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn build_command(
-        args: &SshFail2banStatusArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
-        Ok(NetworkSecurityCommandBuilder::build_fail2ban_status_command(
-            args.jail.as_deref(),
-        ))
+    fn build_command(args: &SshFail2banStatusArgs, _host_config: &HostConfig) -> Result<String> {
+        Ok(NetworkSecurityCommandBuilder::build_fail2ban_status_command(args.jail.as_deref()))
     }
 }
 

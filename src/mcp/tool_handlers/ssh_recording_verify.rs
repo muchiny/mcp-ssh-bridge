@@ -61,12 +61,11 @@ impl ToolHandler for SshRecordingVerifyHandler {
     }
 
     async fn execute(&self, args: Option<Value>, _ctx: &ToolContext) -> Result<ToolCallResult> {
-        let args: Args = serde_json::from_value(
-            args.ok_or_else(|| BridgeError::McpMissingParam {
+        let args: Args =
+            serde_json::from_value(args.ok_or_else(|| BridgeError::McpMissingParam {
                 param: "arguments".to_string(),
-            })?,
-        )
-        .map_err(|e| BridgeError::McpInvalidRequest(format!("Invalid arguments: {e}")))?;
+            })?)
+            .map_err(|e| BridgeError::McpInvalidRequest(format!("Invalid arguments: {e}")))?;
 
         let key = args
             .hash_key

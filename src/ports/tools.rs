@@ -16,7 +16,9 @@ use crate::domain::CommandHistory;
 use crate::domain::{ExecuteCommandUseCase, OutputCache, TunnelManager};
 use crate::error::Result;
 use crate::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
-use crate::ssh::{ConnectionPool, SessionManager};
+use crate::ssh::SessionManager;
+
+use super::executor_router::ExecutorRouter;
 
 /// Schema definition for a tool
 #[derive(Debug, Clone)]
@@ -36,7 +38,7 @@ pub struct ToolContext {
     pub sanitizer: Arc<Sanitizer>,
     pub audit_logger: Arc<AuditLogger>,
     pub history: Arc<CommandHistory>,
-    pub connection_pool: Arc<ConnectionPool>,
+    pub connection_pool: Arc<ExecutorRouter>,
     pub execute_use_case: Arc<ExecuteCommandUseCase>,
     pub rate_limiter: Arc<RateLimiter>,
     pub session_manager: Arc<SessionManager>,
@@ -59,7 +61,7 @@ impl ToolContext {
         sanitizer: Arc<Sanitizer>,
         audit_logger: Arc<AuditLogger>,
         history: Arc<CommandHistory>,
-        connection_pool: Arc<ConnectionPool>,
+        connection_pool: Arc<ExecutorRouter>,
         execute_use_case: Arc<ExecuteCommandUseCase>,
         rate_limiter: Arc<RateLimiter>,
         session_manager: Arc<SessionManager>,
@@ -136,6 +138,7 @@ pub mod mock {
         LimitsConfig, OsType, SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
     };
     use crate::domain::history::HistoryConfig;
+    use crate::ports::ExecutorRouter;
     use crate::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
     use crate::ssh::SessionManager;
     use std::collections::HashMap;
@@ -179,6 +182,7 @@ pub mod mock {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -244,7 +248,7 @@ pub mod mock {
             sanitizer,
             audit_logger,
             history,
-            connection_pool: Arc::new(ConnectionPool::with_defaults()),
+            connection_pool: Arc::new(ExecutorRouter::with_defaults()),
             execute_use_case,
             rate_limiter: Arc::new(RateLimiter::new(0)),
             session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
@@ -277,7 +281,7 @@ pub mod mock {
             sanitizer,
             audit_logger,
             history,
-            connection_pool: Arc::new(ConnectionPool::with_defaults()),
+            connection_pool: Arc::new(ExecutorRouter::with_defaults()),
             execute_use_case,
             rate_limiter: Arc::new(RateLimiter::new(0)), // Disabled for tests
             session_manager: Arc::new(SessionManager::new(SessionConfig::default())),

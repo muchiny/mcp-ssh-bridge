@@ -18,10 +18,38 @@ pub mod ports;
 pub mod security;
 pub mod ssh;
 
+#[cfg(feature = "grpc")]
+pub mod grpc_exec;
+#[cfg(feature = "k8s-exec")]
+pub mod k8s_exec;
+#[cfg(feature = "netconf")]
+pub mod netconf;
+#[cfg(feature = "serial")]
+pub mod serial_port;
+#[cfg(feature = "snmp")]
+pub mod snmp_client;
+#[cfg(feature = "telnet")]
+pub mod telnet;
+#[cfg(feature = "mqtt")]
+pub mod mqtt_exec;
+#[cfg(feature = "nats")]
+pub mod nats_exec;
+#[cfg(feature = "ssm")]
+pub mod ssm;
+#[cfg(feature = "zeromq")]
+pub mod zmq_exec;
+#[cfg(any(feature = "azure", feature = "gcp"))]
+pub mod cloud_exec;
+#[cfg(feature = "winrm")]
+pub mod winrm;
+
 pub use config::Config;
 pub use error::{BridgeError, Result};
 pub use mcp::McpServer;
-pub use ports::{SshExecutor, ToolAnnotations, ToolContext, ToolHandler, ToolSchema};
+pub use ports::{
+    ExecutorRouter, RemoteExecutor, SshExecutor, ToolAnnotations, ToolContext, ToolHandler,
+    ToolSchema,
+};
 pub use security::{AuditLogger, Sanitizer};
 
 // Re-exports for fuzzing

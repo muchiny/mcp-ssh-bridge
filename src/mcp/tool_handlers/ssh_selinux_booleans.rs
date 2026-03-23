@@ -67,14 +67,13 @@ impl StandardTool for SelinuxBooleansTool {
         }
     }"#;
 
-    fn build_command(
-        args: &SshSelinuxBooleansArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
-        Ok(SecurityModulesCommandBuilder::build_selinux_booleans_command(
-            args.name.as_deref(),
-            args.value,
-        ))
+    fn build_command(args: &SshSelinuxBooleansArgs, _host_config: &HostConfig) -> Result<String> {
+        Ok(
+            SecurityModulesCommandBuilder::build_selinux_booleans_command(
+                args.name.as_deref(),
+                args.value,
+            ),
+        )
     }
 }
 

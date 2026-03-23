@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::domain::runbook::{self, apply_template, RunbookStep};
+use crate::domain::runbook::{self, RunbookStep, apply_template};
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
@@ -71,12 +71,11 @@ impl ToolHandler for SshRunbookExecuteHandler {
     }
 
     async fn execute(&self, args: Option<Value>, ctx: &ToolContext) -> Result<ToolCallResult> {
-        let args: Args = serde_json::from_value(
-            args.ok_or_else(|| BridgeError::McpMissingParam {
+        let args: Args =
+            serde_json::from_value(args.ok_or_else(|| BridgeError::McpMissingParam {
                 param: "arguments".to_string(),
-            })?,
-        )
-        .map_err(|e| BridgeError::McpInvalidRequest(format!("Invalid arguments: {e}")))?;
+            })?)
+            .map_err(|e| BridgeError::McpInvalidRequest(format!("Invalid arguments: {e}")))?;
 
         // Verify host exists
         ctx.config
@@ -95,10 +94,7 @@ impl ToolHandler for SshRunbookExecuteHandler {
             .iter()
             .find(|r| r.name == args.runbook_name)
             .ok_or_else(|| {
-                BridgeError::McpInvalidRequest(format!(
-                    "Runbook '{}' not found",
-                    args.runbook_name
-                ))
+                BridgeError::McpInvalidRequest(format!("Runbook '{}' not found", args.runbook_name))
             })?
             .clone();
 

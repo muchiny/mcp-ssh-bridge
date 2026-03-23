@@ -35,9 +35,7 @@ pub fn validate_port(port: u16) -> Result<()> {
 pub fn validate_capture_count(count: u32) -> Result<()> {
     if count == 0 || count > 1000 {
         return Err(BridgeError::CommandDenied {
-            reason: format!(
-                "Capture count must be between 1 and 1000, got {count}"
-            ),
+            reason: format!("Capture count must be between 1 and 1000, got {count}"),
         });
     }
     Ok(())
@@ -88,10 +86,7 @@ impl NetworkSecurityCommandBuilder {
     ///
     /// Returns [`BridgeError::CommandDenied`] if the target is invalid.
     #[must_use]
-    pub fn build_port_scan_command(
-        target: Option<&str>,
-        ports: Option<&str>,
-    ) -> String {
+    pub fn build_port_scan_command(target: Option<&str>, ports: Option<&str>) -> String {
         let is_local = match target {
             None => true,
             Some(t) => t == "localhost" || t == "127.0.0.1" || t == "::1",
@@ -257,15 +252,13 @@ mod tests {
 
     #[test]
     fn test_port_scan_localhost() {
-        let cmd =
-            NetworkSecurityCommandBuilder::build_port_scan_command(Some("localhost"), None);
+        let cmd = NetworkSecurityCommandBuilder::build_port_scan_command(Some("localhost"), None);
         assert!(cmd.contains("ss -tlnp"));
     }
 
     #[test]
     fn test_port_scan_remote() {
-        let cmd =
-            NetworkSecurityCommandBuilder::build_port_scan_command(Some("192.168.1.1"), None);
+        let cmd = NetworkSecurityCommandBuilder::build_port_scan_command(Some("192.168.1.1"), None);
         assert!(cmd.contains("nmap"));
         assert!(cmd.contains("192.168.1.1"));
     }
@@ -281,8 +274,7 @@ mod tests {
 
     #[test]
     fn test_port_scan_127_local() {
-        let cmd =
-            NetworkSecurityCommandBuilder::build_port_scan_command(Some("127.0.0.1"), None);
+        let cmd = NetworkSecurityCommandBuilder::build_port_scan_command(Some("127.0.0.1"), None);
         assert!(cmd.contains("ss -tlnp"));
     }
 
@@ -309,8 +301,7 @@ mod tests {
     #[test]
     fn test_capture_default() {
         let cmd =
-            NetworkSecurityCommandBuilder::build_network_capture_command(None, None, 100)
-                .unwrap();
+            NetworkSecurityCommandBuilder::build_network_capture_command(None, None, 100).unwrap();
         assert!(cmd.contains("tcpdump"));
         assert!(cmd.contains("-c 100"));
         assert!(cmd.contains("-nn"));
@@ -319,38 +310,30 @@ mod tests {
 
     #[test]
     fn test_capture_with_interface() {
-        let cmd = NetworkSecurityCommandBuilder::build_network_capture_command(
-            Some("eth0"),
-            None,
-            50,
-        )
-        .unwrap();
+        let cmd =
+            NetworkSecurityCommandBuilder::build_network_capture_command(Some("eth0"), None, 50)
+                .unwrap();
         assert!(cmd.contains("'eth0'"));
         assert!(cmd.contains("-c 50"));
     }
 
     #[test]
     fn test_capture_with_filter() {
-        let cmd = NetworkSecurityCommandBuilder::build_network_capture_command(
-            None,
-            Some("port 80"),
-            10,
-        )
-        .unwrap();
+        let cmd =
+            NetworkSecurityCommandBuilder::build_network_capture_command(None, Some("port 80"), 10)
+                .unwrap();
         assert!(cmd.contains("'port 80'"));
     }
 
     #[test]
     fn test_capture_exceeds_max() {
-        let result =
-            NetworkSecurityCommandBuilder::build_network_capture_command(None, None, 1001);
+        let result = NetworkSecurityCommandBuilder::build_network_capture_command(None, None, 1001);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_capture_zero_count() {
-        let result =
-            NetworkSecurityCommandBuilder::build_network_capture_command(None, None, 0);
+        let result = NetworkSecurityCommandBuilder::build_network_capture_command(None, None, 0);
         assert!(result.is_err());
     }
 
@@ -371,9 +354,9 @@ mod tests {
 
     #[test]
     fn test_fail2ban_injection_in_jail() {
-        let cmd = NetworkSecurityCommandBuilder::build_fail2ban_status_command(
-            Some("sshd; cat /etc/shadow"),
-        );
+        let cmd = NetworkSecurityCommandBuilder::build_fail2ban_status_command(Some(
+            "sshd; cat /etc/shadow",
+        ));
         assert!(cmd.contains("'sshd; cat /etc/shadow'"));
     }
 
@@ -381,8 +364,7 @@ mod tests {
 
     #[test]
     fn test_ssl_audit_injection_in_host() {
-        let cmd =
-            NetworkSecurityCommandBuilder::build_ssl_audit_command("host$(id)", 443);
+        let cmd = NetworkSecurityCommandBuilder::build_ssl_audit_command("host$(id)", 443);
         // validate_target would catch this, but shell_escape also protects
         assert!(cmd.contains("'host$(id)'"));
     }

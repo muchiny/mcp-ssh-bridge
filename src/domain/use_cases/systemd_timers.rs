@@ -2,7 +2,6 @@
 //!
 //! Builds systemctl commands for managing systemd timers.
 
-
 use crate::config::ShellType;
 
 fn shell_escape(s: &str) -> String {

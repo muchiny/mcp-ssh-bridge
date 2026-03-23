@@ -26,9 +26,7 @@ impl FileAdvancedCommandBuilder {
         let escaped_target = shell_escape(target_file);
         let escaped_patch = shell_escape(patch_content);
         let dry_flag = if dry_run { " --dry-run" } else { "" };
-        format!(
-            "printf {escaped_patch} | patch{dry_flag} -p0 {escaped_target}"
-        )
+        format!("printf {escaped_patch} | patch{dry_flag} -p0 {escaped_target}")
     }
 
     /// Build a template rendering command using envsubst.
@@ -68,7 +66,11 @@ mod tests {
 
     #[test]
     fn test_diff_command() {
-        let cmd = FileAdvancedCommandBuilder::build_diff_command("/etc/nginx/a.conf", "/etc/nginx/b.conf", 3);
+        let cmd = FileAdvancedCommandBuilder::build_diff_command(
+            "/etc/nginx/a.conf",
+            "/etc/nginx/b.conf",
+            3,
+        );
         assert!(cmd.contains("diff -u"));
         assert!(cmd.contains("-U 3"));
         assert!(cmd.contains("/etc/nginx/a.conf"));
@@ -76,7 +78,8 @@ mod tests {
 
     #[test]
     fn test_patch_command_dry_run() {
-        let cmd = FileAdvancedCommandBuilder::build_patch_command("/etc/config", "--- a\n+++ b\n", true);
+        let cmd =
+            FileAdvancedCommandBuilder::build_patch_command("/etc/config", "--- a\n+++ b\n", true);
         assert!(cmd.contains("--dry-run"));
         assert!(cmd.contains("patch"));
     }
@@ -105,11 +108,8 @@ mod tests {
 
     #[test]
     fn test_template_command_no_vars() {
-        let cmd = FileAdvancedCommandBuilder::build_template_command(
-            "/etc/template",
-            "/etc/output",
-            &[],
-        );
+        let cmd =
+            FileAdvancedCommandBuilder::build_template_command("/etc/template", "/etc/output", &[]);
         assert!(cmd.contains("envsubst"));
         assert!(!cmd.contains("export"));
     }

@@ -73,10 +73,7 @@ impl StandardTool for LdapGroupMembersTool {
         "required": ["host", "base_dn", "group"]
     }"#;
 
-    fn build_command(
-        args: &SshLdapGroupMembersArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshLdapGroupMembersArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(LdapCommandBuilder::build_group_members_command(
             &args.base_dn,
             &args.group,
@@ -114,7 +111,9 @@ mod tests {
         let ctx = create_test_context();
         let result = handler
             .execute(
-                Some(json!({"host": "nonexistent", "base_dn": "dc=example,dc=com", "group": "devs"})),
+                Some(
+                    json!({"host": "nonexistent", "base_dn": "dc=example,dc=com", "group": "devs"}),
+                ),
                 &ctx,
             )
             .await;

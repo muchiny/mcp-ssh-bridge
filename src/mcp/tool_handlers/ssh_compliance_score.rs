@@ -66,10 +66,7 @@ impl StandardTool for ComplianceScoreTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn build_command(
-        _args: &SshComplianceScoreArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshComplianceScoreArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(ComplianceCommandBuilder::build_compliance_score_command())
     }
 }

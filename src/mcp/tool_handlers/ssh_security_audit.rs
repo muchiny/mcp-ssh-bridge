@@ -55,10 +55,7 @@ impl StandardTool for SecurityAuditTool {
         }
     }"#;
 
-    fn build_command(
-        _args: &SshSecurityAuditArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshSecurityAuditArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SecurityModulesCommandBuilder::build_security_audit_command())
     }
 }

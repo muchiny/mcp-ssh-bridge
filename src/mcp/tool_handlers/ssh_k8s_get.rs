@@ -143,10 +143,7 @@ impl StandardTool for K8sGetTool {
         for row in &parsed.rows {
             let mut row_map = serde_json::Map::new();
             for (i, h) in parsed.headers.iter().enumerate() {
-                row_map.insert(
-                    h.clone(),
-                    json!(row.get(i).map_or("", String::as_str)),
-                );
+                row_map.insert(h.clone(), json!(row.get(i).map_or("", String::as_str)));
             }
             tbl = tbl.row(Value::Object(row_map));
         }
@@ -326,6 +323,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 

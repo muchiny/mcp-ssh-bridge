@@ -100,7 +100,9 @@ mod tests {
     async fn test_unknown_host() {
         let handler = SshUserListHandler::new();
         let ctx = create_test_context();
-        let result = handler.execute(Some(json!({"host": "nonexistent"})), &ctx).await;
+        let result = handler
+            .execute(Some(json!({"host": "nonexistent"})), &ctx)
+            .await;
         assert!(result.is_err());
         match result.unwrap_err() {
             BridgeError::UnknownHost { host } => assert_eq!(host, "nonexistent"),

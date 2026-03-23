@@ -95,7 +95,10 @@ pub fn validate_runbook(runbook: &Runbook) -> Result<(), String> {
             return Err(format!("Step {i} has no name"));
         }
         if step.command.is_none() && step.condition.is_none() {
-            return Err(format!("Step '{}' has neither command nor condition", step.name));
+            return Err(format!(
+                "Step '{}' has neither command nor condition",
+                step.name
+            ));
         }
     }
     Ok(())
@@ -105,13 +108,13 @@ pub fn validate_runbook(runbook: &Runbook) -> Result<(), String> {
 ///
 /// Replaces `{{ variable }}` patterns with values from params.
 #[must_use]
-pub fn apply_template<S: ::std::hash::BuildHasher>(template: &str, vars: &HashMap<String, String, S>) -> String {
+pub fn apply_template<S: ::std::hash::BuildHasher>(
+    template: &str,
+    vars: &HashMap<String, String, S>,
+) -> String {
     let mut result = template.to_string();
     for (key, value) in vars {
-        let patterns = [
-            format!("{{{{ {key} }}}}"),
-            format!("{{{{{key}}}}}"),
-        ];
+        let patterns = [format!("{{{{ {key} }}}}"), format!("{{{{{key}}}}}")];
         for pattern in &patterns {
             result = result.replace(pattern, value);
         }
@@ -133,7 +136,10 @@ pub fn load_runbooks_from_dir(dir: &Path) -> Vec<Runbook> {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().is_some_and(|ext| ext == "yaml" || ext == "yml") {
+        if path
+            .extension()
+            .is_some_and(|ext| ext == "yaml" || ext == "yml")
+        {
             match load_runbook(&path) {
                 Ok(rb) => {
                     info!(name = %rb.name, path = %path.display(), "Loaded runbook");
@@ -151,11 +157,11 @@ pub fn load_runbooks_from_dir(dir: &Path) -> Vec<Runbook> {
 
 /// Load a single runbook from a YAML file
 pub fn load_runbook(path: &Path) -> Result<Runbook, String> {
-    let content =
-        std::fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
 
-    let runbook: Runbook =
-        serde_saphyr::from_str(&content).map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
+    let runbook: Runbook = serde_saphyr::from_str(&content)
+        .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
 
     validate_runbook(&runbook)?;
     Ok(runbook)
@@ -164,8 +170,7 @@ pub fn load_runbook(path: &Path) -> Result<Runbook, String> {
 /// Get the default runbooks directory path
 #[must_use]
 pub fn default_runbooks_dir() -> PathBuf {
-    let config_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"));
+    let config_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("~/.config"));
     config_dir.join("mcp-ssh-bridge").join("runbooks")
 }
 

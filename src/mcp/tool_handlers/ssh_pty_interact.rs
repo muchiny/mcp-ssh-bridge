@@ -77,12 +77,8 @@ impl StandardTool for PtyInteractTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn build_command(
-        args: &SshPtyInteractArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
-        let escaped_input =
-            shell::escape(&args.input, crate::config::ShellType::Posix);
+    fn build_command(args: &SshPtyInteractArgs, _host_config: &HostConfig) -> Result<String> {
+        let escaped_input = shell::escape(&args.input, crate::config::ShellType::Posix);
         Ok(format!("echo {escaped_input}"))
     }
 }
@@ -138,8 +134,7 @@ mod tests {
         assert!(!handler.description().is_empty());
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_pty_interact");
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("host")));
         assert!(required.contains(&json!("session_id")));
@@ -185,8 +180,7 @@ mod tests {
     fn test_schema_optional_fields() {
         let handler = SshPtyInteractHandler::new();
         let schema = handler.schema();
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let props = schema_json["properties"].as_object().unwrap();
         assert!(props.contains_key("timeout_seconds"));
         assert!(props.contains_key("max_output"));
@@ -239,6 +233,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshPtyInteractArgs {
             host: "s".to_string(),
@@ -270,6 +265,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshPtyInteractArgs {
             host: "s".to_string(),

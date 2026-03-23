@@ -120,8 +120,9 @@ mod tests {
     use crate::domain::{ExecuteCommandUseCase, TunnelManager};
     use crate::mcp::CommandHistory;
     use crate::mcp::history::HistoryConfig;
+    use crate::ports::ExecutorRouter;
     use crate::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
-    use crate::ssh::{ConnectionPool, SessionManager};
+    use crate::ssh::SessionManager;
     use std::collections::HashMap;
 
     fn create_test_context() -> ToolContext {
@@ -155,7 +156,7 @@ mod tests {
             sanitizer,
             audit_logger,
             history,
-            connection_pool: Arc::new(ConnectionPool::with_defaults()),
+            connection_pool: Arc::new(ExecutorRouter::with_defaults()),
             execute_use_case,
             rate_limiter: Arc::new(RateLimiter::new(0)),
             session_manager: Arc::new(SessionManager::new(SessionConfig::default())),

@@ -8,7 +8,7 @@ use serde::Deserialize;
 use crate::config::HostConfig;
 use crate::domain::use_cases::diagnostics::DiagnosticsCommandBuilder;
 use crate::error::Result;
-use crate::mcp::standard_tool::{impl_common_args, StandardTool, StandardToolHandler};
+use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 
 #[derive(Debug, Deserialize)]
 pub struct SshCompareStateArgs {
@@ -60,10 +60,7 @@ impl StandardTool for CompareStateTool {
         "required": ["host"]
     }"#;
 
-    fn build_command(
-        _args: &SshCompareStateArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshCompareStateArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(DiagnosticsCommandBuilder::build_state_snapshot_command())
     }
 }
@@ -74,8 +71,8 @@ pub type SshCompareStateHandler = StandardToolHandler<CompareStateTool>;
 mod tests {
     use super::*;
     use crate::error::BridgeError;
-    use crate::ports::mock::create_test_context;
     use crate::ports::ToolHandler;
+    use crate::ports::mock::create_test_context;
     use serde_json::json;
 
     #[tokio::test]
@@ -142,6 +139,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshCompareStateArgs {
             host: "server1".to_string(),

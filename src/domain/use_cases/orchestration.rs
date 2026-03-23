@@ -53,8 +53,10 @@ mod tests {
 
     #[test]
     fn test_canary_with_health_check() {
-        let cmd =
-            OrchestrationCommandBuilder::build_canary_command("apt upgrade -y", Some("curl -f http://localhost/health"));
+        let cmd = OrchestrationCommandBuilder::build_canary_command(
+            "apt upgrade -y",
+            Some("curl -f http://localhost/health"),
+        );
         assert!(cmd.contains("apt upgrade -y"));
         assert!(cmd.contains("curl -f http://localhost/health"));
         assert!(cmd.contains("|| true"));
@@ -84,7 +86,8 @@ mod tests {
 
     #[test]
     fn test_rolling_without_health_check() {
-        let cmd = OrchestrationCommandBuilder::build_rolling_command("systemctl restart nginx", None);
+        let cmd =
+            OrchestrationCommandBuilder::build_rolling_command("systemctl restart nginx", None);
         assert!(cmd.contains("systemctl restart nginx"));
         assert!(cmd.contains("no health check configured"));
     }

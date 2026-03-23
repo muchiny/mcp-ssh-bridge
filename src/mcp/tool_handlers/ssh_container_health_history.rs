@@ -82,10 +82,7 @@ impl StandardTool for ContainerHealthHistoryTool {
         ))
     }
 
-    fn validate(
-        args: &SshContainerHealthHistoryArgs,
-        _host_config: &HostConfig,
-    ) -> Result<()> {
+    fn validate(args: &SshContainerHealthHistoryArgs, _host_config: &HostConfig) -> Result<()> {
         ContainerLogCommandBuilder::validate_container_name(&args.container)?;
         Ok(())
     }
@@ -192,10 +189,7 @@ mod tests {
         let handler = SshContainerHealthHistoryHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"host": 123, "container": "nginx"})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": 123, "container": "nginx"})), &ctx)
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -237,6 +231,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         }
     }
 
@@ -250,8 +245,7 @@ mod tests {
             max_output: None,
             save_output: None,
         };
-        let cmd =
-            ContainerHealthHistoryTool::build_command(&args, &test_host_config()).unwrap();
+        let cmd = ContainerHealthHistoryTool::build_command(&args, &test_host_config()).unwrap();
         assert!(cmd.contains("docker inspect"));
         assert!(cmd.contains("State.Health"));
         assert!(cmd.contains("nginx"));
@@ -267,8 +261,7 @@ mod tests {
             max_output: None,
             save_output: None,
         };
-        let cmd =
-            ContainerHealthHistoryTool::build_command(&args, &test_host_config()).unwrap();
+        let cmd = ContainerHealthHistoryTool::build_command(&args, &test_host_config()).unwrap();
         assert!(cmd.contains("podman inspect"));
         assert!(cmd.contains("webapp"));
     }
@@ -283,9 +276,7 @@ mod tests {
             max_output: None,
             save_output: None,
         };
-        assert!(
-            ContainerHealthHistoryTool::validate(&args, &test_host_config()).is_ok()
-        );
+        assert!(ContainerHealthHistoryTool::validate(&args, &test_host_config()).is_ok());
     }
 
     #[test]
@@ -298,8 +289,6 @@ mod tests {
             max_output: None,
             save_output: None,
         };
-        assert!(
-            ContainerHealthHistoryTool::validate(&args, &test_host_config()).is_err()
-        );
+        assert!(ContainerHealthHistoryTool::validate(&args, &test_host_config()).is_err());
     }
 }

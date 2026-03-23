@@ -29,10 +29,7 @@ pub fn validate_paths(paths: &str) -> Result<()> {
     }
     if paths.len() > 4096 {
         return Err(BridgeError::CommandDenied {
-            reason: format!(
-                "Backup paths too long: {} chars (max 4096)",
-                paths.len()
-            ),
+            reason: format!("Backup paths too long: {} chars (max 4096)", paths.len()),
         });
     }
     Ok(())
@@ -106,10 +103,7 @@ impl BackupAdvancedCommandBuilder {
     /// # Errors
     ///
     /// Returns an error if paths are invalid.
-    pub fn build_snapshot_command(
-        paths: &str,
-        label: Option<&str>,
-    ) -> Result<String> {
+    pub fn build_snapshot_command(paths: &str, label: Option<&str>) -> Result<String> {
         validate_paths(paths)?;
 
         let label_part = label.unwrap_or("snapshot");
@@ -154,11 +148,7 @@ impl BackupAdvancedCommandBuilder {
     /// # Errors
     ///
     /// Returns an error if the cron expression or paths are invalid.
-    pub fn build_schedule_command(
-        cron_expr: &str,
-        paths: &str,
-        dest: &str,
-    ) -> Result<String> {
+    pub fn build_schedule_command(cron_expr: &str, paths: &str, dest: &str) -> Result<String> {
         validate_cron_expr(cron_expr)?;
         validate_paths(paths)?;
 
@@ -273,11 +263,7 @@ mod tests {
 
     #[test]
     fn test_snapshot_defaults() {
-        let cmd = BackupAdvancedCommandBuilder::build_snapshot_command(
-            "/var/data",
-            None,
-        )
-        .unwrap();
+        let cmd = BackupAdvancedCommandBuilder::build_snapshot_command("/var/data", None).unwrap();
         assert!(cmd.contains("tar czf"));
         assert!(cmd.contains("snapshot"));
         assert!(cmd.contains("sha256sum"));
@@ -286,11 +272,9 @@ mod tests {
 
     #[test]
     fn test_snapshot_with_label() {
-        let cmd = BackupAdvancedCommandBuilder::build_snapshot_command(
-            "/var/data",
-            Some("mybackup"),
-        )
-        .unwrap();
+        let cmd =
+            BackupAdvancedCommandBuilder::build_snapshot_command("/var/data", Some("mybackup"))
+                .unwrap();
         assert!(cmd.contains("mybackup"));
     }
 
@@ -314,10 +298,7 @@ mod tests {
 
     #[test]
     fn test_verify_valid() {
-        let cmd = BackupAdvancedCommandBuilder::build_verify_command(
-            "/tmp/backup.tar.gz",
-        )
-        .unwrap();
+        let cmd = BackupAdvancedCommandBuilder::build_verify_command("/tmp/backup.tar.gz").unwrap();
         assert!(cmd.contains("tar tzf"));
         assert!(cmd.contains("Archive OK"));
         assert!(cmd.contains("sha256sum"));
@@ -332,10 +313,8 @@ mod tests {
 
     #[test]
     fn test_verify_shell_injection() {
-        let cmd = BackupAdvancedCommandBuilder::build_verify_command(
-            "/tmp/'; rm -rf /.tar.gz",
-        )
-        .unwrap();
+        let cmd =
+            BackupAdvancedCommandBuilder::build_verify_command("/tmp/'; rm -rf /.tar.gz").unwrap();
         assert!(cmd.contains("'\\''"));
     }
 
@@ -358,31 +337,22 @@ mod tests {
 
     #[test]
     fn test_schedule_invalid_cron() {
-        let result = BackupAdvancedCommandBuilder::build_schedule_command(
-            "bad",
-            "/var/data",
-            "/backups",
-        );
+        let result =
+            BackupAdvancedCommandBuilder::build_schedule_command("bad", "/var/data", "/backups");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_schedule_invalid_paths() {
-        let result = BackupAdvancedCommandBuilder::build_schedule_command(
-            "0 * * * *",
-            "",
-            "/backups",
-        );
+        let result =
+            BackupAdvancedCommandBuilder::build_schedule_command("0 * * * *", "", "/backups");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_schedule_empty_dest() {
-        let result = BackupAdvancedCommandBuilder::build_schedule_command(
-            "0 * * * *",
-            "/var/data",
-            "",
-        );
+        let result =
+            BackupAdvancedCommandBuilder::build_schedule_command("0 * * * *", "/var/data", "");
         assert!(result.is_err());
     }
 }

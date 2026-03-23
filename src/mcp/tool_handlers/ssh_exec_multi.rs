@@ -17,9 +17,10 @@ use crate::domain::OutputCache;
 use crate::domain::output_truncator::truncate_output_with_cache;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::ports::ExecutorRouter;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::security::RateLimiter;
-use crate::ssh::{ConnectionPool, is_retryable_error, with_retry_if};
+use crate::ssh::{is_retryable_error, with_retry_if};
 
 use super::utils::shell_escape;
 
@@ -279,7 +280,7 @@ async fn execute_on_host(
     use_sudo: bool,
     sudo_user: Arc<str>,
     config: Arc<Config>,
-    connection_pool: Arc<ConnectionPool>,
+    connection_pool: Arc<ExecutorRouter>,
     execute_use_case: Arc<ExecuteCommandUseCase>,
     rate_limiter: Arc<RateLimiter>,
     cancel_token: tokio_util::sync::CancellationToken,
@@ -460,6 +461,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
         hosts.insert(
@@ -481,6 +483,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
         hosts.insert(
@@ -502,6 +505,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
         crate::ports::mock::create_test_context_with_hosts(hosts)

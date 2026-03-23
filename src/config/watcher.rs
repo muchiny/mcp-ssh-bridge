@@ -332,6 +332,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 
@@ -405,6 +406,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
         write_config_to_file(&config_path, &initial_config);
@@ -545,6 +547,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
         atomic_save(&config_path, &initial_config);
@@ -988,6 +991,7 @@ mod tests {
                 os_type: OsType::Linux,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
         atomic_save(&config_path, &updated);
@@ -1072,6 +1076,7 @@ mod tests {
                     os_type: OsType::Linux,
                     shell: None,
                     retry: None,
+                    protocol: crate::config::Protocol::default(),
                 },
             );
             write_config_to_file(&config_path, &cfg);

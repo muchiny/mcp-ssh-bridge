@@ -214,6 +214,7 @@ mod tests {
                 os_type: OsType::Windows,
                 shell: None,
                 retry: None,
+                protocol: crate::config::Protocol::default(),
             },
         );
 

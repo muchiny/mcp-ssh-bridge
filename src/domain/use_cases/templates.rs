@@ -92,10 +92,7 @@ pub fn validate_dest_path(path: &str) -> Result<()> {
     }
     if path.contains("..") {
         return Err(BridgeError::CommandDenied {
-            reason: format!(
-                "Path traversal not allowed: '{}' contains '..'",
-                path
-            ),
+            reason: format!("Path traversal not allowed: '{}' contains '..'", path),
         });
     }
     Ok(())
@@ -149,10 +146,7 @@ impl TemplateCommandBuilder {
     ///
     /// Runs the appropriate config-test command for the given service.
     #[must_use]
-    pub fn build_template_validate_command(
-        service: &str,
-        config_path: Option<&str>,
-    ) -> String {
+    pub fn build_template_validate_command(service: &str, config_path: Option<&str>) -> String {
         match service {
             "nginx" => {
                 if let Some(path) = config_path {
@@ -187,10 +181,7 @@ impl TemplateCommandBuilder {
             }
             "redis" => {
                 if let Some(path) = config_path {
-                    format!(
-                        "redis-cli ping && echo 'Config: {}'",
-                        shell_escape(path)
-                    )
+                    format!("redis-cli ping && echo 'Config: {}'", shell_escape(path))
                 } else {
                     "redis-cli ping".to_string()
                 }
@@ -411,8 +402,7 @@ mod tests {
 
     #[test]
     fn test_validate_postgresql() {
-        let cmd =
-            TemplateCommandBuilder::build_template_validate_command("postgresql", None);
+        let cmd = TemplateCommandBuilder::build_template_validate_command("postgresql", None);
         assert_eq!(cmd, "pg_isready");
     }
 
@@ -458,10 +448,8 @@ mod tests {
 
     #[test]
     fn test_diff_command_injection_in_path() {
-        let cmd = TemplateCommandBuilder::build_template_diff_command(
-            "content",
-            "/tmp/test; rm -rf /",
-        );
+        let cmd =
+            TemplateCommandBuilder::build_template_diff_command("content", "/tmp/test; rm -rf /");
         assert!(cmd.contains("'/tmp/test; rm -rf /'"));
     }
 

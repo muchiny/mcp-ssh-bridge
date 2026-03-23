@@ -62,10 +62,7 @@ impl StandardTool for InventorySyncTool {
                 "required": ["host"]
             }"#;
 
-    fn build_command(
-        _args: &SshInventorySyncArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(_args: &SshInventorySyncArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(InventoryCommandBuilder::build_inventory_sync_command())
     }
 }

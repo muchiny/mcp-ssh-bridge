@@ -182,6 +182,7 @@ impl PartialHost {
             os_type: OsType::Linux,
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         })
     }
 }

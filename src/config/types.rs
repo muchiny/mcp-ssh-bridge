@@ -173,6 +173,13 @@ pub struct HostConfig {
     /// Per-host retry configuration override
     #[serde(default)]
     pub retry: Option<HostRetryConfig>,
+
+    /// Remote execution protocol (default: ssh).
+    ///
+    /// Determines which adapter is used to connect and execute commands.
+    /// When omitted, defaults to SSH for full backward compatibility.
+    #[serde(default)]
+    pub protocol: Protocol,
 }
 
 /// Per-host retry configuration override
@@ -252,6 +259,60 @@ pub enum ShellType {
     /// `PowerShell` (`pwsh` / `powershell.exe`) -- single-quote with doubling
     #[serde(alias = "pwsh")]
     PowerShell,
+}
+
+/// Remote execution protocol for a host.
+///
+/// Determines which adapter is used to execute commands on the host.
+/// Defaults to `Ssh` for full backward compatibility.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Protocol {
+    /// SSH (default) — works for Linux, Windows (via `OpenSSH`), and modern network equipment
+    #[default]
+    Ssh,
+    /// `WinRM` — Windows Remote Management (SOAP/WS-Man over HTTP/HTTPS)
+    #[cfg(feature = "winrm")]
+    #[serde(alias = "WinRM")]
+    WinRm,
+    /// Telnet — legacy network equipment (Cisco IOS, switches, PLCs)
+    #[cfg(feature = "telnet")]
+    Telnet,
+    /// NETCONF — modern network device configuration (RFC 6241 over SSH)
+    #[cfg(feature = "netconf")]
+    Netconf,
+    /// gRPC — cloud-native remote execution via gRPC service
+    #[cfg(feature = "grpc")]
+    Grpc,
+    /// Kubernetes Exec — direct pod command execution via K8s API
+    #[cfg(feature = "k8s-exec")]
+    #[serde(alias = "kubernetes", alias = "k8s")]
+    K8sExec,
+    /// Serial — RS-232/USB serial port communication (PLCs, embedded, console)
+    #[cfg(feature = "serial")]
+    Serial,
+    /// SNMP — Simple Network Management Protocol (v1/v2c) for network devices
+    #[cfg(feature = "snmp")]
+    Snmp,
+    /// AWS SSM — Systems Manager `SendCommand` for EC2 instances
+    #[cfg(feature = "ssm")]
+    Ssm,
+    /// Azure Run Command — execute commands on Azure VMs via REST API
+    #[cfg(feature = "azure")]
+    Azure,
+    /// GCP OS Command — execute commands on GCP VMs via `gcloud` CLI
+    #[cfg(feature = "gcp")]
+    Gcp,
+    /// ZeroMQ — fleet-scale command execution via REQ/REP sockets
+    #[cfg(feature = "zeromq")]
+    #[serde(alias = "zmq")]
+    ZeroMq,
+    /// NATS — event-driven command execution via request/reply
+    #[cfg(feature = "nats")]
+    Nats,
+    /// MQTT — IoT/Edge command execution via pub/sub
+    #[cfg(feature = "mqtt")]
+    Mqtt,
 }
 
 const fn default_port() -> u16 {

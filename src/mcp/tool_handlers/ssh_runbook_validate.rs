@@ -63,24 +63,19 @@ impl ToolHandler for SshRunbookValidateHandler {
     async fn execute(&self, args: Option<Value>, _ctx: &ToolContext) -> Result<ToolCallResult> {
         let args: Args =
             serde_json::from_value(args.unwrap_or_else(|| Value::Object(Map::default())))
-                .map_err(|e| {
-                    BridgeError::McpInvalidRequest(format!("Invalid arguments: {e}"))
-                })?;
+                .map_err(|e| BridgeError::McpInvalidRequest(format!("Invalid arguments: {e}")))?;
 
         let rb = if let Some(ref yaml) = args.yaml_content {
-            serde_saphyr::from_str::<Runbook>(yaml).map_err(|e| {
-                BridgeError::McpInvalidRequest(format!("YAML parse error: {e}"))
-            })?
+            serde_saphyr::from_str::<Runbook>(yaml)
+                .map_err(|e| BridgeError::McpInvalidRequest(format!("YAML parse error: {e}")))?
         } else if let Some(ref name) = args.runbook_name {
             let mut all = runbook::builtin_runbooks();
             all.extend(runbook::load_runbooks_from_dir(
                 &runbook::default_runbooks_dir(),
             ));
-            all.into_iter()
-                .find(|r| r.name == *name)
-                .ok_or_else(|| {
-                    BridgeError::McpInvalidRequest(format!("Runbook '{name}' not found"))
-                })?
+            all.into_iter().find(|r| r.name == *name).ok_or_else(|| {
+                BridgeError::McpInvalidRequest(format!("Runbook '{name}' not found"))
+            })?
         } else {
             return Err(BridgeError::McpInvalidRequest(
                 "Provide either runbook_name or yaml_content".to_string(),
@@ -89,27 +84,19 @@ impl ToolHandler for SshRunbookValidateHandler {
 
         match runbook::validate_runbook(&rb) {
             Ok(()) => {
-                let mut output =
-                    format!("VALID: Runbook '{}' (v{})\n\n", rb.name, rb.version);
+                let mut output = format!("VALID: Runbook '{}' (v{})\n\n", rb.name, rb.version);
                 let _ = writeln!(output, "Description: {}", rb.description);
                 let _ = writeln!(output, "Steps: {}", rb.steps.len());
                 let _ = writeln!(output, "Parameters: {}", rb.params.len());
 
                 let confirm_count = rb.steps.iter().filter(|s| s.confirm).count();
                 if confirm_count > 0 {
-                    let _ = writeln!(
-                        output,
-                        "Steps requiring confirmation: {confirm_count}"
-                    );
+                    let _ = writeln!(output, "Steps requiring confirmation: {confirm_count}");
                 }
 
-                let rollback_count =
-                    rb.steps.iter().filter(|s| s.rollback.is_some()).count();
+                let rollback_count = rb.steps.iter().filter(|s| s.rollback.is_some()).count();
                 if rollback_count > 0 {
-                    let _ = writeln!(
-                        output,
-                        "Steps with rollback: {rollback_count}"
-                    );
+                    let _ = writeln!(output, "Steps with rollback: {rollback_count}");
                 }
 
                 Ok(ToolCallResult::text(output))
@@ -139,10 +126,7 @@ mod tests {
         let handler = SshRunbookValidateHandler;
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"runbook_name": "disk_full_recovery"})),
-                &ctx,
-            )
+            .execute(Some(json!({"runbook_name": "disk_full_recovery"})), &ctx)
             .await
             .unwrap();
         let crate::mcp::protocol::ToolContent::Text { text } = &result.content[0] else {
@@ -177,10 +161,7 @@ steps:
         let handler = SshRunbookValidateHandler;
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"yaml_content": "not: valid: yaml: ["})),
-                &ctx,
-            )
+            .execute(Some(json!({"yaml_content": "not: valid: yaml: ["})), &ctx)
             .await;
         assert!(result.is_err());
     }

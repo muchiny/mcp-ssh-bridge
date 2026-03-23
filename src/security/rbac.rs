@@ -185,10 +185,7 @@ mod tests {
             Role {
                 description: Some("Restricted access".to_string()),
                 allowed_tools: vec!["*".to_string()],
-                denied_tools: vec![
-                    "ssh_exec*".to_string(),
-                    "ssh_file_write".to_string(),
-                ],
+                denied_tools: vec!["ssh_exec*".to_string(), "ssh_file_write".to_string()],
                 allowed_hosts: vec!["dev-*".to_string()],
                 denied_hosts: vec!["dev-secure".to_string()],
             },

@@ -6,9 +6,7 @@ use serde::Deserialize;
 
 use crate::config::HostConfig;
 use crate::config::OsType;
-use crate::domain::use_cases::network_security::{
-    NetworkSecurityCommandBuilder, validate_target,
-};
+use crate::domain::use_cases::network_security::{NetworkSecurityCommandBuilder, validate_target};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::ports::protocol::ToolCallResult;

@@ -85,10 +85,7 @@ impl StandardTool for DiscoverHostsTool {
         Ok(())
     }
 
-    fn build_command(
-        args: &SshDiscoverHostsArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshDiscoverHostsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(InventoryCommandBuilder::build_discover_hosts_command(
             &args.network,
             args.method.as_deref(),

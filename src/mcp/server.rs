@@ -13,9 +13,10 @@ use crate::config::{Config, ConfigWatcher};
 use crate::domain::{ExecuteCommandUseCase, OutputCache, TaskStore, TunnelManager};
 use crate::error::Result;
 use crate::mcp::instructions;
+use crate::ports::ExecutorRouter;
 use crate::ports::ToolContext;
 use crate::security::{AuditLogger, AuditWriterTask, CommandValidator, RateLimiter, Sanitizer};
-use crate::ssh::{ConnectionPool, SessionManager};
+use crate::ssh::SessionManager;
 
 use super::completion_provider::DefaultCompletionProvider;
 use super::logger::McpLogger;
@@ -46,7 +47,7 @@ pub struct McpServer {
     sanitizer: Arc<Sanitizer>,
     audit_logger: Arc<AuditLogger>,
     history: Arc<CommandHistory>,
-    connection_pool: Arc<ConnectionPool>,
+    connection_pool: Arc<ExecutorRouter>,
     execute_use_case: Arc<ExecuteCommandUseCase>,
     rate_limiter: Arc<RateLimiter>,
     registry: ToolRegistry,
@@ -108,8 +109,8 @@ impl McpServer {
         // Create command history
         let history = Arc::new(CommandHistory::with_defaults());
 
-        // Create connection pool
-        let connection_pool = Arc::new(ConnectionPool::with_defaults());
+        // Create executor router (protocol-aware connection dispatcher)
+        let connection_pool = Arc::new(ExecutorRouter::with_defaults());
 
         // Create execute command use case
         let execute_use_case = Arc::new(ExecuteCommandUseCase::new(
@@ -766,9 +767,7 @@ impl McpServer {
         let filter_destructive = params
             .and_then(|p| p.get("destructiveHint"))
             .and_then(Value::as_bool);
-        let filter_group = params
-            .and_then(|p| p.get("group"))
-            .and_then(|v| v.as_str());
+        let filter_group = params.and_then(|p| p.get("group")).and_then(|v| v.as_str());
 
         let mut all_tools = self.registry.list_tools();
 
@@ -1165,15 +1164,14 @@ impl McpServer {
             .and_then(|v| v.as_str())
             .unwrap_or("");
         if uri.is_empty() {
-            return JsonRpcResponse::error(
-                id,
-                JsonRpcError::invalid_params("uri is required"),
-            );
+            return JsonRpcResponse::error(id, JsonRpcError::invalid_params("uri is required"));
         }
         let sub_id = uuid::Uuid::new_v4().to_string();
         {
             let mut subs = self.resource_subscriptions.write().await;
-            subs.entry(uri.to_string()).or_default().push(sub_id.clone());
+            subs.entry(uri.to_string())
+                .or_default()
+                .push(sub_id.clone());
         }
         JsonRpcResponse::success(id, json!({"subscriptionId": sub_id}))
     }

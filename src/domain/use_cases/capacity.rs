@@ -313,15 +313,13 @@ mod tests {
 
     #[test]
     fn test_trend_invalid_resource() {
-        let result =
-            CapacityCommandBuilder::build_capacity_trend_command(Some("invalid"), Some(7));
+        let result = CapacityCommandBuilder::build_capacity_trend_command(Some("invalid"), Some(7));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_trend_invalid_days() {
-        let result =
-            CapacityCommandBuilder::build_capacity_trend_command(Some("cpu"), Some(500));
+        let result = CapacityCommandBuilder::build_capacity_trend_command(Some("cpu"), Some(500));
         assert!(result.is_err());
     }
 

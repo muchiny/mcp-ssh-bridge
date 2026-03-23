@@ -111,10 +111,7 @@ impl StandardTool for ProcessListTool {
         let cmd_idx = parsed.headers.iter().position(|h| h == "command");
 
         for row in &parsed.rows {
-            let get = |idx: Option<usize>| {
-                idx.and_then(|i| row.get(i))
-                    .map_or("", String::as_str)
-            };
+            let get = |idx: Option<usize>| idx.and_then(|i| row.get(i)).map_or("", String::as_str);
             let user = get(user_idx);
             if !user.is_empty() {
                 tbl = tbl.row(json!({

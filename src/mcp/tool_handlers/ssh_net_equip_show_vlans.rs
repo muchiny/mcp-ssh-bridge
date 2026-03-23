@@ -63,15 +63,14 @@ impl StandardTool for NetEquipShowVlansTool {
         "required": ["host"]
     }"#;
 
-    fn build_command(
-        args: &SshNetEquipShowVlansArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshNetEquipShowVlansArgs, _host_config: &HostConfig) -> Result<String> {
         let eq_type = args
             .equipment_type
             .as_deref()
             .map_or(EquipmentType::Generic, EquipmentType::from_str_loose);
-        Ok(NetworkEquipmentCommandBuilder::build_show_vlans_command(eq_type))
+        Ok(NetworkEquipmentCommandBuilder::build_show_vlans_command(
+            eq_type,
+        ))
     }
 }
 

@@ -209,7 +209,10 @@ mod tests {
         let handler = SshAwsCliHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(Some(json!({"host": 123, "service": "s3", "subcommand": "ls"})), &ctx)
+            .execute(
+                Some(json!({"host": 123, "service": "s3", "subcommand": "ls"})),
+                &ctx,
+            )
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {

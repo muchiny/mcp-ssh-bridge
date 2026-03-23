@@ -79,10 +79,7 @@ impl StandardTool for TemplateValidateTool {
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
 
-    fn validate(
-        args: &SshTemplateValidateArgs,
-        _host_config: &HostConfig,
-    ) -> Result<()> {
+    fn validate(args: &SshTemplateValidateArgs, _host_config: &HostConfig) -> Result<()> {
         validate_service(&args.service)?;
         if let Some(path) = &args.config_path {
             validate_dest_path(path)?;
@@ -90,10 +87,7 @@ impl StandardTool for TemplateValidateTool {
         Ok(())
     }
 
-    fn build_command(
-        args: &SshTemplateValidateArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshTemplateValidateArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(TemplateCommandBuilder::build_template_validate_command(
             &args.service,
             args.config_path.as_deref(),
@@ -148,8 +142,7 @@ mod tests {
         assert!(!handler.description().is_empty());
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_template_validate");
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("host")));
         assert!(required.contains(&json!("service")));
@@ -168,10 +161,7 @@ mod tests {
         let args: SshTemplateValidateArgs = serde_json::from_value(json).unwrap();
         assert_eq!(args.host, "server1");
         assert_eq!(args.service, "nginx");
-        assert_eq!(
-            args.config_path.as_deref(),
-            Some("/etc/nginx/nginx.conf")
-        );
+        assert_eq!(args.config_path.as_deref(), Some("/etc/nginx/nginx.conf"));
         assert_eq!(args.timeout_seconds, Some(15));
         assert_eq!(args.max_output, Some(5000));
         assert_eq!(args.save_output.as_deref(), Some("/tmp/validate.txt"));
@@ -196,8 +186,7 @@ mod tests {
     fn test_schema_optional_fields() {
         let handler = SshTemplateValidateHandler::new();
         let schema = handler.schema();
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let props = schema_json["properties"].as_object().unwrap();
         assert!(props.contains_key("config_path"));
         assert!(props.contains_key("timeout_seconds"));
@@ -247,6 +236,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshTemplateValidateArgs {
             host: "s".to_string(),
@@ -277,6 +267,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshTemplateValidateArgs {
             host: "s".to_string(),

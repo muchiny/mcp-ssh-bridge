@@ -107,11 +107,7 @@ impl SessionRecorder {
     ///
     /// Returns the session ID on success.
     pub fn start_session(&self, host: &str, title: Option<&str>) -> Result<String, String> {
-        let id = format!(
-            "rec_{}_{}",
-            host,
-            Utc::now().format("%Y%m%d_%H%M%S")
-        );
+        let id = format!("rec_{}_{}", host, Utc::now().format("%Y%m%d_%H%M%S"));
         let file_path = self.recordings_dir.join(format!("{id}.cast"));
 
         let mut file = OpenOptions::new()
@@ -137,10 +133,9 @@ impl SessionRecorder {
             },
         };
 
-        let header_json =
-            serde_json::to_string(&header).map_err(|e| format!("Failed to serialize header: {e}"))?;
-        writeln!(file, "{header_json}")
-            .map_err(|e| format!("Failed to write header: {e}"))?;
+        let header_json = serde_json::to_string(&header)
+            .map_err(|e| format!("Failed to serialize header: {e}"))?;
+        writeln!(file, "{header_json}").map_err(|e| format!("Failed to write header: {e}"))?;
 
         let initial_hash = Self::compute_hash(&self.hash_key, "genesis", "");
 
@@ -225,9 +220,7 @@ impl SessionRecorder {
             .remove(session_id)
             .ok_or_else(|| format!("No active session: {session_id}"))?;
 
-        let file_path = self
-            .recordings_dir
-            .join(format!("{}.cast", session.id));
+        let file_path = self.recordings_dir.join(format!("{}.cast", session.id));
 
         let info = RecordingInfo {
             id: session.id.clone(),
@@ -300,8 +293,7 @@ impl SessionRecorder {
 
     /// Read a recording file and return its events for replay
     pub fn replay_recording(path: &Path) -> Result<(RecordingHeader, Vec<RecordingEvent>), String> {
-        let file =
-            File::open(path).map_err(|e| format!("Failed to open recording: {e}"))?;
+        let file = File::open(path).map_err(|e| format!("Failed to open recording: {e}"))?;
         let reader = BufReader::new(file);
         let mut lines = reader.lines();
 
@@ -311,8 +303,8 @@ impl SessionRecorder {
             .ok_or("Empty recording file")?
             .map_err(|e| format!("Failed to read header: {e}"))?;
 
-        let header: RecordingHeader = serde_json::from_str(&header_line)
-            .map_err(|e| format!("Invalid header: {e}"))?;
+        let header: RecordingHeader =
+            serde_json::from_str(&header_line).map_err(|e| format!("Invalid header: {e}"))?;
 
         let mut events = Vec::new();
 
@@ -323,8 +315,8 @@ impl SessionRecorder {
             }
 
             // Parse asciinema v2 event: [time, type, data] or [time, type, data, hash]
-            let arr: Vec<serde_json::Value> = serde_json::from_str(&line)
-                .map_err(|e| format!("Invalid event line: {e}"))?;
+            let arr: Vec<serde_json::Value> =
+                serde_json::from_str(&line).map_err(|e| format!("Invalid event line: {e}"))?;
 
             if arr.len() >= 3 {
                 events.push(RecordingEvent {
@@ -413,8 +405,7 @@ impl SessionRecorder {
 
     /// Read recording info from a .cast file header
     fn read_recording_info(path: &Path) -> Result<RecordingInfo, String> {
-        let file =
-            File::open(path).map_err(|e| format!("Failed to open: {e}"))?;
+        let file = File::open(path).map_err(|e| format!("Failed to open: {e}"))?;
         let reader = BufReader::new(file);
         let mut lines = reader.lines();
 
@@ -423,8 +414,8 @@ impl SessionRecorder {
             .ok_or("Empty file")?
             .map_err(|e| format!("Read error: {e}"))?;
 
-        let header: RecordingHeader = serde_json::from_str(&header_line)
-            .map_err(|e| format!("Invalid header: {e}"))?;
+        let header: RecordingHeader =
+            serde_json::from_str(&header_line).map_err(|e| format!("Invalid header: {e}"))?;
 
         let event_count = lines.count();
         let filename = path.file_stem().unwrap_or_default().to_string_lossy();
@@ -461,12 +452,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn test_recorder(dir: &Path) -> SessionRecorder {
-        SessionRecorder::new(
-            dir.to_path_buf(),
-            true,
-            b"test-secret-key".to_vec(),
-            false,
-        )
+        SessionRecorder::new(dir.to_path_buf(), true, b"test-secret-key".to_vec(), false)
     }
 
     #[test]
@@ -474,7 +460,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let recorder = test_recorder(tmp.path());
 
-        let id = recorder.start_session("myhost", Some("test session")).unwrap();
+        let id = recorder
+            .start_session("myhost", Some("test session"))
+            .unwrap();
         assert!(id.starts_with("rec_myhost_"));
 
         let info = recorder.stop_session(&id).unwrap();
@@ -491,7 +479,9 @@ mod tests {
         let id = recorder.start_session("server1", None).unwrap();
         recorder.record_event(&id, "i", "ls -la\r\n").unwrap();
         recorder.record_event(&id, "o", "total 42\r\n").unwrap();
-        recorder.record_event(&id, "o", "-rw-r--r-- 1 root root 1234 file.txt\r\n").unwrap();
+        recorder
+            .record_event(&id, "o", "-rw-r--r-- 1 root root 1234 file.txt\r\n")
+            .unwrap();
 
         let info = recorder.stop_session(&id).unwrap();
         assert_eq!(info.event_count, 3);
@@ -502,7 +492,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let recorder = test_recorder(tmp.path());
 
-        let id = recorder.start_session("host1", Some("replay test")).unwrap();
+        let id = recorder
+            .start_session("host1", Some("replay test"))
+            .unwrap();
         recorder.record_event(&id, "i", "whoami").unwrap();
         recorder.record_event(&id, "o", "root").unwrap();
         let info = recorder.stop_session(&id).unwrap();
@@ -590,15 +582,13 @@ mod tests {
     #[test]
     fn test_no_hash_chain() {
         let tmp = TempDir::new().unwrap();
-        let recorder =
-            SessionRecorder::new(tmp.path().to_path_buf(), false, Vec::new(), false);
+        let recorder = SessionRecorder::new(tmp.path().to_path_buf(), false, Vec::new(), false);
 
         let id = recorder.start_session("host1", None).unwrap();
         recorder.record_event(&id, "o", "hello").unwrap();
         let info = recorder.stop_session(&id).unwrap();
 
-        let (_, events) =
-            SessionRecorder::replay_recording(Path::new(&info.file_path)).unwrap();
+        let (_, events) = SessionRecorder::replay_recording(Path::new(&info.file_path)).unwrap();
         assert!(events[0].hash.is_none());
     }
 

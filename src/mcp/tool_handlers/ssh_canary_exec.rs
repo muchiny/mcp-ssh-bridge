@@ -9,7 +9,7 @@ use serde::Deserialize;
 use crate::config::HostConfig;
 use crate::domain::use_cases::orchestration::OrchestrationCommandBuilder;
 use crate::error::Result;
-use crate::mcp::standard_tool::{impl_common_args, StandardTool, StandardToolHandler};
+use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 
 #[derive(Debug, Deserialize)]
 pub struct SshCanaryExecArgs {
@@ -80,10 +80,7 @@ impl StandardTool for CanaryExecTool {
         "required": ["host", "command"]
     }"#;
 
-    fn build_command(
-        args: &SshCanaryExecArgs,
-        _host_config: &HostConfig,
-    ) -> Result<String> {
+    fn build_command(args: &SshCanaryExecArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(OrchestrationCommandBuilder::build_canary_command(
             &args.command,
             args.health_check.as_deref(),
@@ -97,8 +94,8 @@ pub type SshCanaryExecHandler = StandardToolHandler<CanaryExecTool>;
 mod tests {
     use super::*;
     use crate::error::BridgeError;
-    use crate::ports::mock::create_test_context;
     use crate::ports::ToolHandler;
+    use crate::ports::mock::create_test_context;
     use serde_json::json;
 
     #[tokio::test]
@@ -186,6 +183,7 @@ mod tests {
             os_type: OsType::default(),
             shell: None,
             retry: None,
+            protocol: crate::config::Protocol::default(),
         };
         let args = SshCanaryExecArgs {
             host: "canary1".to_string(),

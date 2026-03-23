@@ -97,7 +97,10 @@ mod tests {
         let handler = SshGroupDeleteHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(Some(json!({"host": "nonexistent", "name": "oldgroup"})), &ctx)
+            .execute(
+                Some(json!({"host": "nonexistent", "name": "oldgroup"})),
+                &ctx,
+            )
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {

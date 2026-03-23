@@ -52,10 +52,7 @@ impl JournaldCommandBuilder {
 
     /// Build a journal follow command (with timeout safety).
     #[must_use]
-    pub fn build_follow_command(
-        unit: Option<&str>,
-        lines: Option<u64>,
-    ) -> String {
+    pub fn build_follow_command(unit: Option<&str>, lines: Option<u64>) -> String {
         let mut cmd = String::from("journalctl --no-pager -f");
         if let Some(u) = unit {
             let _ = write!(cmd, " -u {}", shell_escape(u));
@@ -85,7 +82,13 @@ mod tests {
     #[test]
     fn test_query_simple() {
         let cmd = JournaldCommandBuilder::build_query_command(
-            Some("nginx"), None, None, None, Some(100), None, false,
+            Some("nginx"),
+            None,
+            None,
+            None,
+            Some(100),
+            None,
+            false,
         );
         assert!(cmd.contains("journalctl"));
         assert!(cmd.contains("-u"));
@@ -96,7 +99,13 @@ mod tests {
     #[test]
     fn test_query_with_priority_and_time() {
         let cmd = JournaldCommandBuilder::build_query_command(
-            None, Some("err"), Some("2024-01-01"), Some("2024-01-02"), None, None, true,
+            None,
+            Some("err"),
+            Some("2024-01-01"),
+            Some("2024-01-02"),
+            None,
+            None,
+            true,
         );
         assert!(cmd.contains("-p"));
         assert!(cmd.contains("--since"));
@@ -107,7 +116,13 @@ mod tests {
     #[test]
     fn test_query_with_grep() {
         let cmd = JournaldCommandBuilder::build_query_command(
-            None, None, None, None, Some(50), Some("error"), false,
+            None,
+            None,
+            None,
+            None,
+            Some(50),
+            Some("error"),
+            false,
         );
         assert!(cmd.contains("-g"));
     }
