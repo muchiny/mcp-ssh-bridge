@@ -16,36 +16,41 @@
 
 ## 🔍 What is this?
 
-MCP SSH Bridge is a local server that sits between Claude Code and your remote servers. Claude Code talks to it via JSON-RPC over stdio, and it executes commands on your servers over SSH.
+MCP SSH Bridge is a local server that sits between Claude Code and your remote infrastructure. Claude Code talks to it via JSON-RPC over stdio, and it routes commands through **14 protocol adapters** — SSH, WinRM, Telnet, NETCONF, gRPC, K8s Exec, Serial, SNMP, AWS SSM, Azure, GCP, ZeroMQ, NATS, and MQTT.
 
 ```
-Claude Code  <--JSON-RPC-->  MCP SSH Bridge  <--SSH-->  Your Servers
+Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──14 protocols──►  Your Infrastructure
 ```
 
 Without it, Claude cannot reach your servers. With it, Claude can run commands, transfer files, read logs, check metrics, manage Docker containers, Kubernetes clusters, Podman, LDAP directories, network equipment, systemd services, and much more — all through 337 purpose-built tools with built-in security controls.
 
 ```mermaid
 graph LR
-    CC[🤖 Claude Code] -->|JSON-RPC stdio| MCP[⚡ MCP SSH Bridge]
+    CC[🤖 Claude Code] -->|JSON-RPC stdio| BR[⚡ MCP SSH Bridge]
 
-    MCP -->|SSH| S1[🖥️ Linux Servers]
-    MCP -->|SSH| S2[🪟 Windows Servers]
-    MCP -->|SSH| S3[🐳 Docker / K8s]
-    MCP -->|SSH| S4[📡 Network Equipment]
-    MCP -->|WinRM| S5[🪟 Windows WinRM]
-    MCP -->|Telnet| S6[📡 Legacy Devices]
-    MCP -->|NETCONF| S7[🔧 Network YANG]
-    MCP -->|gRPC| S8[⚙️ gRPC Services]
-    MCP -->|K8s API| S9[☸️ K8s Exec]
-    MCP -->|Serial| S10[🔌 Serial Devices]
-    MCP -->|SNMP| S11[📊 SNMP Agents]
-    MCP -->|SSM / Azure / GCP| S12[☁️ Cloud Instances]
-    MCP -->|ZeroMQ / NATS / MQTT| S13[📬 Messaging]
+    BR --> SEC[🛡️ Security<br/>Validator · Sanitizer · Audit]
+    SEC --> ER[🔀 Executor Router]
 
-    subgraph "Security Layer"
-        MCP --- V[🛡️ Validator]
-        MCP --- San[🔒 Sanitizer + Entropy]
-        MCP --- A[📝 Audit + Recording]
+    subgraph "Air-Gapped Protocols"
+        ER -->|SSH| P1[🖥️ Linux / Windows<br/>Docker · K8s · Network]
+        ER -->|WinRM| P2[🪟 Windows]
+        ER -->|Telnet| P3[📡 Legacy Devices]
+        ER -->|NETCONF| P4[🔧 YANG / Network]
+        ER -->|gRPC| P5[⚙️ gRPC Services]
+    end
+
+    subgraph "Infrastructure Protocols"
+        ER -->|K8s API| P6[☸️ K8s Exec]
+        ER -->|Serial| P7[🔌 Serial Devices]
+        ER -->|SNMP| P8[📊 SNMP Agents]
+    end
+
+    subgraph "Cloud Protocols"
+        ER -->|SSM · Azure · GCP| P9[☁️ Cloud Instances]
+    end
+
+    subgraph "Messaging Protocols"
+        ER -->|ZeroMQ · NATS · MQTT| P10[📬 Message Brokers]
     end
 ```
 
