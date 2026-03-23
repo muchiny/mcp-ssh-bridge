@@ -107,43 +107,23 @@ impl ConfigWatcher {
 
                         match load_config(&path_clone) {
                             Ok(new_config) => {
-                                // We need to spawn a task to update the config since
-                                // the callback is not async
-                                let config = Arc::clone(&config);
-                                let validator = validator.clone();
-                                // Use a blocking approach since we're in a sync callback
-                                // This spawns a task that will run in the tokio runtime
-                                std::thread::spawn(move || {
-                                    // Create a small runtime for this update
-                                    let rt = match tokio::runtime::Builder::new_current_thread()
-                                        .enable_all()
-                                        .build()
-                                    {
-                                        Ok(rt) => rt,
-                                        Err(e) => {
-                                            error!(error = %e, "Failed to create runtime for config reload");
-                                            return;
-                                        }
-                                    };
+                                // Use blocking_write since we're in a sync callback
+                                // (the watcher runs on its own thread, not a tokio task).
+                                // This replaces the previous std::thread::spawn + mini-runtime
+                                // approach which was unreliable.
+                                let security_config = new_config.security.clone();
 
-                                    rt.block_on(async {
-                                        // Clone security config before acquiring write lock
-                                        let security_config = new_config.security.clone();
+                                {
+                                    let mut guard = config.blocking_write();
+                                    *guard = new_config;
+                                }
 
-                                        // Update the config
-                                        {
-                                            let mut guard = config.write().await;
-                                            *guard = new_config;
-                                        }
+                                // Reload validator with new security rules
+                                if let Some(ref v) = validator {
+                                    v.reload(&security_config);
+                                }
 
-                                        // Reload validator with new security rules
-                                        if let Some(v) = validator {
-                                            v.reload(&security_config);
-                                        }
-
-                                        info!("Configuration reloaded successfully");
-                                    });
-                                });
+                                info!("Configuration reloaded successfully");
                             }
                             Err(e) => {
                                 error!(
@@ -233,39 +213,21 @@ impl ConfigWatcher {
 
                         match load_config(&path_clone) {
                             Ok(new_config) => {
-                                let config = Arc::clone(&config);
-                                let validator = validator.clone();
-                                let on_reload = Arc::clone(&on_reload);
-                                std::thread::spawn(move || {
-                                    let rt = match tokio::runtime::Builder::new_current_thread()
-                                        .enable_all()
-                                        .build()
-                                    {
-                                        Ok(rt) => rt,
-                                        Err(e) => {
-                                            error!(error = %e, "Failed to create runtime for config reload");
-                                            return;
-                                        }
-                                    };
+                                let security_config = new_config.security.clone();
 
-                                    rt.block_on(async {
-                                        let security_config = new_config.security.clone();
+                                {
+                                    let mut guard = config.blocking_write();
+                                    *guard = new_config;
+                                }
 
-                                        {
-                                            let mut guard = config.write().await;
-                                            *guard = new_config;
-                                        }
+                                if let Some(ref v) = validator {
+                                    v.reload(&security_config);
+                                }
 
-                                        if let Some(v) = validator {
-                                            v.reload(&security_config);
-                                        }
+                                info!("Configuration reloaded successfully");
 
-                                        info!("Configuration reloaded successfully");
-                                    });
-
-                                    // Notify the server after successful reload
-                                    on_reload();
-                                });
+                                // Notify the server after successful reload
+                                on_reload();
                             }
                             Err(e) => {
                                 error!(
@@ -411,24 +373,14 @@ mod tests {
         );
         write_config_to_file(&config_path, &initial_config);
 
-        // Wait for the watcher to pick up the change (includes debounce delay)
-        // Use a retry loop instead of a fixed sleep to handle slow CI/WSL2 environments
-        // where inotify events can be significantly delayed.
-        let mut detected = false;
-        for i in 0..80 {
-            tokio::time::sleep(Duration::from_millis(250)).await;
-            // Re-write the file periodically to generate additional events,
-            // working around inotify delivery issues on WSL2/slow systems.
-            if i == 20 || i == 40 || i == 60 {
-                write_config_to_file(&config_path, &initial_config);
-            }
-            let current_config = config.read().await;
-            if current_config.hosts.contains_key("new-host") {
-                detected = true;
-                break;
-            }
-        }
-        assert!(detected, "Config watcher did not detect changes within 20s");
+        // Wait for PollWatcher to detect the change (500ms poll + margin)
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+
+        let current_config = config.read().await;
+        assert!(
+            current_config.hosts.contains_key("new-host"),
+            "Config watcher did not detect changes"
+        );
     }
 
     #[tokio::test]
@@ -503,7 +455,7 @@ mod tests {
         fs::write(&config_path, "invalid: yaml: content: [[[").unwrap();
 
         // Wait for watcher to attempt reload
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         // Config should still have original content
         let current_config = config.read().await;
@@ -552,10 +504,9 @@ mod tests {
         );
         atomic_save(&config_path, &initial_config);
 
-        // Wait for the watcher to pick up the change
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        // Wait for PollWatcher to detect the change
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
-        // Check if the config was updated
         let current_config = config.read().await;
         assert!(
             current_config.hosts.contains_key("atomic-host"),
@@ -589,10 +540,9 @@ mod tests {
         new_config.security.mode = SecurityMode::Permissive;
         atomic_save(&config_path, &new_config);
 
-        // Wait for the watcher to reload
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        // Wait for PollWatcher to detect the change and reload the validator
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
-        // Validator should now allow "ls" (permissive mode)
         assert!(
             validator.validate("ls").is_ok(),
             "Validator should be reloaded after atomic save"
@@ -650,7 +600,7 @@ mod tests {
         // Reload: add "cat" to whitelist
         let updated = config_with_security(SecurityMode::Strict, vec![r"^ls\b", r"^cat\b"], vec![]);
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("cat /etc/hosts").is_ok(),
@@ -676,7 +626,7 @@ mod tests {
         // Reload: remove "cat" from whitelist
         let updated = config_with_security(SecurityMode::Strict, vec![r"^ls\b"], vec![]);
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(validator.validate("ls").is_ok(), "ls should still work");
         assert!(
@@ -703,7 +653,7 @@ mod tests {
         let updated =
             config_with_security(SecurityMode::Strict, vec![r"^whoami$", r"^date$"], vec![]);
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("ls").is_err(),
@@ -748,7 +698,7 @@ mod tests {
             vec![r"rm\s+-rf", r"mkfs\."],
         );
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("rm -rf /").is_err(),
@@ -780,7 +730,7 @@ mod tests {
         // Reload: remove mkfs from blacklist
         let updated = config_with_security(SecurityMode::Permissive, vec![], vec![r"rm\s+-rf"]);
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("rm -rf /").is_err(),
@@ -815,7 +765,7 @@ mod tests {
             vec![r"cat\s+/etc/shadow"],
         );
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("cat /etc/shadow").is_err(),
@@ -848,7 +798,7 @@ mod tests {
         // Reload: switch to permissive
         let updated = config_with_security(SecurityMode::Permissive, vec![], vec![]);
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("whoami").is_ok(),
@@ -878,7 +828,7 @@ mod tests {
         // Reload: switch to strict with narrow whitelist
         let updated = config_with_security(SecurityMode::Strict, vec![r"^pwd$"], vec![]);
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("pwd").is_ok(),
@@ -912,7 +862,7 @@ mod tests {
         // Reload 1: add pwd
         let v1 = config_with_security(SecurityMode::Strict, vec![r"^ls\b", r"^pwd$"], vec![]);
         atomic_save(&config_path, &v1);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("pwd").is_ok(),
@@ -922,7 +872,7 @@ mod tests {
         // Reload 2: switch to permissive with blacklist
         let v2 = config_with_security(SecurityMode::Permissive, vec![], vec![r"rm\s+-rf"]);
         atomic_save(&config_path, &v2);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("anything").is_ok(),
@@ -936,7 +886,7 @@ mod tests {
         // Reload 3: back to strict with different whitelist
         let v3 = config_with_security(SecurityMode::Strict, vec![r"^whoami$"], vec![]);
         atomic_save(&config_path, &v3);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("whoami").is_ok(),
@@ -995,7 +945,7 @@ mod tests {
             },
         );
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         let cfg = shared_config.read().await;
         assert_eq!(cfg.hosts.len(), 2, "should have 2 hosts after reload");
@@ -1028,7 +978,7 @@ mod tests {
         updated.security.mode = SecurityMode::Permissive;
         updated.security.blacklist = vec![r"rm\s+-rf".to_string(), r"mkfs\.".to_string()];
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         let cfg = shared_config.read().await;
         assert_eq!(
@@ -1115,7 +1065,7 @@ mod tests {
         // Reload: strict mode with EMPTY whitelist = deny all
         let updated = config_with_security(SecurityMode::Strict, vec![], vec![]);
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("ls").is_err(),
@@ -1147,7 +1097,7 @@ mod tests {
         // Reload: clear all blacklist patterns
         let updated = config_with_security(SecurityMode::Permissive, vec![], vec![]);
         atomic_save(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("rm -rf /").is_ok(),
@@ -1174,7 +1124,7 @@ mod tests {
 
         // Write invalid YAML - validator should keep previous rules
         fs::write(&config_path, "completely: invalid: yaml: [[[").unwrap();
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("ls").is_ok(),
@@ -1201,7 +1151,7 @@ mod tests {
         // Direct write (not atomic save) - should also trigger reload via Modify event
         let updated = config_with_security(SecurityMode::Strict, vec![r"^ls\b", r"^pwd$"], vec![]);
         write_config_to_file(&config_path, &updated);
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
         assert!(
             validator.validate("pwd").is_ok(),

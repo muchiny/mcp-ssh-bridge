@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-03-24
+
+### Fixed
+
+- **Revert serde-saphyr to 0.0.21** — v0.0.22 generates invalid YAML for empty arrays, breaking config hot-reload (`load_config` fails on re-serialized files)
+- **Config watcher reliability** — replace `std::thread::spawn` + mini tokio runtime with `blocking_write()` for config updates in the file watcher callback; the previous approach was unreliable (spawned thread could fail to propagate writes back to the shared config)
+
 ## [1.6.0] - 2026-03-22
 
 ### Summary
