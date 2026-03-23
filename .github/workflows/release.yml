@@ -90,7 +90,7 @@ jobs:
           sha256sum ${{ env.BINARY_NAME }}-${{ matrix.name }}.zip > ${{ env.BINARY_NAME }}-${{ matrix.name }}.zip.sha256
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.name }}
           path: |
