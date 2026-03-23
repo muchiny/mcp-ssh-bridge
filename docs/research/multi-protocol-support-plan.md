@@ -139,6 +139,7 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 ### Phase 2 : Adapters Tier 1 (air-gapped, feature-gated)
 
 **2.1 — WinRM Adapter** (`src/winrm/`)
+
 - `client.rs` : HTTP/HTTPS + SOAP/WSMAN via `reqwest` + `quick-xml`
 - `executor.rs` : Implémente `RemoteExecutor`
 - `pool.rs` : Pool de sessions WinRM
@@ -146,6 +147,7 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 - Feature : `winrm = ["dep:reqwest", "dep:quick-xml"]`
 
 **2.2 — Telnet Adapter** (`src/telnet/`) — **NOUVEAU**
+
 - `client.rs` : Connexion TCP + négociation Telnet via `mini-telnet` ou raw tokio `TcpStream`
 - `executor.rs` : Implémente `RemoteExecutor`
 - `pool.rs` : Pool de connexions Telnet avec keep-alive
@@ -155,6 +157,7 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 - Intégration directe avec les outils `network_equipment` existants
 
 **2.3 — NETCONF Adapter** (`src/netconf/`) — **NOUVEAU**
+
 - `client.rs` : NETCONF over SSH (RFC 6242) via `netconf-rs`
 - `executor.rs` : Implémente `RemoteExecutor` avec `supports_structured_config() -> true`
 - Opérations : `get-config`, `edit-config`, `lock`, `unlock`, `commit`
@@ -162,6 +165,7 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 - Nouveau groupe d'outils : `netconf` (get-config, edit-config, validate, commit)
 
 **2.4 — gRPC Adapter** (`src/grpc_exec/`)
+
 - `client.rs` : gRPC client via `tonic`
 - `executor.rs` : Implémente `RemoteExecutor`
 - Proto definition pour remote exec service
@@ -170,10 +174,12 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 ### Phase 3 : Adapters Tier 2
 
 **3.1 — Kubernetes Exec Adapter** (`src/k8s_exec/`)
+
 - Via `kube` crate — WebSocket exec dans pods
 - Feature : `k8s-exec = ["dep:kube", "dep:k8s-openapi"]`
 
 **3.2 — Serial/Console Adapter** (`src/serial/`) — **NOUVEAU**
+
 - `client.rs` : Serial port I/O via `serial2-tokio`
 - `executor.rs` : Implémente `RemoteExecutor`
 - `prompt.rs` : Détection de prompt (partagé avec Telnet)
@@ -181,6 +187,7 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 - Use cases : BMC console, PDU management, IPMI serial-over-LAN
 
 **3.3 — SNMP Adapter** (`src/snmp/`) — **NOUVEAU**
+
 - `client.rs` : SNMP v2c/v3 via `csnmp`
 - **Ne implémente PAS `RemoteExecutor`** — pas d'exécution de commandes
 - Nouveau trait : `MonitoringProvider` pour GET/SET/WALK
@@ -190,6 +197,7 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 ### Phase 4 : Cloud Adapters (feature-gated, opt-in) ✅ DONE
 
 **4.1 — AWS SSM Adapter** (`src/ssm/mod.rs`)
+
 - Uses `aws-sdk-ssm` + `aws-config` crates
 - `SendCommand` → poll `GetCommandInvocation` pattern
 - Auto-detects document: `AWS-RunShellScript` (Linux) / `AWS-RunPowerShellScript` (Windows)
@@ -197,6 +205,7 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 - Feature: `ssm = ["dep:aws-sdk-ssm", "dep:aws-config"]`
 
 **4.2 — Azure Run Command Adapter** (`src/cloud_exec/azure.rs`)
+
 - Uses `reqwest` for Azure Compute Management REST API
 - Supports sync (200) and async (202 + Location polling) responses
 - Auth via Azure CLI (`az account get-access-token`) or `AZURE_ACCESS_TOKEN` env var
@@ -204,6 +213,7 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 - Feature: `azure = ["dep:reqwest"]` (shares reqwest with WinRM)
 
 **4.3 — GCP OS Command Adapter** (`src/cloud_exec/gcp.rs`)
+
 - Wraps `gcloud compute ssh --command` CLI (no direct Run Command API in GCP)
 - Uses IAP tunneling for secure access
 - Auto-detects project/zone from `gcloud config` if not specified
@@ -217,18 +227,21 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 > Ces adapters nécessitent un **agent/daemon custom** installé sur les machines cibles.
 
 **5.1 — ZeroMQ Adapter** (`src/zmq_exec/mod.rs`)
+
 - Uses `zeromq` crate (pure-Rust async ZeroMQ)
 - REQ/REP pattern: send JSON command, receive JSON response
 - Host mapping: `hostname` → agent address, `port` → agent port (default: 4506)
 - Feature: `zeromq = ["dep:zeromq"]`
 
 **5.2 — NATS Adapter** (`src/nats_exec/mod.rs`)
+
 - Uses `async-nats` crate (native async)
 - Request/reply on subject `mcp.exec.<host_identity>`
 - Host mapping: `hostname` → NATS server, `user` → target identity
 - Feature: `nats = ["dep:async-nats"]`
 
 **5.3 — MQTT Adapter** (`src/mqtt_exec/mod.rs`)
+
 - Uses `rumqttc` crate (async MQTT v3.1.1/v5)
 - Pub/sub RPC: publish to `mcp/exec/<device>`, subscribe to `mcp/resp/<device>`
 - Request ID correlation for concurrent commands

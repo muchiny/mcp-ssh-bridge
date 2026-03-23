@@ -57,6 +57,7 @@ steps:                              # Ordered list of steps (at least one requir
 MCP SSH Bridge ships with **5 built-in runbooks** embedded directly in the binary. They are always available without any file installation.
 
 ### 1. 💾 `disk_full_recovery`
+
 Diagnose and recover from disk full conditions by identifying large files, cleaning old logs, and verifying recovery.
 
 | Parameter | Type | Default | Description |
@@ -67,6 +68,7 @@ Diagnose and recover from disk full conditions by identifying large files, clean
 **Steps:** Check disk usage → Evaluate threshold → Find large files → Find old compressed logs → Clean old compressed logs (confirm) → Verify recovery
 
 ### 2. 🔄 `service_restart`
+
 Safely restart a systemd service with pre/post health checks and automatic rollback on failure.
 
 | Parameter | Type | Default | Description |
@@ -77,6 +79,7 @@ Safely restart a systemd service with pre/post health checks and automatic rollb
 **Steps:** Check service exists → Capture pre-state → Restart service (confirm) → Wait for startup → Verify service active
 
 ### 3. 🧠 `oom_recovery`
+
 Investigate and recover from Out-Of-Memory conditions by identifying memory-hungry processes and clearing caches.
 
 | Parameter | Type | Default | Description |
@@ -86,6 +89,7 @@ Investigate and recover from Out-Of-Memory conditions by identifying memory-hung
 **Steps:** Check memory → Check OOM kills → Top memory consumers → Check swap → Clear caches (confirm) → Verify memory
 
 ### 4. 📜 `log_rotation`
+
 Force log rotation and clean up old log files to reclaim disk space.
 
 | Parameter | Type | Default | Description |
@@ -96,6 +100,7 @@ Force log rotation and clean up old log files to reclaim disk space.
 **Steps:** Check log disk usage → Find large logs → Force logrotate (confirm) → Clean old rotated logs (confirm) → Verify disk freed
 
 ### 5. 🔐 `cert_renewal_check`
+
 Check TLS certificate expiry dates and attempt renewal via certbot if certificates are expiring soon.
 
 | Parameter | Type | Default | Description |
@@ -168,12 +173,15 @@ ssh_runbook_validate(runbook_name: "app_health_check")
 The runbook workflow uses three MCP tools in sequence:
 
 ### Step 1: List available runbooks
+
 ```
 ssh_runbook_list()
 ```
+
 Returns all built-in and user-defined runbooks with their descriptions, parameters, and step counts.
 
 ### Step 2: Generate an execution plan
+
 ```
 ssh_runbook_execute(
   host: "my-server",
@@ -181,13 +189,17 @@ ssh_runbook_execute(
   params: { "threshold_percent": "85", "target_dir": "/data" }
 )
 ```
+
 Returns a fully-resolved execution plan with all `{{ template }}` variables replaced. No commands are actually executed yet.
 
 ### Step 3: Execute step by step
+
 Run each step from the plan individually using `ssh_exec`:
+
 ```
 ssh_exec(host: "my-server", command: "df -h /data | awk 'NR==2{print $5}' | tr -d '%'")
 ```
+
 Observe the output, then proceed to the next step. For steps marked with `confirm: true`, the user is asked for confirmation before execution.
 
 ---

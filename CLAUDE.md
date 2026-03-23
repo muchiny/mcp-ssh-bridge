@@ -103,6 +103,7 @@ dxt/                              # 🆕 DXT packaging (Claude Desktop extension
 Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 
 ### Core Infrastructure (Linux)
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `core` | `exec`, `exec_multi`, `status`, `health`, `history`, `output_fetch` | Running arbitrary commands, system info |
@@ -128,6 +129,7 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `tunnels` | `tunnel_create`, `tunnel_list`, `tunnel_close` | SSH tunnel management |
 
 ### Containers & Orchestration
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `docker` | `docker_ps`, `docker_logs`, `docker_inspect`, `docker_exec`, `docker_compose`, `docker_images`, `docker_stats`, `docker_volume_ls`, `docker_network_ls`, `docker_volume_inspect`, `docker_network_inspect` | Docker container management |
@@ -136,6 +138,7 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `esxi` | `esxi_vm_list`, `esxi_vm_info`, `esxi_vm_power`, `esxi_snapshot`, `esxi_host_info`, `esxi_datastore_list`, `esxi_network_list` | VMware ESXi management |
 
 ### Databases
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `database` | `db_query`, `db_dump`, `db_restore` | Generic DB operations |
@@ -145,12 +148,14 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `mongodb` | `mongodb_status` | MongoDB status |
 
 ### Web Servers & Reverse Proxies
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `nginx` | `nginx_status`, `nginx_test`, `nginx_reload`, `nginx_list_sites` | Nginx management |
 | `apache` | `apache_status`, `apache_vhosts` | Apache HTTPD |
 
 ### Infrastructure as Code
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `ansible` | `ansible_playbook`, `ansible_inventory`, `ansible_adhoc` | Ansible automation |
@@ -159,6 +164,7 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `git` | `git_status`, `git_log`, `git_diff`, `git_pull`, `git_clone`, `git_branch`, `git_checkout` | Git repositories |
 
 ### Security & Compliance
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `certificates` | `cert_check`, `cert_info`, `cert_expiry` | TLS/SSL certificate inspection |
@@ -168,6 +174,7 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `compliance` | `cis_benchmark`, `stig_check`, `compliance_score`, `compliance_report` | CIS/STIG benchmarks & compliance reporting |
 
 ### Observability & Analysis
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `diagnostics` | `diagnose`, `incident_triage`, `compare_state` | Intelligent root-cause diagnostics & state comparison |
@@ -177,6 +184,7 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `drift` | `env_snapshot`, `env_diff`, `env_drift` | Environment drift detection & snapshot comparison |
 
 ### Cloud & Inventory
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `cloud` | `aws_cli`, `cloud_metadata`, `cloud_tags`, `cloud_cost` | Cloud provider interaction |
@@ -184,6 +192,7 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `multicloud` | `multicloud_list`, `multicloud_sync`, `multicloud_compare` | Multi-cloud resource management |
 
 ### Alerting & Incident Response
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `alerting` | `alert_check`, `alert_list`, `alert_set` | Metric monitoring, threshold checking, alert rules |
@@ -191,6 +200,7 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `incident` | `incident_timeline`, `incident_correlate` | Incident response timeline & log correlation |
 
 ### Multi-host Operations & ChatOps
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `orchestration` | `canary_exec`, `rolling_exec`, `fleet_diff` | Multi-host canary/rolling deployments, fleet comparison |
@@ -200,12 +210,14 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `chatops` | `webhook_send`, `notify` | Slack/Teams/webhook notifications |
 
 ### Config Templates & Interactive
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `templates` | `template_list`, `template_show`, `template_apply`, `template_validate`, `template_diff` | Config template management |
 | `pty` | `pty_exec`, `pty_interact`, `pty_resize` | Interactive PTY sessions |
 
 ### Windows (13 groups)
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `windows_services` | `win_service_status`, `win_service_start`, `win_service_stop`, `win_service_restart`, `win_service_list`, `win_service_enable`, `win_service_disable`, `win_service_config` | Windows service management |
@@ -223,6 +235,7 @@ Use this table to find the right tool for a task. Each tool is prefixed `ssh_`.
 | `windows_process` | `win_process_list`, `win_process_info`, `win_process_kill`, `win_process_top`, `win_process_by_name` | Windows process management |
 
 ### Cross-Platform
+
 | Group | Tools | Use when… |
 |-------|-------|-----------|
 | `config` | `config_get`, `config_set` | Show/modify bridge configuration |
