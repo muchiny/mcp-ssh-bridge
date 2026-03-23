@@ -27,10 +27,20 @@ Without it, Claude cannot reach your servers. With it, Claude can run commands, 
 ```mermaid
 graph LR
     CC[🤖 Claude Code] -->|JSON-RPC stdio| MCP[⚡ MCP SSH Bridge]
+
     MCP -->|SSH| S1[🖥️ Linux Servers]
     MCP -->|SSH| S2[🪟 Windows Servers]
-    MCP -->|SSH| S3[🐳 Docker/K8s]
+    MCP -->|SSH| S3[🐳 Docker / K8s]
     MCP -->|SSH| S4[📡 Network Equipment]
+    MCP -->|WinRM| S5[🪟 Windows WinRM]
+    MCP -->|Telnet| S6[📡 Legacy Devices]
+    MCP -->|NETCONF| S7[🔧 Network YANG]
+    MCP -->|gRPC| S8[⚙️ gRPC Services]
+    MCP -->|K8s API| S9[☸️ K8s Exec]
+    MCP -->|Serial| S10[🔌 Serial Devices]
+    MCP -->|SNMP| S11[📊 SNMP Agents]
+    MCP -->|SSM / Azure / GCP| S12[☁️ Cloud Instances]
+    MCP -->|ZeroMQ / NATS / MQTT| S13[📬 Messaging]
 
     subgraph "Security Layer"
         MCP --- V[🛡️ Validator]
@@ -45,10 +55,30 @@ graph LR
 
 Pick one method:
 
-**From crates.io** (recommended):
+**Prebuilt binaries** (recommended):
+
+Download from [GitHub Releases](https://github.com/muchiny/mcp-ssh-bridge/releases/latest) — available for Linux x86_64, Linux aarch64, macOS x86_64, macOS aarch64, Windows x86_64.
 
 ```bash
-cargo install mcp-ssh-bridge
+# Linux x86_64
+curl -fsSL https://github.com/muchiny/mcp-ssh-bridge/releases/latest/download/mcp-ssh-bridge-linux-x86_64.tar.gz | tar xz
+sudo mv mcp-ssh-bridge /usr/local/bin/
+
+# Linux aarch64 (Raspberry Pi, ARM servers)
+curl -fsSL https://github.com/muchiny/mcp-ssh-bridge/releases/latest/download/mcp-ssh-bridge-linux-arm64.tar.gz | tar xz
+sudo mv mcp-ssh-bridge /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -fsSL https://github.com/muchiny/mcp-ssh-bridge/releases/latest/download/mcp-ssh-bridge-macos-arm64.tar.gz | tar xz
+sudo mv mcp-ssh-bridge /usr/local/bin/
+```
+
+**Claude Desktop (DXT):** Download the `.dxt` file from [Releases](https://github.com/muchiny/mcp-ssh-bridge/releases/latest) and drag-and-drop into Claude Desktop.
+
+**Docker:**
+
+```bash
+docker pull ghcr.io/muchiny/mcp-ssh-bridge:latest
 ```
 
 **From source:**
@@ -58,16 +88,6 @@ git clone https://github.com/muchiny/mcp-ssh-bridge
 cd mcp-ssh-bridge
 make release
 ```
-
-**Prebuilt binaries:** Download from [GitHub Releases](https://github.com/muchiny/mcp-ssh-bridge/releases/latest) (Linux x86_64/aarch64, macOS x86_64/aarch64, Windows x86_64).
-
-**Docker:**
-
-```bash
-docker pull ghcr.io/muchiny/mcp-ssh-bridge:latest
-```
-
-**Claude Desktop (DXT):** Download the `.dxt` file from [Releases](https://github.com/muchiny/mcp-ssh-bridge/releases/latest) and drag-and-drop into Claude Desktop.
 
 ---
 
@@ -368,7 +388,7 @@ tool_groups:
     # ... see config.example.yaml for all 74 groups
 ```
 
-### 🐧 Linux groups (42 groups, 256 tools)
+### 🐧 Linux groups (59 groups, 261 tools)
 
 | Group | Tools |
 |-------|-------|
@@ -431,7 +451,7 @@ tool_groups:
 | `windows_network` | ssh_win_net_ip, ssh_win_net_adapters, ssh_win_net_connections, ssh_win_net_routes, ssh_win_net_ping, ssh_win_net_dns |
 | `windows_process` | ssh_win_process_list, ssh_win_process_top, ssh_win_process_info, ssh_win_process_by_name, ssh_win_process_kill |
 
-### 🆕 New groups (v1.5.0+ — 15 groups, 56 tools)
+### 🆕 Advanced groups (19 groups)
 
 | Group | Tools | Description |
 |-------|-------|-------------|
@@ -537,7 +557,7 @@ make ci-full            # Full CI (ci + hack + geiger)
 make dxt                # Build DXT package for Claude Desktop
 ```
 
-Rust edition 2024, MSRV 1.93+. `#![forbid(unsafe_code)]`. 4782+ tests.
+Rust edition 2024, MSRV 1.94+. `#![forbid(unsafe_code)]`. 5700+ tests.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
