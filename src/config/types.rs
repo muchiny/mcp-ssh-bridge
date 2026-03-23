@@ -303,6 +303,16 @@ pub enum Protocol {
     /// GCP OS Command — execute commands on GCP VMs via `gcloud` CLI
     #[cfg(feature = "gcp")]
     Gcp,
+    /// ZeroMQ — fleet-scale command execution via REQ/REP sockets
+    #[cfg(feature = "zeromq")]
+    #[serde(alias = "zmq")]
+    ZeroMq,
+    /// NATS — event-driven command execution via request/reply
+    #[cfg(feature = "nats")]
+    Nats,
+    /// MQTT — IoT/Edge command execution via pub/sub
+    #[cfg(feature = "mqtt")]
+    Mqtt,
 }
 
 const fn default_port() -> u16 {

@@ -148,6 +148,27 @@ impl ExecutorRouter {
                     .await?;
                 Ok(ConnectionGuard::Gcp(conn))
             }
+            #[cfg(feature = "zeromq")]
+            Protocol::ZeroMq => {
+                let conn =
+                    crate::zmq_exec::ZmqConnection::connect(host_name, host_config, limits)
+                        .await?;
+                Ok(ConnectionGuard::ZeroMq(conn))
+            }
+            #[cfg(feature = "nats")]
+            Protocol::Nats => {
+                let conn =
+                    crate::nats_exec::NatsConnection::connect(host_name, host_config, limits)
+                        .await?;
+                Ok(ConnectionGuard::Nats(conn))
+            }
+            #[cfg(feature = "mqtt")]
+            Protocol::Mqtt => {
+                let conn =
+                    crate::mqtt_exec::MqttConnection::connect(host_name, host_config, limits)
+                        .await?;
+                Ok(ConnectionGuard::Mqtt(conn))
+            }
         }
     }
 
@@ -211,6 +232,15 @@ pub enum ConnectionGuard<'a> {
     /// GCP OS Command (`gcloud` CLI).
     #[cfg(feature = "gcp")]
     Gcp(crate::cloud_exec::gcp::GcpRunConnection),
+    /// ZeroMQ REQ/REP (fleet-scale messaging).
+    #[cfg(feature = "zeromq")]
+    ZeroMq(crate::zmq_exec::ZmqConnection),
+    /// NATS request/reply (event-driven messaging).
+    #[cfg(feature = "nats")]
+    Nats(crate::nats_exec::NatsConnection),
+    /// MQTT pub/sub (IoT/Edge messaging).
+    #[cfg(feature = "mqtt")]
+    Mqtt(crate::mqtt_exec::MqttConnection),
 }
 
 impl ConnectionGuard<'_> {
@@ -246,6 +276,12 @@ impl ConnectionGuard<'_> {
             Self::Azure(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "gcp")]
             Self::Gcp(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "zeromq")]
+            Self::ZeroMq(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "nats")]
+            Self::Nats(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "mqtt")]
+            Self::Mqtt(conn) => conn.exec(command, limits).await,
         }
     }
 
@@ -273,6 +309,12 @@ impl ConnectionGuard<'_> {
             Self::Azure(conn) => conn.mark_failed(),
             #[cfg(feature = "gcp")]
             Self::Gcp(conn) => conn.mark_failed(),
+            #[cfg(feature = "zeromq")]
+            Self::ZeroMq(conn) => conn.mark_failed(),
+            #[cfg(feature = "nats")]
+            Self::Nats(conn) => conn.mark_failed(),
+            #[cfg(feature = "mqtt")]
+            Self::Mqtt(conn) => conn.mark_failed(),
         }
     }
 }

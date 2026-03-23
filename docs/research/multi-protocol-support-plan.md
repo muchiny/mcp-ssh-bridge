@@ -212,13 +212,30 @@ pub executor: Arc<dyn SshExecutor>,  // ExecutorRouter implémente SshExecutor
 
 **Bundle**: `cloud = ["ssm", "azure", "gcp"]`
 
-### Phase 5 : Messaging-based Adapters (nécessite agent distant)
+### Phase 5 : Messaging-based Adapters (nécessite agent distant) ✅ DONE
 
 > Ces adapters nécessitent un **agent/daemon custom** installé sur les machines cibles.
 
-- ZeroMQ adapter (`src/zmq_exec/`) — `zeromq`
-- NATS adapter (`src/nats_exec/`) — `async-nats`
-- MQTT adapter (`src/mqtt_exec/`) — `rumqttc` (IoT/edge uniquement)
+**5.1 — ZeroMQ Adapter** (`src/zmq_exec/mod.rs`)
+- Uses `zeromq` crate (pure-Rust async ZeroMQ)
+- REQ/REP pattern: send JSON command, receive JSON response
+- Host mapping: `hostname` → agent address, `port` → agent port (default: 4506)
+- Feature: `zeromq = ["dep:zeromq"]`
+
+**5.2 — NATS Adapter** (`src/nats_exec/mod.rs`)
+- Uses `async-nats` crate (native async)
+- Request/reply on subject `mcp.exec.<host_identity>`
+- Host mapping: `hostname` → NATS server, `user` → target identity
+- Feature: `nats = ["dep:async-nats"]`
+
+**5.3 — MQTT Adapter** (`src/mqtt_exec/mod.rs`)
+- Uses `rumqttc` crate (async MQTT v3.1.1/v5)
+- Pub/sub RPC: publish to `mcp/exec/<device>`, subscribe to `mcp/resp/<device>`
+- Request ID correlation for concurrent commands
+- Host mapping: `hostname` → broker, `user` → device identity
+- Feature: `mqtt = ["dep:rumqttc"]`
+
+**Bundle**: `messaging = ["zeromq", "nats", "mqtt"]`
 
 ## Feature Flags (`Cargo.toml`)
 

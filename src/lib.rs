@@ -30,8 +30,14 @@ pub mod serial_port;
 pub mod snmp_client;
 #[cfg(feature = "telnet")]
 pub mod telnet;
+#[cfg(feature = "mqtt")]
+pub mod mqtt_exec;
+#[cfg(feature = "nats")]
+pub mod nats_exec;
 #[cfg(feature = "ssm")]
 pub mod ssm;
+#[cfg(feature = "zeromq")]
+pub mod zmq_exec;
 #[cfg(any(feature = "azure", feature = "gcp"))]
 pub mod cloud_exec;
 #[cfg(feature = "winrm")]

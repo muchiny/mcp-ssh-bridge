@@ -40,10 +40,16 @@ azure = ["dep:reqwest"]
 gcp = []
 cloud = ["ssm", "azure", "gcp"]
 
+# Protocol adapters (Tier 4 — Messaging, requires remote agent)
+zeromq = ["dep:zeromq"]
+nats = ["dep:async-nats"]
+mqtt = ["dep:rumqttc"]
+messaging = ["zeromq", "nats", "mqtt"]
+
 # Bundles
 full = ["cli", "mimalloc", "http"]
 air-gapped = ["winrm", "telnet", "netconf"]
-all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "snmp", "ssm", "azure", "gcp"]
+all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "snmp", "ssm", "azure", "gcp", "zeromq", "nats", "mqtt"]
 
 [dependencies]
 # Async runtime (explicit features instead of "full" for smaller binary)
@@ -129,6 +135,15 @@ snmp = { version = "0.2", optional = true }
 # AWS SSM adapter (optional) — cloud command execution via Systems Manager
 aws-sdk-ssm = { version = "1", optional = true }
 aws-config = { version = "1", features = ["behavior-version-latest"], optional = true }
+
+# ZeroMQ adapter (optional) — fleet-scale messaging (SaltStack model)
+zeromq = { version = "0.4", optional = true }
+
+# NATS adapter (optional) — event-driven messaging
+async-nats = { version = "0.38", optional = true }
+
+# MQTT adapter (optional) — IoT/Edge messaging
+rumqttc = { version = "0.24", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
