@@ -535,6 +535,7 @@ dxt: release
 ### Passage de 262 → 286 tools, de 47 → 53 groupes
 
 ### Aucune nouvelle dépendance Cargo requise
+
 Tout est implémenté avec les crates existantes (serde, sha2/hmac pour hash-chain, regex pour entropy).
 
 ---

@@ -85,6 +85,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 **Pattern de référence** : `ssh_docker_logs.rs`
 
 ### Bilan Phase 1
+
 - **+11 tools** (281 → 292)
 - **+3 groupes** (`cron_analysis`, `performance`, `container_logs`)
 - **~180 nouveaux tests**
@@ -138,6 +139,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 **Config** : `ComplianceConfig` avec `profiles_dir`
 
 ### Bilan Phase 2
+
 - **+8 tools** (292 → 300)
 - **+1 groupe** (`network_security`), 1 étendu (`security_scan`)
 - **~130 nouveaux tests**
@@ -203,6 +205,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 **Groupe** : `multicloud`
 
 ### Bilan Phase 3
+
 - **+10 tools** (300 → 310)
 - **+3 groupes** (`cloud`, `inventory`, `multicloud`)
 - **~170 nouveaux tests**
@@ -266,6 +269,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 **Groupe** : étend `diagnostics`
 
 ### Bilan Phase 4
+
 - **+8 tools** (310 → 318)
 - **+2 groupes** (`alerting`, `capacity`), 1 étendu (`diagnostics`)
 - **~140 nouveaux tests**
@@ -346,6 +350,7 @@ Fichiers modifiés pour CHAQUE nouveau tool :
 **Sécurité** : HTTPS only pour les webhooks, sanitization du payload.
 
 ### Bilan Phase 5
+
 - **+11 tools** (318 → 329)
 - **+3 groupes** (`log_aggregation`, `key_management`, `chatops`), 1 étendu (`backup`)
 - **~190 nouveaux tests**
@@ -397,6 +402,7 @@ Pas de nouveaux tools — c'est un renforcement sécurité au niveau protocole.
 - `src/mcp/tool_handlers/utils.rs` — `validate_path` étendu avec roots optionnel
 
 ### Bilan Phase 6
+
 - **+5 tools** (329 → 334)
 - **+1 groupe** (`templates`)
 - **~120 nouveaux tests**
@@ -435,6 +441,7 @@ Pas de nouveaux tools — c'est un renforcement sécurité au niveau protocole.
 - Sessions trackées dans `SessionManager` avec auto-close
 
 ### Bilan Phase 7
+
 - **+3 tools** (334 → 337)
 - **+1 groupe** (`pty`)
 - **~80 nouveaux tests**

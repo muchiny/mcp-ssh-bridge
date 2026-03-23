@@ -82,6 +82,7 @@ dist/mcp-ssh-bridge.dxt
 ## 🖥️ How to Install in Claude Desktop
 
 1. **Build the package:**
+
    ```bash
    make dxt
    ```

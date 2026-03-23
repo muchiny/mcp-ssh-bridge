@@ -45,9 +45,11 @@ Votre projet est **déjà très avancé** :
 ### 🔴 PRIORITÉ HAUTE — Différenciateurs concurrentiels
 
 #### 1. ~~MCP Structured Output~~ ✅ DÉJÀ IMPLÉMENTÉ
+
 - `structuredContent` + `output_schema` implémentés dans `protocol.rs` et `ports/protocol.rs` avec tests.
 
 #### 2. **Multi-Host Orchestration Intelligente (Fan-out/Fan-in)**
+
 - **Quoi** : Exécuter une commande/workflow sur N hosts en parallèle avec agrégation des résultats, diff entre hosts, et détection d'anomalies.
 - **Pourquoi** : Ansible fait ça. `ssh_exec_multi` existe mais c'est basique. Il manque : rolling updates, canary execution (1 host d'abord, puis les autres si OK), result diffing, conditional execution.
 - **Concurrents** : Ansible, Fabric, pdsh, pssh, Rundeck — tous offrent du fan-out avancé.
@@ -57,6 +59,7 @@ Votre projet est **déjà très avancé** :
   - `ssh_rolling_exec` — rolling execution avec rollback automatique si erreur
 
 #### 3. **Runbook Engine / Workflow Automation**
+
 - **Quoi** : Définir et exécuter des runbooks YAML (séquences d'opérations avec conditions, boucles, rollback).
 - **Pourquoi** : C'est le coeur de Rundeck, StackStorm, PagerDuty Runbook Automation. Un MCP SSH Bridge sans runbooks est un "couteau sans manche" pour le SRE.
 - **Features** :
@@ -67,6 +70,7 @@ Votre projet est **déjà très avancé** :
   - Intégration avec MCP Tasks pour le suivi async
 
 #### 4. **Intelligent Diagnostics / Root Cause Analysis**
+
 - **Quoi** : Toolchain automatisée de diagnostic qui combine multiple checks en un seul appel intelligent.
 - **Pourquoi** : Au lieu que Claude fasse 15 appels séquentiels (check CPU → check mem → check disk → check logs → check services...), un outil intelligent le fait en un shot.
 - **Features** :
@@ -75,10 +79,12 @@ Votre projet est **déjà très avancé** :
   - `ssh_compare_state` — comparer l'état actuel vs un baseline connu
 
 #### 5. ~~SSH Jump Host / Bastion / ProxyJump~~ ✅ DÉJÀ IMPLÉMENTÉ
+
 - ProxyJump + SOCKS4/SOCKS5 proxy déjà supportés dans `src/ssh/` et `src/config/types.rs`.
 - **Amélioration possible** : Support des chaînes multi-hop (bastion1 → bastion2 → target) si pas déjà fait.
 
 #### 6. ~~Streamable HTTP Transport~~ ✅ DÉJÀ IMPLÉMENTÉ
+
 - `src/mcp/transport/http.rs` implémente "Streamable HTTP Transport (MCP 2025-11-25)".
 - Type déclaré : `"streamable-http"`. Déjà le standard actuel, pas du SSE legacy.
 
@@ -87,6 +93,7 @@ Votre projet est **déjà très avancé** :
 ### 🟠 PRIORITÉ MOYENNE — Features attendues par le marché
 
 #### 7. **File Diff & Patch**
+
 - **Quoi** : Outils pour comparer des fichiers, générer des diffs, et appliquer des patches à distance.
 - **Features** :
   - `ssh_file_diff` — diff entre 2 fichiers (même host ou cross-host)
@@ -95,6 +102,7 @@ Votre projet est **déjà très avancé** :
   - `ssh_file_search` — grep/ripgrep à distance avec contexte
 
 #### 8. **Session Recording & Replay**
+
 - **Quoi** : Enregistrer toutes les commandes et outputs dans un format rejouable (asciinema-like).
 - **Pourquoi** : Compliance (SOC2, HIPAA, PCI-DSS), audit post-incident, training.
 - **Features** :
@@ -104,6 +112,7 @@ Votre projet est **déjà très avancé** :
   - Masquage automatique des secrets dans les recordings
 
 #### 9. **Secrets Detection & Masking**
+
 - **Quoi** : Détecter automatiquement les secrets dans les outputs (tokens, passwords, API keys, private keys) et les masquer.
 - **Pourquoi** : Le sanitizer actuel est basique. Des outils comme gitleaks, truffleHog, detect-secrets font ça beaucoup mieux.
 - **Features** :
@@ -113,6 +122,7 @@ Votre projet est **déjà très avancé** :
   - Whitelist pour les faux positifs
 
 #### 10. **Container Log Analysis**
+
 - **Quoi** : Outils spécialisés pour analyser les logs de containers Docker/K8s (pas juste `docker logs`).
 - **Features** :
   - `ssh_container_log_search` — chercher dans les logs avec filtres avancés (time range, severity, pattern)
@@ -121,6 +131,7 @@ Votre projet est **déjà très avancé** :
   - `ssh_container_health_history` — historique des health checks
 
 #### 11. **SBOM & Vulnerability Scanning**
+
 - **Quoi** : Inventaire logiciel et scan de vulnérabilités sur les hosts distants.
 - **Features** :
   - `ssh_sbom_generate` — générer un SBOM (packages installés, versions)
@@ -128,6 +139,7 @@ Votre projet est **déjà très avancé** :
   - `ssh_compliance_check` — vérifier la conformité (CIS benchmarks, STIG)
 
 #### 12. **Cloud Provider Integration**
+
 - **Quoi** : Outils pour interagir avec les APIs cloud (AWS, GCP, Azure) via le SSH host.
 - **Features** :
   - `ssh_aws_cli` — exécuter des commandes AWS CLI
@@ -136,6 +148,7 @@ Votre projet est **déjà très avancé** :
   - `ssh_cloud_cost` — coûts de l'instance
 
 #### 13. **Intelligent Cron/Job Analysis**
+
 - **Quoi** : Au-delà de `ssh_cron_list`, analyser les jobs planifiés pour détecter les problèmes.
 - **Features** :
   - `ssh_cron_analyze` — détecter overlaps, jobs qui échouent silencieusement, jobs qui ne s'exécutent jamais
@@ -143,6 +156,7 @@ Votre projet est **déjà très avancé** :
   - `ssh_at_jobs` — gérer les jobs `at` en plus de cron
 
 #### 14. **Network Security Analysis**
+
 - **Quoi** : Outils de sécurité réseau avancés.
 - **Features** :
   - `ssh_port_scan` — scanner les ports ouverts sur le host (nmap-like)
@@ -151,6 +165,7 @@ Votre projet est **déjà très avancé** :
   - `ssh_fail2ban_status` — état de fail2ban/denyhosts
 
 #### 15. **Performance Profiling**
+
 - **Quoi** : Outils de profiling système avancés.
 - **Features** :
   - `ssh_perf_trace` — tracer les syscalls d'un process (strace-like, limité en durée)
@@ -163,15 +178,18 @@ Votre projet est **déjà très avancé** :
 ### 🟡 PRIORITÉ BASSE — Nice-to-have / Innovation
 
 #### 16. **MCP Roots Support**
+
 - **Quoi** : Implémenter le support des MCP Roots pour restreindre les opérations fichiers aux répertoires déclarés par le client.
 - **Status** : Partiellement implémenté (instructions mentionnent ROOTS) mais pas clair si c'est vraiment enforced.
 
 #### 17. **Interactive Terminal (Pseudo-PTY)**
+
 - **Quoi** : Mode terminal interactif via SSH (PTY allocation) pour les commandes qui nécessitent un terminal.
 - **Pourquoi** : Certaines commandes (vim, top interactif, passwd) nécessitent un PTY. Rare mais parfois nécessaire.
 - **Limitation** : Difficile avec le modèle MCP request/response. Possible via Resources en streaming.
 
 #### 18. **Configuration Templates Library**
+
 - **Quoi** : Bibliothèque de templates de configuration pour services communs.
 - **Features** :
   - Templates Nginx, Apache, PostgreSQL, MySQL, Redis
@@ -179,6 +197,7 @@ Votre projet est **déjà très avancé** :
   - Validation de configs avant application
 
 #### 19. **Host Discovery & Inventory**
+
 - **Quoi** : Découvrir automatiquement les hosts dans un réseau (scan, DNS, cloud API).
 - **Features** :
   - `ssh_discover_hosts` — scanner un subnet pour les hosts SSH
@@ -186,6 +205,7 @@ Votre projet est **déjà très avancé** :
   - `ssh_host_tags` — taguer les hosts pour filtrage
 
 #### 20. **Alerting & Thresholds**
+
 - **Quoi** : Définir des seuils sur les métriques et envoyer des alertes.
 - **Features** :
   - `ssh_alert_set` — définir un seuil (CPU > 90%, disk > 85%)
@@ -194,6 +214,7 @@ Votre projet est **déjà très avancé** :
   - Intégration avec MCP Notifications pour les alertes
 
 #### 21. **Environment Diff / Drift Detection**
+
 - **Quoi** : Comparer la configuration de 2 environnements (staging vs prod, old vs new).
 - **Features** :
   - `ssh_env_snapshot` — snapshot complet d'un host (packages, configs, services, users)
@@ -201,12 +222,14 @@ Votre projet est **déjà très avancé** :
   - `ssh_env_drift` — détecter la dérive vs un state désiré
 
 #### 22. **Log Forwarding & Aggregation**
+
 - **Quoi** : Agréger les logs de multiple hosts en un seul stream.
 - **Features** :
   - `ssh_log_aggregate` — collecter les logs de N hosts avec un filtre
   - `ssh_log_correlate` — corréler des événements entre hosts par timestamp
 
 #### 23. **Database Migration Tools**
+
 - **Quoi** : Au-delà de query/dump/restore, des outils de migration.
 - **Features** :
   - `ssh_db_migrate` — exécuter des migrations (flyway, liquibase style)
@@ -214,10 +237,12 @@ Votre projet est **déjà très avancé** :
   - `ssh_db_slow_queries` — analyser les slow queries
 
 #### 24. **Webhook / Callback Support**
+
 - **Quoi** : Permettre de déclencher des webhooks quand certains événements se produisent.
 - **Pourquoi** : Intégration avec Slack, PagerDuty, Opsgenie, etc.
 
 #### 25. **Multi-Cloud / Hybrid Support**
+
 - **Quoi** : Outils spécialisés pour les environnements hybrides.
 - **Features** :
   - Support WinRM en plus de SSH pour Windows

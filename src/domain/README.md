@@ -564,7 +564,7 @@ Builds comprehensive diagnostic commands that collect multiple system metrics in
 | `oom` / `memory` | Memory detail, top mem processes, OOM kills, swap |
 | `disk` / `storage` | Disk usage, inode usage, large files, disk errors |
 | `network` / `connectivity` | Interfaces, routes, DNS, listeners, dropped packets |
-| _(other)_ | General triage with failed services and recent errors |
+| *(other)* | General triage with failed services and recent errors |
 
 ## 🚀 OrchestrationCommandBuilder (`use_cases/orchestration.rs`)
 
@@ -618,7 +618,7 @@ Builds commands for software inventory (SBOM), vulnerability scanning, and CIS c
 | Profile | Checks Performed |
 |---------|-----------------|
 | `cis-level1` / `cis-level2` | File permissions, SSH configuration, firewall status, password policy, core dump limits, sysctl security settings |
-| _(other)_ | Basic compliance: `/etc/passwd` + `/etc/shadow` permissions, `PermitRootLogin` check |
+| *(other)* | Basic compliance: `/etc/passwd` + `/etc/shadow` permissions, `PermitRootLogin` check |
 
 ## 📓 Runbook Engine (`domain/runbook.rs`)
 
