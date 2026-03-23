@@ -103,6 +103,27 @@ impl ExecutorRouter {
                         .await?;
                 Ok(ConnectionGuard::Grpc(conn))
             }
+            #[cfg(feature = "k8s-exec")]
+            Protocol::K8sExec => {
+                let conn =
+                    crate::k8s_exec::K8sExecConnection::connect(host_name, host_config, limits)
+                        .await?;
+                Ok(ConnectionGuard::K8sExec(conn))
+            }
+            #[cfg(feature = "serial")]
+            Protocol::Serial => {
+                let conn =
+                    crate::serial_port::SerialConnection::connect(host_name, host_config, limits)
+                        .await?;
+                Ok(ConnectionGuard::Serial(conn))
+            }
+            #[cfg(feature = "snmp")]
+            Protocol::Snmp => {
+                let conn =
+                    crate::snmp_client::SnmpConnection::connect(host_name, host_config, limits)
+                        .await?;
+                Ok(ConnectionGuard::Snmp(conn))
+            }
         }
     }
 
@@ -148,6 +169,15 @@ pub enum ConnectionGuard<'a> {
     /// gRPC channel (HTTP/2).
     #[cfg(feature = "grpc")]
     Grpc(crate::grpc_exec::GrpcConnection),
+    /// Kubernetes Exec (direct K8s API pod exec).
+    #[cfg(feature = "k8s-exec")]
+    K8sExec(crate::k8s_exec::K8sExecConnection),
+    /// Serial port (RS-232/USB).
+    #[cfg(feature = "serial")]
+    Serial(crate::serial_port::SerialConnection),
+    /// SNMP session (v1/v2c UDP).
+    #[cfg(feature = "snmp")]
+    Snmp(crate::snmp_client::SnmpConnection),
 }
 
 impl ConnectionGuard<'_> {
@@ -171,6 +201,12 @@ impl ConnectionGuard<'_> {
             Self::Netconf(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "grpc")]
             Self::Grpc(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "k8s-exec")]
+            Self::K8sExec(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "serial")]
+            Self::Serial(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "snmp")]
+            Self::Snmp(conn) => conn.exec(command, limits).await,
         }
     }
 
@@ -186,6 +222,12 @@ impl ConnectionGuard<'_> {
             Self::Netconf(conn) => conn.mark_failed(),
             #[cfg(feature = "grpc")]
             Self::Grpc(conn) => conn.mark_failed(),
+            #[cfg(feature = "k8s-exec")]
+            Self::K8sExec(conn) => conn.mark_failed(),
+            #[cfg(feature = "serial")]
+            Self::Serial(conn) => conn.mark_failed(),
+            #[cfg(feature = "snmp")]
+            Self::Snmp(conn) => conn.mark_failed(),
         }
     }
 }

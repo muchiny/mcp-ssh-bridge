@@ -20,8 +20,14 @@ pub mod ssh;
 
 #[cfg(feature = "grpc")]
 pub mod grpc_exec;
+#[cfg(feature = "k8s-exec")]
+pub mod k8s_exec;
 #[cfg(feature = "netconf")]
 pub mod netconf;
+#[cfg(feature = "serial")]
+pub mod serial_port;
+#[cfg(feature = "snmp")]
+pub mod snmp_client;
 #[cfg(feature = "telnet")]
 pub mod telnet;
 #[cfg(feature = "winrm")]

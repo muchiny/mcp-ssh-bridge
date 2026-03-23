@@ -29,10 +29,15 @@ telnet = ["dep:mini-telnet"]
 netconf = ["dep:netconf-rs"]
 grpc = ["dep:tonic", "dep:prost"]
 
+# Protocol adapters (Tier 2)
+k8s-exec = ["dep:kube", "dep:k8s-openapi"]
+serial = ["dep:tokio-serial"]
+snmp = ["dep:snmp"]
+
 # Bundles
 full = ["cli", "mimalloc", "http"]
 air-gapped = ["winrm", "telnet", "netconf"]
-all-protocols = ["winrm", "telnet", "netconf", "grpc"]
+all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "snmp"]
 
 [dependencies]
 # Async runtime (explicit features instead of "full" for smaller binary)
@@ -104,6 +109,16 @@ netconf-rs = { version = "0.2", optional = true }
 # gRPC adapter (optional) — cloud-native remote execution
 tonic = { version = "0.12", optional = true }
 prost = { version = "0.13", optional = true }
+
+# Kubernetes Exec adapter (optional) — direct pod exec via K8s API
+kube = { version = "0.98", default-features = false, features = ["client", "rustls-tls", "ws"], optional = true }
+k8s-openapi = { version = "0.24", features = ["v1_32"], optional = true }
+
+# Serial adapter (optional) — serial port communication (PLCs, embedded, console)
+tokio-serial = { version = "5.4", optional = true }
+
+# SNMP adapter (optional) — SNMP v1/v2c network monitoring
+snmp = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

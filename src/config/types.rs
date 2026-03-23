@@ -284,6 +284,16 @@ pub enum Protocol {
     /// gRPC — cloud-native remote execution via gRPC service
     #[cfg(feature = "grpc")]
     Grpc,
+    /// Kubernetes Exec — direct pod command execution via K8s API
+    #[cfg(feature = "k8s-exec")]
+    #[serde(alias = "kubernetes", alias = "k8s")]
+    K8sExec,
+    /// Serial — RS-232/USB serial port communication (PLCs, embedded, console)
+    #[cfg(feature = "serial")]
+    Serial,
+    /// SNMP — Simple Network Management Protocol (v1/v2c) for network devices
+    #[cfg(feature = "snmp")]
+    Snmp,
 }
 
 const fn default_port() -> u16 {
