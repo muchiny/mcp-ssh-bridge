@@ -33,18 +33,17 @@ fn is_valid_binary_path(bin: &str) -> bool {
 /// by probing for `docker` or `podman`.
 #[must_use]
 pub fn docker_detect_prefix(docker_bin: Option<&str>) -> String {
-    if let Some(bin) = docker_bin {
-        if is_valid_binary_path(bin) {
-            format!("{bin} ")
-        } else {
-            // Invalid binary path, fall back to auto-detection
-            docker_detect_prefix(None)
-        }
-    } else {
-        "$(if command -v docker &>/dev/null; then echo docker; \
+    let Some(bin) = docker_bin else {
+        return "$(if command -v docker &>/dev/null; then echo docker; \
          elif command -v podman &>/dev/null; then echo podman; \
          else echo ERROR_DOCKER_NOT_FOUND; fi) "
-            .to_string()
+            .to_string();
+    };
+    if is_valid_binary_path(bin) {
+        format!("{bin} ")
+    } else {
+        // Invalid binary path, fall back to auto-detection
+        docker_detect_prefix(None)
     }
 }
 
@@ -54,18 +53,17 @@ pub fn docker_detect_prefix(docker_bin: Option<&str>) -> String {
 /// `docker compose` (v2 plugin) or `docker-compose` (v1 standalone).
 #[must_use]
 pub fn docker_compose_detect_prefix(compose_bin: Option<&str>) -> String {
-    if let Some(bin) = compose_bin {
-        if is_valid_binary_path(bin) {
-            format!("{bin} ")
-        } else {
-            // Invalid binary path, fall back to auto-detection
-            docker_compose_detect_prefix(None)
-        }
-    } else {
-        "$(if docker compose version &>/dev/null 2>&1; then echo 'docker compose'; \
+    let Some(bin) = compose_bin else {
+        return "$(if docker compose version &>/dev/null 2>&1; then echo 'docker compose'; \
          elif command -v docker-compose &>/dev/null; then echo docker-compose; \
          else echo ERROR_DOCKER_COMPOSE_NOT_FOUND; fi) "
-            .to_string()
+            .to_string();
+    };
+    if is_valid_binary_path(bin) {
+        format!("{bin} ")
+    } else {
+        // Invalid binary path, fall back to auto-detection
+        docker_compose_detect_prefix(None)
     }
 }
 

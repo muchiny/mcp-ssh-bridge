@@ -3,11 +3,6 @@
 //! Concrete implementation of the `SshConnector` and `SshClientTrait` ports
 //! using the russh SSH client.
 
-use std::future::Future;
-use std::pin::Pin;
-
-use async_trait::async_trait;
-
 use crate::config::{HostConfig, LimitsConfig};
 use crate::error::Result;
 use crate::ports::{SshClientTrait, SshConnector};
@@ -24,7 +19,6 @@ impl RealSshConnector {
     }
 }
 
-#[async_trait]
 impl SshConnector for RealSshConnector {
     type Client = SshClient;
 
@@ -49,7 +43,6 @@ impl SshConnector for RealSshConnector {
     }
 }
 
-#[async_trait]
 impl SshClientTrait for SshClient {
     async fn exec(&self, command: &str, limits: &LimitsConfig) -> Result<CommandOutput> {
         self.exec(command, limits).await
@@ -63,8 +56,8 @@ impl SshClientTrait for SshClient {
         self.host_name()
     }
 
-    fn close(self) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
-        Box::pin(async move { self.close().await })
+    async fn close(self) -> Result<()> {
+        self.close().await
     }
 }
 

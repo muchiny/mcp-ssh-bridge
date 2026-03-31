@@ -158,7 +158,7 @@ impl K8sExecConnection {
             0
         };
 
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(clippy::cast_possible_truncation)]
         let duration_ms = start.elapsed().as_millis() as u64;
 
         Ok(CommandOutput {

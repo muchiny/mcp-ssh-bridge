@@ -74,7 +74,7 @@ impl GrpcConnection {
     /// # Errors
     ///
     /// Returns an error if the RPC call fails.
-    #[allow(clippy::unused_async)]
+    #[expect(clippy::unused_async)]
     pub async fn exec(&mut self, command: &str, _limits: &LimitsConfig) -> Result<CommandOutput> {
         let start = Instant::now();
 
@@ -99,7 +99,7 @@ impl GrpcConnection {
         let _ = request;
         let _ = &self.channel;
 
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(clippy::cast_possible_truncation)]
         let duration_ms = start.elapsed().as_millis() as u64;
 
         // Placeholder: return an error indicating the proto service is not configured

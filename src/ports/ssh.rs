@@ -35,6 +35,11 @@ impl From<crate::ssh::CommandOutput> for CommandOutput {
 /// This trait abstracts the SSH client implementation, allowing
 /// for easy testing with mock implementations and potential
 /// alternative SSH backends.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not implement `SshExecutor`",
+    label = "this type cannot be used as an SSH executor",
+    note = "implement execute(), upload(), download(), and is_reachable()"
+)]
 #[async_trait]
 pub trait SshExecutor: Send + Sync {
     /// Execute a command on the specified host

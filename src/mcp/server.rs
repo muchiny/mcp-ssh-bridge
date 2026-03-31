@@ -315,12 +315,9 @@ impl McpServer {
                     WriterMessage::Request(r) => serde_json::to_string(&r),
                     WriterMessage::BatchResponse(responses) => serde_json::to_string(responses),
                 };
-                let json_str = match json_str {
-                    Ok(s) => s,
-                    Err(e) => {
-                        error!(error = %e, "Failed to serialize message");
-                        continue;
-                    }
+                let Ok(json_str) = json_str else {
+                    error!("Failed to serialize message");
+                    continue;
                 };
                 debug!(message = %json_str, "Sending message");
 

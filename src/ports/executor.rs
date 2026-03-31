@@ -21,6 +21,11 @@ use super::ssh::CommandOutput;
 ///
 /// The existing `SshExecutor` trait is preserved for backward compatibility;
 /// this trait adds protocol-awareness metadata.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not implement `RemoteExecutor`",
+    label = "this type cannot be used as a protocol adapter",
+    note = "implement execute(), upload(), download(), is_reachable(), protocol_name(), and supports_file_transfer()"
+)]
 #[async_trait]
 pub trait RemoteExecutor: Send + Sync {
     /// Execute a command on the specified host.

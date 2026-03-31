@@ -36,7 +36,7 @@ impl AnsibleCommandBuilder {
     /// [-e key=value ...] [--check] [--diff] [-v..vvvv] [-f {forks}]
     /// [-b] [--become-user {user}]`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn build_playbook_command(
         playbook: &str,
         inventory: Option<&str>,
@@ -120,7 +120,7 @@ impl AnsibleCommandBuilder {
     ///
     /// If none of `list`, `graph`, or `host_pattern` is set, defaults to `--list`.
     #[must_use]
-    #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     pub fn build_inventory_command(
         inventory: Option<&str>,
         list: bool,
@@ -176,7 +176,7 @@ impl AnsibleCommandBuilder {
     /// [-b] [--become-user {user}] [-u {user}] [-f {forks}]
     /// [-v..vvvv] [-C]`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn build_adhoc_command(
         pattern: &str,
         module: &str,

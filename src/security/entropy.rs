@@ -59,7 +59,7 @@ impl EntropyDetector {
     /// - Base64 secrets: 5.0-6.0 bits
     /// - Random bytes (base64): ~5.95 bits
     #[must_use]
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(clippy::cast_precision_loss)]
     pub fn shannon_entropy(s: &str) -> f64 {
         if s.is_empty() {
             return 0.0;

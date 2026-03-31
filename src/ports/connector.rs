@@ -4,9 +4,6 @@
 //! abstracting away the underlying SSH implementation for testability.
 
 use std::future::Future;
-use std::pin::Pin;
-
-use async_trait::async_trait;
 
 use crate::config::{HostConfig, LimitsConfig};
 use crate::error::Result;
@@ -16,7 +13,6 @@ use crate::ssh::CommandOutput;
 ///
 /// This trait abstracts the SSH connection creation, allowing for
 /// mock implementations in tests without requiring real SSH servers.
-#[async_trait]
 pub trait SshConnector: Send + Sync {
     /// The type of client returned by this connector
     type Client: SshClientTrait;
@@ -27,12 +23,12 @@ pub trait SshConnector: Send + Sync {
     /// * `host_name` - The host alias as defined in configuration
     /// * `host` - The host configuration
     /// * `limits` - Connection and command limits
-    async fn connect(
+    fn connect(
         &self,
         host_name: &str,
         host: &HostConfig,
         limits: &LimitsConfig,
-    ) -> Result<Self::Client>;
+    ) -> impl Future<Output = Result<Self::Client>> + Send;
 
     /// Connect to a host through a jump host (bastion)
     ///
@@ -42,33 +38,36 @@ pub trait SshConnector: Send + Sync {
     /// * `jump_host_name` - The jump host alias
     /// * `jump_host` - The jump host configuration
     /// * `limits` - Connection and command limits
-    async fn connect_via_jump(
+    fn connect_via_jump(
         &self,
         host_name: &str,
         host: &HostConfig,
         jump_host_name: &str,
         jump_host: &HostConfig,
         limits: &LimitsConfig,
-    ) -> Result<Self::Client>;
+    ) -> impl Future<Output = Result<Self::Client>> + Send;
 }
 
 /// Trait for SSH client operations
 ///
 /// This trait abstracts operations on an established SSH connection,
 /// allowing for mock implementations in tests.
-#[async_trait]
 pub trait SshClientTrait: Send + Sync {
     /// Execute a command on the remote host
-    async fn exec(&self, command: &str, limits: &LimitsConfig) -> Result<CommandOutput>;
+    fn exec(
+        &self,
+        command: &str,
+        limits: &LimitsConfig,
+    ) -> impl Future<Output = Result<CommandOutput>> + Send;
 
     /// Check if the connection is still alive
-    async fn is_connected(&self) -> bool;
+    fn is_connected(&self) -> impl Future<Output = bool> + Send;
 
     /// Get the host name
     fn host_name(&self) -> &str;
 
     /// Close the connection
-    fn close(self) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+    fn close(self) -> impl Future<Output = Result<()>> + Send;
 }
 
 #[cfg(test)]
@@ -182,7 +181,6 @@ pub mod mock {
         }
     }
 
-    #[async_trait]
     impl SshConnector for MockSshConnector {
         type Client = MockSshClient;
 
@@ -337,7 +335,6 @@ pub mod mock {
         }
     }
 
-    #[async_trait]
     impl SshClientTrait for MockSshClient {
         async fn exec(&self, command: &str, _limits: &LimitsConfig) -> Result<CommandOutput> {
             // Record the exec call
@@ -359,12 +356,9 @@ pub mod mock {
             &self.host_name
         }
 
-        fn close(self) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
-            let closed = self.closed.clone();
-            Box::pin(async move {
-                closed.store(true, Ordering::SeqCst);
-                Ok(())
-            })
+        async fn close(self) -> Result<()> {
+            self.closed.store(true, Ordering::SeqCst);
+            Ok(())
         }
     }
 

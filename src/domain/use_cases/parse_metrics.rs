@@ -187,9 +187,8 @@ pub fn parse_disk(raw: &str) -> Option<Vec<DiskMetrics>> {
             continue;
         }
 
-        let total: u64 = match parts[1].parse() {
-            Ok(v) => v,
-            Err(_) => continue,
+        let Ok(total) = parts[1].parse::<u64>() else {
+            continue;
         };
         let used: u64 = parts[2].parse().unwrap_or(0);
         let available: u64 = parts[3].parse().unwrap_or(0);

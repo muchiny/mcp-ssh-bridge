@@ -107,6 +107,11 @@ impl ToolContext {
 ///
 /// Each tool in the MCP server implements this trait, providing
 /// a consistent interface for tool registration and execution.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not implement `ToolHandler`",
+    label = "this type cannot be used as an MCP tool handler",
+    note = "see src/mcp/tool_handlers/README.md for the handler pattern"
+)]
 #[async_trait]
 pub trait ToolHandler: Send + Sync {
     /// Get the tool's name (used for routing)

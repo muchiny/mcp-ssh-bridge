@@ -35,7 +35,6 @@ impl GitCommandBuilder {
     /// Shows commit history for a repository. Supports filtering by
     /// branch, author, date, and formatting options.
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub fn build_log_command(
         path: &str,
         max_count: Option<u32>,

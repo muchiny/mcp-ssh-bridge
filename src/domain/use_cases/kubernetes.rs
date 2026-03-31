@@ -84,7 +84,7 @@ impl KubernetesCommandBuilder {
     /// [-l {selector}] [--field-selector {fs}] [-o {output}]
     /// [--sort-by={sort}]`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn build_get_command(
         kubectl_bin: Option<&str>,
         resource: &str,
@@ -136,7 +136,7 @@ impl KubernetesCommandBuilder {
     /// Constructs: `{kubectl} logs {pod} [-n {ns}] [-c {container}]
     /// [--tail={N}] [--since={dur}] [-p] [--timestamps]`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn build_logs_command(
         kubectl_bin: Option<&str>,
         pod: &str,
@@ -206,7 +206,6 @@ impl KubernetesCommandBuilder {
     /// path: `{kubectl} apply -f {path}`. Otherwise, it is treated as
     /// inline YAML: `echo '{yaml}' | {kubectl} apply -f -`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub fn build_apply_command(
         kubectl_bin: Option<&str>,
         manifest: &str,
@@ -249,7 +248,6 @@ impl KubernetesCommandBuilder {
     /// Constructs: `{kubectl} delete {resource} {name} [-n {ns}]
     /// [--grace-period={N}] [--force] [--dry-run={mode}]`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub fn build_delete_command(
         kubectl_bin: Option<&str>,
         resource: &str,
@@ -477,7 +475,6 @@ impl HelmCommandBuilder {
     /// Constructs: `{helm} list [-n {ns}] [-A] [-a] [--filter {f}]
     /// [-o {output}]`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub fn build_list_command(
         helm_bin: Option<&str>,
         kubeconfig: Option<&str>,
@@ -554,8 +551,7 @@ impl HelmCommandBuilder {
     /// [--wait] [--timeout {t}] [--install] [--version {v}]
     /// [--create-namespace]`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::too_many_arguments)]
     pub fn build_upgrade_command(
         helm_bin: Option<&str>,
         kubeconfig: Option<&str>,
@@ -629,7 +625,7 @@ impl HelmCommandBuilder {
     /// [--set k=v ...] [-f values.yaml ...] [--dry-run={mode}]
     /// [--wait] [--create-namespace] [--version {v}]`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn build_install_command(
         helm_bin: Option<&str>,
         kubeconfig: Option<&str>,

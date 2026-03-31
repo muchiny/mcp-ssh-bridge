@@ -11,7 +11,7 @@ pub mod http;
 #[cfg(feature = "http")]
 pub mod oauth;
 
-use async_trait::async_trait;
+use std::future::Future;
 
 use super::protocol::{IncomingMessage, WriterMessage};
 
@@ -19,23 +19,20 @@ use super::protocol::{IncomingMessage, WriterMessage};
 ///
 /// Implementations handle reading/writing JSON-RPC messages over
 /// different transport mechanisms (stdio, HTTP/SSE).
-#[async_trait]
 pub trait Transport: Send + Sync {
     /// Receive the next incoming message from the client.
     /// Returns `None` on EOF / client disconnect.
-    async fn recv(&mut self) -> Option<IncomingMessage>;
+    fn recv(&mut self) -> impl Future<Output = Option<IncomingMessage>> + Send;
 
     /// Send a message to the client.
-    async fn send(&self, msg: WriterMessage) -> crate::error::Result<()>;
+    fn send(&self, msg: WriterMessage) -> impl Future<Output = crate::error::Result<()>> + Send;
 
     /// Gracefully shut down the transport.
-    async fn shutdown(&self);
+    fn shutdown(&self) -> impl Future<Output = ()> + Send;
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    // Verify the trait is object-safe
-    fn _assert_object_safe(_: &dyn Transport) {}
+    // Note: Transport uses RPITIT (native async fn in traits) and is
+    // intentionally NOT dyn-compatible. It is always used via concrete types.
 }

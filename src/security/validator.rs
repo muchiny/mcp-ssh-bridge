@@ -116,7 +116,7 @@ impl CommandValidator {
     /// # Panics
     ///
     /// Panics if the internal lock is poisoned (indicates a previous panic).
-    #[allow(clippy::significant_drop_tightening)]
+    #[expect(clippy::significant_drop_tightening)]
     pub fn validate(&self, command: &str) -> Result<()> {
         let normalized = command.trim();
 
@@ -171,7 +171,7 @@ impl CommandValidator {
     /// # Errors
     ///
     /// Returns an error if the command matches a blacklist pattern or is empty.
-    #[allow(clippy::significant_drop_tightening)]
+    #[expect(clippy::significant_drop_tightening)]
     pub fn validate_builtin(&self, command: &str) -> Result<()> {
         let normalized = command.trim();
 

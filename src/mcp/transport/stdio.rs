@@ -3,7 +3,6 @@
 //! Reads JSON-RPC messages line-by-line from stdin and writes to stdout.
 //! This is the default transport for Claude Code subprocess spawning.
 
-use async_trait::async_trait;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 use tracing::{debug, error};
@@ -35,32 +34,32 @@ impl Default for StdioTransport {
     }
 }
 
-#[async_trait]
 impl Transport for StdioTransport {
     async fn recv(&mut self) -> Option<IncomingMessage> {
         let reader = self.reader.get_mut();
-        let mut line = String::new();
 
-        let bytes_read = reader.read_line(&mut line).await.ok()?;
-        if bytes_read == 0 {
-            return None; // EOF
-        }
+        loop {
+            let mut line = String::new();
 
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            // Empty line: return a dummy to keep looping
-            return self.recv().await;
-        }
-
-        debug!(request = %trimmed, "Received message");
-
-        match McpServer::parse_incoming(trimmed) {
-            Ok(msg) => Some(msg),
-            Err(e) => {
-                error!(error = %e, "Failed to parse message");
-                // Return a parse error as a single message
-                None
+            let bytes_read = reader.read_line(&mut line).await.ok()?;
+            if bytes_read == 0 {
+                return None; // EOF
             }
+
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue; // skip empty lines
+            }
+
+            debug!(request = %trimmed, "Received message");
+
+            return match McpServer::parse_incoming(trimmed) {
+                Ok(msg) => Some(msg),
+                Err(e) => {
+                    error!(error = %e, "Failed to parse message");
+                    None
+                }
+            };
         }
     }
 
@@ -71,12 +70,9 @@ impl Transport for StdioTransport {
             WriterMessage::Request(r) => serde_json::to_string(&r),
             WriterMessage::BatchResponse(responses) => serde_json::to_string(responses),
         };
-        let json_str = match json_str {
-            Ok(s) => s,
-            Err(e) => {
-                error!(error = %e, "Failed to serialize message");
-                return Ok(());
-            }
+        let Ok(json_str) = json_str else {
+            error!("Failed to serialize message");
+            return Ok(());
         };
 
         debug!(message = %json_str, "Sending message");

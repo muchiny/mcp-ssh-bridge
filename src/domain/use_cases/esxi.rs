@@ -52,7 +52,6 @@ impl EsxiCommandBuilder {
     /// - `revert`: `vim-cmd vmsvc/snapshot.revert {vm_id} {snapshot_id}`
     /// - `remove_all`: `vim-cmd vmsvc/snapshot.removeall {vm_id}`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub fn build_snapshot_command(
         vm_id: &str,
         action: &str,

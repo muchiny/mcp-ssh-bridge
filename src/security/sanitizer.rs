@@ -1,8 +1,14 @@
 use std::borrow::Cow;
+use std::sync::LazyLock;
 
 use aho_corasick::AhoCorasick;
 use regex::{Regex, RegexSet};
 use tracing::{debug, error, info};
+
+/// Pre-compiled regex for stripping ANSI escape codes from SSH output.
+static ANSI_ESCAPE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\[[\d;]*m").unwrap()
+});
 
 use crate::config::{CustomSanitizePattern, SanitizeConfig};
 use crate::security::entropy::EntropyDetector;
@@ -43,8 +49,8 @@ pub struct Sanitizer {
     literal_detector: AhoCorasick,
     /// Whether sanitization is enabled
     enabled: bool,
-    /// Regex for stripping ANSI escape codes from SSH output
-    ansi_regex: Option<Regex>,
+    /// Whether ANSI escape code stripping is enabled
+    strip_ansi: bool,
     /// Entropy-based secret detector (complements regex patterns)
     entropy_detector: EntropyDetector,
 }
@@ -165,7 +171,7 @@ impl Sanitizer {
             detection_set: RegexSet::empty(),
             literal_detector: AhoCorasick::builder().build(&empty).unwrap(),
             enabled: false,
-            ansi_regex: None,
+            strip_ansi: false,
             entropy_detector: EntropyDetector::disabled(),
         }
     }
@@ -253,11 +259,7 @@ impl Sanitizer {
             "Sanitizer initialized"
         );
 
-        let ansi_regex = if enabled {
-            Some(Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\[[\d;]*m").unwrap())
-        } else {
-            None
-        };
+        let strip_ansi = enabled;
 
         if entropy_detector.is_enabled() {
             info!("Entropy-based secret detection enabled");
@@ -268,7 +270,7 @@ impl Sanitizer {
             detection_set,
             literal_detector,
             enabled,
-            ansi_regex,
+            strip_ansi,
             entropy_detector,
         }
     }
@@ -392,7 +394,7 @@ impl Sanitizer {
     /// - `gcp` - Google Cloud credentials
     /// - `hashicorp` - Vault and Consul tokens
     /// - `generic` - Generic password/secret/token patterns
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     fn default_pattern_defs() -> Vec<PatternDef> {
         vec![
             // ══════════════════════════════════════════════════════════════════
@@ -847,8 +849,8 @@ impl Sanitizer {
         }
 
         // Strip ANSI escape codes from SSH output
-        let text = if let Some(ref ansi_re) = self.ansi_regex {
-            match ansi_re.replace_all(text, "") {
+        let text = if self.strip_ansi {
+            match ANSI_ESCAPE_REGEX.replace_all(text, "") {
                 Cow::Borrowed(_) => Cow::Borrowed(text),
                 Cow::Owned(stripped) => Cow::Owned(stripped),
             }

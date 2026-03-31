@@ -126,12 +126,9 @@ pub fn apply_template<S: ::std::hash::BuildHasher>(
 pub fn load_runbooks_from_dir(dir: &Path) -> Vec<Runbook> {
     let mut runbooks = Vec::new();
 
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(e) => {
-            warn!(path = %dir.display(), error = %e, "Failed to read runbooks directory");
-            return runbooks;
-        }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        warn!(path = %dir.display(), "Failed to read runbooks directory");
+        return runbooks;
     };
 
     for entry in entries.flatten() {

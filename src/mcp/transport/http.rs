@@ -287,11 +287,10 @@ async fn handle_sse(State(state): State<Arc<HttpTransportState>>, headers: Heade
     // Update session with the new notification channel
     {
         let mut sessions = state.sessions.write().await;
-        if let Some(session) = sessions.get_mut(&session_id) {
-            session.notification_tx = notif_tx;
-        } else {
+        let Some(session) = sessions.get_mut(&session_id) else {
             return StatusCode::NOT_FOUND.into_response();
-        }
+        };
+        session.notification_tx = notif_tx;
     }
 
     // Convert channel to SSE stream of Result<Event, Infallible>

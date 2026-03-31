@@ -8,11 +8,32 @@
 //! standard SSH execution pipeline.
 
 use std::fmt::Write;
+use std::sync::LazyLock;
 
 use regex::Regex;
 
 use crate::config::ShellType;
 use crate::error::{BridgeError, Result};
+
+/// Pre-compiled regexes for dangerous SQL pattern detection.
+/// Compiled once on first use, avoiding per-query regex compilation overhead.
+static DANGEROUS_SQL_PATTERNS: LazyLock<[(Regex, &str); 7]> = LazyLock::new(|| {
+    [
+        (
+            Regex::new(r"(?i)\bDROP\s+DATABASE\b").unwrap(),
+            "DROP DATABASE",
+        ),
+        (Regex::new(r"(?i)\bDROP\s+TABLE\b").unwrap(), "DROP TABLE"),
+        (Regex::new(r"(?i)\bTRUNCATE\b").unwrap(), "TRUNCATE"),
+        (Regex::new(r"(?i)\bDELETE\s+FROM\b").unwrap(), "DELETE FROM"),
+        (
+            Regex::new(r"(?i)\bALTER\s+TABLE\b.*\bDROP\b").unwrap(),
+            "ALTER TABLE ... DROP",
+        ),
+        (Regex::new(r"(?i)\bGRANT\b").unwrap(), "GRANT"),
+        (Regex::new(r"(?i)\bREVOKE\b").unwrap(), "REVOKE"),
+    ]
+});
 
 /// Supported database types
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,7 +122,7 @@ impl DatabaseCommandBuilder {
     /// For `MySQL`: `MYSQL_PWD='password' mysql -h host -P port -u user database -e "query"`
     /// For `PostgreSQL`: `PGPASSWORD='password' psql -h host -p port -U user -d database -c "query"`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn build_query_command(
         db_type: &DatabaseType,
         db_host: &str,
@@ -157,7 +178,7 @@ impl DatabaseCommandBuilder {
     /// For `MySQL`: `MYSQL_PWD='password' mysqldump -h host -P port -u user database`
     /// For `PostgreSQL`: `PGPASSWORD='password' pg_dump -h host -p port -U user database`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn build_dump_command(
         db_type: &DatabaseType,
         db_host: &str,
@@ -219,7 +240,6 @@ impl DatabaseCommandBuilder {
     /// For `MySQL`: `MYSQL_PWD='password' mysql -h host -P port -u user database < input_file`
     /// For `PostgreSQL`: `PGPASSWORD='password' psql -h host -p port -U user -d database < input_file`
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub fn build_restore_command(
         db_type: &DatabaseType,
         db_host: &str,
@@ -270,18 +290,7 @@ impl DatabaseCommandBuilder {
     ///
     /// Returns `BridgeError::CommandDenied` if the query matches a dangerous pattern.
     pub fn validate_query(query: &str) -> Result<()> {
-        let dangerous_patterns = [
-            (r"(?i)\bDROP\s+DATABASE\b", "DROP DATABASE"),
-            (r"(?i)\bDROP\s+TABLE\b", "DROP TABLE"),
-            (r"(?i)\bTRUNCATE\b", "TRUNCATE"),
-            (r"(?i)\bDELETE\s+FROM\b", "DELETE FROM"),
-            (r"(?i)\bALTER\s+TABLE\b.*\bDROP\b", "ALTER TABLE ... DROP"),
-            (r"(?i)\bGRANT\b", "GRANT"),
-            (r"(?i)\bREVOKE\b", "REVOKE"),
-        ];
-
-        for (pattern, name) in &dangerous_patterns {
-            let re = Regex::new(pattern).expect("invalid regex in dangerous_patterns");
+        for (re, name) in DANGEROUS_SQL_PATTERNS.iter() {
             if re.is_match(query) {
                 return Err(BridgeError::CommandDenied {
                     reason: format!(
