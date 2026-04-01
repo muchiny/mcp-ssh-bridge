@@ -66,7 +66,6 @@ impl StandardTool for TimerListTool {
             args.all.unwrap_or(false),
         ))
     }
-
 }
 
 /// Handler for the `ssh_timer_list` tool.

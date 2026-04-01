@@ -6,9 +6,8 @@ use regex::{Regex, RegexSet};
 use tracing::{debug, error, info};
 
 /// Pre-compiled regex for stripping ANSI escape codes from SSH output.
-static ANSI_ESCAPE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\[[\d;]*m").unwrap()
-});
+static ANSI_ESCAPE_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?\x07|\x1b\[[\d;]*m").unwrap());
 
 use crate::config::{CustomSanitizePattern, SanitizeConfig};
 use crate::security::entropy::EntropyDetector;
