@@ -19,21 +19,25 @@ CLI saves 10-32x tokens compared to MCP by loading schemas on-demand.
 To find the right tool, follow these steps:
 
 ### Step 1 — Browse groups (~2K tokens)
+
 ```bash
 mcp-ssh-bridge list-tools --groups-only
 ```
 
 ### Step 2 — Explore a group (~500 tokens)
+
 ```bash
 mcp-ssh-bridge list-tools --group docker
 ```
 
 ### Step 3 — Get tool schema (~200 tokens)
+
 ```bash
 mcp-ssh-bridge describe-tool ssh_docker_ps
 ```
 
 ### Step 4 — Invoke the tool
+
 ```bash
 mcp-ssh-bridge tool ssh_docker_ps host=myserver --json
 ```

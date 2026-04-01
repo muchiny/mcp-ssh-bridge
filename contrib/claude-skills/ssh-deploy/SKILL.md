@@ -19,6 +19,7 @@ Parse `$ARGUMENTS`: first word = host, second word = action (restart, canary, ro
 Before ANY deployment, verify:
 
 1. **Health check** — confirm the target is healthy BEFORE changing anything:
+
    ```bash
    mcp-ssh-bridge tool ssh_diagnose host=HOST --json
    ```
@@ -101,11 +102,13 @@ mcp-ssh-bridge tool ssh_helm_rollback host=HOST release=RELEASE
 After every deployment:
 
 1. **Health check** — verify the system is healthy:
+
    ```bash
    mcp-ssh-bridge tool ssh_diagnose host=HOST --json
    ```
 
 2. **Verify service** — check the specific service/app is running:
+
    ```bash
    mcp-ssh-bridge tool ssh_service_status host=HOST service=SERVICE --json
    ```

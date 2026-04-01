@@ -16,21 +16,25 @@ Explore the mcp-ssh-bridge tool catalog interactively.
 Run one of these depending on what was requested:
 
 **No argument — show all groups:**
+
 ```bash
 mcp-ssh-bridge list-tools --groups-only
 ```
 
 **Group name — show tools in that group:**
+
 ```bash
 mcp-ssh-bridge list-tools --group $ARGUMENTS
 ```
 
 **Keyword — search by name or description:**
+
 ```bash
 mcp-ssh-bridge list-tools --search $ARGUMENTS
 ```
 
 After finding interesting tools, show their full schema:
+
 ```bash
 mcp-ssh-bridge describe-tool TOOL_NAME
 ```
@@ -50,6 +54,7 @@ mcp-ssh-bridge describe-tool TOOL_NAME
 | Windows | windows_services, windows_events, active_directory, iis |
 
 To invoke any discovered tool:
+
 ```bash
 mcp-ssh-bridge tool TOOL_NAME host=HOST key=value --json
 ```

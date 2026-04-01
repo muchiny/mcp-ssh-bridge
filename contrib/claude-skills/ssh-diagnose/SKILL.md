@@ -34,18 +34,21 @@ Valid symptoms: `slow`, `crash`, `oom`, `disk`, `network`
 Based on Phase 1 findings, drill into the specific problem area.
 
 ### High CPU / Slow
+
 ```bash
 mcp-ssh-bridge tool ssh_process_top host=HOST --json
 mcp-ssh-bridge tool ssh_metrics host=HOST --json
 ```
 
 ### Out of Memory
+
 ```bash
 mcp-ssh-bridge tool ssh_exec host=HOST command="free -h && cat /proc/meminfo | head -20"
 mcp-ssh-bridge tool ssh_process_top host=HOST --json
 ```
 
 ### Disk Full
+
 ```bash
 mcp-ssh-bridge tool ssh_disk_usage host=HOST --json
 mcp-ssh-bridge tool ssh_exec host=HOST command="df -h && df -i"
@@ -53,12 +56,14 @@ mcp-ssh-bridge tool ssh_exec host=HOST command="du -sh /* 2>/dev/null | sort -rh
 ```
 
 ### Service Down
+
 ```bash
 mcp-ssh-bridge tool ssh_service_list host=HOST --json
 mcp-ssh-bridge tool ssh_service_logs host=HOST service=SERVICE_NAME lines=100
 ```
 
 ### Network Issues
+
 ```bash
 mcp-ssh-bridge tool ssh_net_connections host=HOST --json
 mcp-ssh-bridge tool ssh_net_interfaces host=HOST --json
