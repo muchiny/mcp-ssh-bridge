@@ -280,7 +280,7 @@ async fn test_docker_file_write_and_read() {
     let test_content = "Hello from E2E Docker test!";
 
     // Write file
-    let write_handler = SshFileWriteHandler::new();
+    let write_handler = SshFileWriteHandler;
     let text = exec_tool(
         &write_handler,
         json!({"host": "docker", "path": &test_file, "content": test_content}),

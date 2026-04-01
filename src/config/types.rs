@@ -654,6 +654,12 @@ pub struct LimitsConfig {
     /// Maximum tokens for sampling `createMessage` requests (default: 4096).
     #[serde(default = "default_sampling_max_tokens")]
     pub sampling_max_tokens: u32,
+
+    /// Content size threshold in bytes above which `ssh_file_write` uses SFTP
+    /// streaming instead of shell commands (default: 65536 = 64 KB).
+    /// Set to 0 to always use SFTP.
+    #[serde(default = "default_sftp_write_threshold")]
+    pub sftp_write_threshold_bytes: usize,
 }
 
 impl Default for LimitsConfig {
@@ -676,6 +682,7 @@ impl Default for LimitsConfig {
             task_poll_interval_ms: default_task_poll_interval_ms(),
             client_request_timeout_seconds: default_client_request_timeout(),
             sampling_max_tokens: default_sampling_max_tokens(),
+            sftp_write_threshold_bytes: default_sftp_write_threshold(),
         }
     }
 }
@@ -806,6 +813,10 @@ const fn default_client_request_timeout() -> u64 {
 
 const fn default_sampling_max_tokens() -> u32 {
     4096
+}
+
+const fn default_sftp_write_threshold() -> usize {
+    65_536 // 64 KB — well below ARG_MAX on all platforms
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -939,8 +950,8 @@ fn default_ssh_config_path() -> String {
 /// - `core`: `ssh_exec`, `ssh_exec_multi`, `ssh_status`, `ssh_health`, `ssh_history`,
 ///   `ssh_output_fetch`
 /// - `file_transfer`: `ssh_upload`, `ssh_download`, `ssh_sync`
-/// - `file_ops`: `ssh_file_read`, `ssh_file_write`, `ssh_file_chmod`, `ssh_file_chown`,
-///   `ssh_file_stat`, `ssh_file_diff`, `ssh_file_patch`, `ssh_file_template`
+/// - `file_ops`: `ssh_file_read`, `ssh_file_write`, `ssh_files_write`, `ssh_file_chmod`,
+///   `ssh_file_chown`, `ssh_file_stat`, `ssh_file_diff`, `ssh_file_patch`, `ssh_file_template`
 /// - `sessions`: `ssh_session_create`, `ssh_session_exec`, `ssh_session_list`,
 ///   `ssh_session_close`
 /// - `directory`: `ssh_ls`, `ssh_find`
@@ -1225,6 +1236,7 @@ mod tests {
         assert_eq!(config.max_output_chars, 20_000);
         assert_eq!(config.output_cache_ttl_seconds, 300);
         assert_eq!(config.output_cache_max_entries, 100);
+        assert_eq!(config.sftp_write_threshold_bytes, 65_536);
     }
 
     #[test]

@@ -708,7 +708,7 @@ fn test_all_major_tool_schemas_are_valid_json() {
         Box::new(SshNetConnectionsHandler::new()),
         Box::new(SshNetInterfacesHandler::new()),
         Box::new(SshFileReadHandler::new()),
-        Box::new(SshFileWriteHandler::new()),
+        Box::new(SshFileWriteHandler),
         Box::new(SshGitStatusHandler::new()),
         Box::new(SshGitLogHandler::new()),
         Box::new(SshCertCheckHandler::new()),

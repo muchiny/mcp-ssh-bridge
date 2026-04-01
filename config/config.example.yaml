@@ -240,6 +240,10 @@ limits:
   #     match_mode: exact
   #     max_output_chars: 60000
 
+  # Content size threshold above which ssh_file_write uses SFTP streaming
+  # instead of shell commands (default: 65536 = 64KB, 0 = always SFTP)
+  # sftp_write_threshold_bytes: 65536
+
   # How long cached outputs are kept for pagination (seconds)
   # output_cache_ttl_seconds: 300
 
@@ -313,8 +317,9 @@ audit:
 #   core              - ssh_exec, ssh_exec_multi, ssh_status, ssh_health, ssh_history,
 #                       ssh_output_fetch
 #   file_transfer     - ssh_upload, ssh_download, ssh_sync
-#   file_ops          - ssh_file_read, ssh_file_write, ssh_file_chmod, ssh_file_chown,
-#                       ssh_file_stat, ssh_file_diff, ssh_file_patch, ssh_file_template
+#   file_ops          - ssh_file_read, ssh_file_write, ssh_files_write, ssh_file_chmod,
+#                       ssh_file_chown, ssh_file_stat, ssh_file_diff, ssh_file_patch,
+#                       ssh_file_template
 #   sessions          - ssh_session_create, ssh_session_exec, ssh_session_list, ssh_session_close
 #   directory         - ssh_ls, ssh_find
 #   monitoring        - ssh_metrics, ssh_metrics_multi, ssh_tail, ssh_disk_usage

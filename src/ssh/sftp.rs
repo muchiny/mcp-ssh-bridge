@@ -811,6 +811,83 @@ impl SftpClient {
         })
     }
 
+    /// Write in-memory bytes to a remote file via SFTP.
+    ///
+    /// Unlike [`upload_file`](Self::upload_file), this method writes directly from a byte
+    /// slice without requiring a local file. Designed for `ssh_file_write` when content
+    /// exceeds the shell argument size limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the remote path contains traversal components or the
+    /// SFTP write fails.
+    #[expect(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    pub async fn write_bytes(
+        &self,
+        data: &[u8],
+        remote_path: &str,
+        append: bool,
+        chunk_size: u64,
+    ) -> Result<TransferResult> {
+        let start = std::time::Instant::now();
+        validate_remote_path(remote_path)?;
+
+        let flags = if append {
+            OpenFlags::CREATE | OpenFlags::APPEND | OpenFlags::WRITE
+        } else {
+            OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE
+        };
+
+        let mut remote_file = self
+            .session
+            .open_with_flags_and_attributes(remote_path, flags, FileAttributes::empty())
+            .await
+            .map_err(sftp_error)?;
+
+        let chunk = chunk_size as usize;
+        let mut offset = 0;
+
+        while offset < data.len() {
+            let end = (offset + chunk).min(data.len());
+            remote_file
+                .write_all(&data[offset..end])
+                .await
+                .map_err(|e| BridgeError::FileTransfer {
+                    reason: format!("Write error: {e}"),
+                })?;
+            offset = end;
+        }
+
+        remote_file
+            .flush()
+            .await
+            .map_err(|e| BridgeError::FileTransfer {
+                reason: format!("Flush error: {e}"),
+            })?;
+
+        remote_file
+            .shutdown()
+            .await
+            .map_err(|e| BridgeError::FileTransfer {
+                reason: format!("Close error: {e}"),
+            })?;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let bytes_transferred = data.len() as u64;
+        let bytes_per_second = if duration_ms > 0 {
+            (bytes_transferred as f64 / duration_ms as f64) * 1000.0
+        } else {
+            0.0
+        };
+
+        Ok(TransferResult {
+            bytes_transferred,
+            duration_ms,
+            bytes_per_second,
+            checksum: None,
+        })
+    }
+
     /// Get the size of a remote file
     async fn get_remote_file_size(&self, path: &str) -> Option<u64> {
         self.session.metadata(path).await.ok().and_then(|m| m.size)

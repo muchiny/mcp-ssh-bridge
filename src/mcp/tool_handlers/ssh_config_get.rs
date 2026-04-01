@@ -108,6 +108,11 @@ impl ToolHandler for SshConfigGetHandler {
                     "  output_cache_max_entries: {}",
                     limits.output_cache_max_entries
                 );
+                let _ = writeln!(
+                    result,
+                    "  sftp_write_threshold_bytes: {}",
+                    limits.sftp_write_threshold_bytes
+                );
             }
         }
 
