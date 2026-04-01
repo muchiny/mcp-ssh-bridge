@@ -7,10 +7,11 @@ use tracing_subscriber::EnvFilter;
 
 use mcp_ssh_bridge::McpServer;
 use mcp_ssh_bridge::cli::{
-    Cli, Commands, run_config_diff, run_download, run_exec, run_history, run_list_tools,
-    run_status, run_upload, run_validate,
+    Cli, Commands, run_config_diff, run_describe_tool, run_download, run_exec, run_history,
+    run_list_tools, run_status, run_tool, run_upload, run_validate,
 };
 use mcp_ssh_bridge::config::{default_config_path, load_config};
+use mcp_ssh_bridge::error::BridgeError;
 
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
@@ -122,8 +123,42 @@ async fn main() -> Result<()> {
                 &mut std::io::stdout(),
             );
         }
-        Some(Commands::ListTools { group, json }) => {
-            run_list_tools(config, group.as_deref(), json).await?;
+        Some(Commands::Tool {
+            tool_name,
+            args,
+            json_args,
+        }) => {
+            if cli.dry_run {
+                println!("[dry-run] Would invoke tool '{tool_name}' with args: {args:?}");
+                if let Some(ref ja) = json_args {
+                    println!("[dry-run] JSON args: {ja}");
+                }
+                return Ok(());
+            }
+            let exit_code = run_tool(config, &tool_name, &args, json_args.as_deref(), cli.json)
+                .await
+                .map_err(map_exit_code)?;
+            if exit_code != 0 {
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::DescribeTool { tool_name }) => {
+            run_describe_tool(config, &tool_name, cli.json).await?;
+        }
+        Some(Commands::ListTools {
+            group,
+            groups_only,
+            search,
+            json,
+        }) => {
+            run_list_tools(
+                config,
+                group.as_deref(),
+                json || cli.json,
+                groups_only,
+                search.as_deref(),
+            )
+            .await?;
         }
         Some(Commands::Validate) => {
             run_validate(config).await?;
@@ -180,4 +215,24 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Map `BridgeError` variants to standardised exit codes.
+///
+/// - 1: tool / command execution error
+/// - 2: CLI usage error (unknown tool, bad args)
+/// - 3: connection / SSH error
+/// - 4: security denial
+/// - 5: configuration error
+#[expect(clippy::needless_pass_by_value)]
+fn map_exit_code(err: BridgeError) -> anyhow::Error {
+    let code = match &err {
+        BridgeError::CommandDenied { .. } => 4,
+        BridgeError::UnknownHost { .. } | BridgeError::SshConnection { .. } => 3,
+        BridgeError::McpUnknownTool { .. } => 2,
+        BridgeError::Config(_) => 5,
+        _ => 1,
+    };
+    eprintln!("Error: {err}");
+    std::process::exit(code);
 }

@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 pub use runner::{
-    run_config_diff, run_download, run_exec, run_history, run_list_tools, run_status, run_upload,
-    run_validate,
+    run_config_diff, run_describe_tool, run_download, run_exec, run_history, run_list_tools,
+    run_status, run_tool, run_upload, run_validate,
 };
 
 /// MCP SSH Bridge - Secure SSH access to air-gapped environments
@@ -28,6 +28,17 @@ pub use runner::{
 
     # Execute a command on a remote host
     mcp-ssh-bridge exec prod-server \"docker ps\"
+
+    # Invoke any of the 337 MCP tools directly via CLI
+    mcp-ssh-bridge tool ssh_docker_ps host=prod
+    mcp-ssh-bridge tool ssh_exec host=prod command=\"ls -la\" --json
+    mcp-ssh-bridge tool ssh_k8s_get --json-args '{\"host\":\"k8s\",\"resource\":\"pods\"}'
+
+    # Progressive tool discovery (token-efficient for AI agents)
+    mcp-ssh-bridge list-tools --groups-only
+    mcp-ssh-bridge list-tools --group docker
+    mcp-ssh-bridge list-tools --search kubernetes
+    mcp-ssh-bridge describe-tool ssh_docker_ps
 
     # Show configured hosts and security settings
     mcp-ssh-bridge status
@@ -48,6 +59,10 @@ pub struct Cli {
     /// Dry-run mode: show commands without executing
     #[arg(long, global = true)]
     pub dry_run: bool,
+
+    /// Output as JSON (applies to all commands)
+    #[arg(long, global = true)]
+    pub json: bool,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -137,13 +152,46 @@ pub enum Commands {
         shell: clap_complete::Shell,
     },
 
+    /// Invoke any registered MCP tool directly via CLI
+    ///
+    /// Accepts tool arguments as key=value pairs or as a JSON object via --json-args.
+    /// Values are auto-coerced to the type declared in the tool's input schema.
+    #[command(alias = "t")]
+    Tool {
+        /// Tool name (e.g. `ssh_docker_ps`, `ssh_exec`, `ssh_k8s_get`)
+        tool_name: String,
+
+        /// Tool arguments as key=value pairs (e.g. host=prod command="ls -la")
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
+
+        /// Tool arguments as a JSON object (alternative to key=value pairs)
+        #[arg(long)]
+        json_args: Option<String>,
+    },
+
+    /// Show full schema and description for a single tool
+    #[command(alias = "dt")]
+    DescribeTool {
+        /// Tool name (e.g. `ssh_docker_ps`)
+        tool_name: String,
+    },
+
     /// List all available MCP tools
     ListTools {
         /// Filter by tool group name
         #[arg(short, long)]
         group: Option<String>,
 
-        /// Output as JSON
+        /// Show only group names with tool counts (compact output for AI agents)
+        #[arg(long)]
+        groups_only: bool,
+
+        /// Search tools by keyword in name or description
+        #[arg(short, long)]
+        search: Option<String>,
+
+        /// Output as JSON (deprecated: use global --json instead)
         #[arg(long)]
         json: bool,
     },
@@ -381,5 +429,115 @@ mod tests {
             }
             _ => panic!("Expected Upload command"),
         }
+    }
+
+    #[test]
+    fn test_tool_subcommand() {
+        let cli = Cli::try_parse_from([
+            "mcp-ssh-bridge",
+            "tool",
+            "ssh_docker_ps",
+            "host=prod",
+            "all=true",
+        ])
+        .unwrap();
+        match cli.command {
+            Some(Commands::Tool {
+                tool_name,
+                args,
+                json_args,
+            }) => {
+                assert_eq!(tool_name, "ssh_docker_ps");
+                assert_eq!(args, vec!["host=prod", "all=true"]);
+                assert!(json_args.is_none());
+            }
+            _ => panic!("Expected Tool command"),
+        }
+    }
+
+    #[test]
+    fn test_tool_with_json_args() {
+        let cli = Cli::try_parse_from([
+            "mcp-ssh-bridge",
+            "tool",
+            "ssh_exec",
+            "--json-args",
+            r#"{"host":"prod","command":"ls"}"#,
+        ])
+        .unwrap();
+        match cli.command {
+            Some(Commands::Tool {
+                tool_name,
+                json_args,
+                ..
+            }) => {
+                assert_eq!(tool_name, "ssh_exec");
+                assert!(json_args.is_some());
+            }
+            _ => panic!("Expected Tool command"),
+        }
+    }
+
+    #[test]
+    fn test_tool_alias() {
+        let cli = Cli::try_parse_from(["mcp-ssh-bridge", "t", "ssh_status"]).unwrap();
+        assert!(matches!(cli.command, Some(Commands::Tool { .. })));
+    }
+
+    #[test]
+    fn test_describe_tool_subcommand() {
+        let cli =
+            Cli::try_parse_from(["mcp-ssh-bridge", "describe-tool", "ssh_docker_ps"]).unwrap();
+        match cli.command {
+            Some(Commands::DescribeTool { tool_name }) => {
+                assert_eq!(tool_name, "ssh_docker_ps");
+            }
+            _ => panic!("Expected DescribeTool command"),
+        }
+    }
+
+    #[test]
+    fn test_describe_tool_alias() {
+        let cli = Cli::try_parse_from(["mcp-ssh-bridge", "dt", "ssh_exec"]).unwrap();
+        assert!(matches!(cli.command, Some(Commands::DescribeTool { .. })));
+    }
+
+    #[test]
+    fn test_list_tools_groups_only() {
+        let cli = Cli::try_parse_from(["mcp-ssh-bridge", "list-tools", "--groups-only"]).unwrap();
+        match cli.command {
+            Some(Commands::ListTools { groups_only, .. }) => {
+                assert!(groups_only);
+            }
+            _ => panic!("Expected ListTools command"),
+        }
+    }
+
+    #[test]
+    fn test_list_tools_search() {
+        let cli =
+            Cli::try_parse_from(["mcp-ssh-bridge", "list-tools", "--search", "docker"]).unwrap();
+        match cli.command {
+            Some(Commands::ListTools { search, .. }) => {
+                assert_eq!(search, Some("docker".to_string()));
+            }
+            _ => panic!("Expected ListTools command"),
+        }
+    }
+
+    #[test]
+    fn test_global_json_flag() {
+        let cli = Cli::try_parse_from(["mcp-ssh-bridge", "--json", "status"]).unwrap();
+        assert!(cli.json);
+        assert!(matches!(cli.command, Some(Commands::Status)));
+    }
+
+    #[test]
+    fn test_global_json_flag_with_tool() {
+        let cli =
+            Cli::try_parse_from(["mcp-ssh-bridge", "--json", "tool", "ssh_exec", "host=prod"])
+                .unwrap();
+        assert!(cli.json);
+        assert!(matches!(cli.command, Some(Commands::Tool { .. })));
     }
 }
