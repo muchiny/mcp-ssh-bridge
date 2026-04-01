@@ -1089,6 +1089,7 @@ mod tests {
         AuditConfig, AuthConfig, HostConfig, HostKeyVerification, HttpTransportConfig,
         LimitsConfig, OsType, SecurityConfig, SessionConfig, SshConfigDiscovery, ToolGroupsConfig,
     };
+    use crate::mcp::tool_handlers::utils::shell_escape;
     use std::collections::HashMap;
 
     // ============== shell_escape Tests ==============
