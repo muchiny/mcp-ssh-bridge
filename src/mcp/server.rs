@@ -521,9 +521,13 @@ impl McpServer {
             return None;
         }
 
-        // Handle roots/list_changed notification (no response needed)
+        // Handle client notifications (no response needed per JSON-RPC 2.0)
         if message.method.as_deref() == Some("notifications/roots/list_changed") {
             self.handle_roots_changed(tx).await;
+            return None;
+        }
+        if message.method.as_deref() == Some("notifications/cancelled") {
+            Self::handle_cancellation_notification(message.params.as_ref());
             return None;
         }
 
@@ -625,10 +629,6 @@ impl McpServer {
             "resources/templates/list" => self.handle_resource_templates_list(id),
             "resources/subscribe" => self.handle_resource_subscribe(id, request.params).await,
             "resources/unsubscribe" => self.handle_resource_unsubscribe(id, request.params).await,
-            "notifications/cancelled" => {
-                Self::handle_cancellation_notification(request.params.as_ref());
-                JsonRpcResponse::success(id, json!({}))
-            }
             "ping" => JsonRpcResponse::success(id, json!({})),
             _ => {
                 error!(method = %request.method, "Unknown method");
@@ -726,7 +726,10 @@ impl McpServer {
             capabilities: ServerCapabilities {
                 tools: Some(ToolsCapability { list_changed: true }),
                 prompts: Some(PromptsCapability { list_changed: true }),
-                resources: Some(ResourcesCapability { list_changed: true }),
+                resources: Some(ResourcesCapability {
+                    subscribe: true,
+                    list_changed: true,
+                }),
                 tasks: Some(TasksCapability {
                     list: json!({}),
                     cancel: json!({}),

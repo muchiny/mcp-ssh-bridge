@@ -369,6 +369,7 @@ pub struct ResourcesReadResult {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourcesCapability {
+    pub subscribe: bool,
     pub list_changed: bool,
 }
 
