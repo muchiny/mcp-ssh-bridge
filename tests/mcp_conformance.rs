@@ -161,7 +161,7 @@ fn all_tools_have_valid_json_schema() {
     let registry = create_filtered_registry(&tool_groups);
     let tools = registry.list_tools();
 
-    assert_eq!(tools.len(), 337, "Expected 337 tools in default registry");
+    assert_eq!(tools.len(), 338, "Expected 338 tools in default registry");
 
     for tool in &tools {
         // Name must be non-empty and snake_case
