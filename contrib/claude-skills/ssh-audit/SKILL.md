@@ -1,8 +1,6 @@
 ---
 name: ssh-audit
 description: Security audit and compliance scanning — CIS benchmarks, vulnerability scans, certificate checks, firewall rules, open ports. Use for security reviews or compliance assessments.
-context: fork
-agent: general-purpose
 argument-hint: <host> [quick|full|network|compliance]
 ---
 

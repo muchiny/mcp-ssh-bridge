@@ -1,8 +1,6 @@
 ---
 name: ssh-diagnose
 description: Diagnose remote server issues — health checks, service failures, disk/memory/CPU problems, network issues. Use when debugging slow, unresponsive, or failing servers.
-context: fork
-agent: general-purpose
 argument-hint: <host> [symptom]
 ---
 
