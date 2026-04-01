@@ -1,6 +1,6 @@
 [package]
 name = "mcp-ssh-bridge"
-version = "1.6.1"
+version = "1.7.0"
 edition = "2024"
 rust-version = "1.94"
 description = "MCP server that bridges Claude Code to air-gapped environments via SSH"
