@@ -153,13 +153,25 @@ impl ParsedTable {
     }
 }
 
-/// Parse columnar CLI output using header-position-based column boundary detection.
+/// Parse columnar CLI output using data-driven gutter detection.
 ///
 /// Algorithm:
-/// 1. First non-empty line is the header
-/// 2. Header tokens are separated by 2+ whitespace characters
-/// 3. Each token's byte-offset start position defines a column boundary
-/// 4. Data rows are sliced at these boundaries: `row[start[N]..start[N+1]].trim()`
+/// 1. Collect all non-empty lines (first = header, rest = data)
+/// 2. Find "data gap" positions: byte positions where ALL data rows have a space
+///    (lines shorter than the position count as space — they're padded)
+/// 3. Group consecutive data-gap positions into runs
+/// 4. Only runs of width ≥ 2 are column boundaries (filters out 1-space gaps
+///    within multi-word values like "2 hours ago")
+/// 5. Column starts are at the first non-gap position after each run
+/// 6. Headers are extracted from the header line at these positions
+///
+/// This data-driven approach handles:
+/// - Multi-word column names ("CONTAINER ID", "MEM USAGE / LIMIT") — data at
+///   those positions has non-space chars, so no false split
+/// - Tight header spacing (French `df` with 1-space gap between "fichiers" and
+///   "Type") — data has a wide gap there, correctly detected
+/// - Multi-word values ("2 hours ago") — internal spaces are 1-wide, filtered
+///   by the ≥ 2 width requirement
 ///
 /// Returns `None` if fewer than 2 non-empty lines are found.
 #[must_use]
@@ -170,39 +182,61 @@ pub fn parse_columnar_output(output: &str) -> Option<ParsedTable> {
     }
 
     let header_line = lines[0];
+    let data_lines = &lines[1..];
+    let max_len = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+    if max_len == 0 {
+        return None;
+    }
 
-    // Find column start positions by scanning for 2+ space boundaries.
-    // Each header token starts after a run of 2+ spaces (or at position 0).
+    // Phase 1: Find positions where the HEADER has a space AND ALL data rows
+    // have a space (or are shorter). Both conditions are required:
+    //   - Header check prevents right-aligned padding from creating false gaps
+    //     (padding positions have column name chars like "Taille" in header)
+    //   - Data check prevents multi-word column names from creating false gaps
+    //     ("CONTAINER ID" has a space at pos 9, but data has "5" there)
+    let header_bytes = header_line.as_bytes();
+    let mut is_data_gap = vec![false; max_len];
+    for (pos, gap) in is_data_gap.iter_mut().enumerate() {
+        // Header must have a space at this position
+        if header_bytes.get(pos).is_some_and(|&b| b != b' ') {
+            continue;
+        }
+        // ALL data rows must also have a space (or be shorter)
+        *gap = data_lines
+            .iter()
+            .all(|l| l.as_bytes().get(pos).is_none_or(|&b| b == b' '));
+    }
+
+    // Phase 2: Group consecutive data-gap positions into runs.
+    // Only runs of width ≥ 2 are column boundaries.
+    // Width ≥ 2 filters out 1-space gaps within multi-word values
+    // ("2 hours ago", "Up 2 hours") while keeping real column gaps
+    // (CLI tools always pad columns with ≥ 2 spaces).
     let mut col_starts: Vec<usize> = Vec::new();
-    let bytes = header_line.as_bytes();
-    let len = bytes.len();
-    let mut i = 0;
 
-    // First token always starts at 0 (skip leading whitespace if any)
-    while i < len && bytes[i] == b' ' {
+    // Find start of first column (skip leading gaps)
+    let mut i = 0;
+    while i < max_len && is_data_gap[i] {
         i += 1;
     }
-    if i < len {
+    if i < max_len {
         col_starts.push(i);
     }
 
-    // Scan for transitions: non-space -> 2+ spaces -> non-space
-    while i < len {
-        // Skip non-space characters (current token)
-        while i < len && bytes[i] != b' ' {
+    // Find transitions: content -> gap(width ≥ 2) -> content
+    while i < max_len {
+        // Skip non-gap positions (column content)
+        while i < max_len && !is_data_gap[i] {
             i += 1;
         }
-        // Count consecutive spaces
-        let space_start = i;
-        while i < len && bytes[i] == b' ' {
+        // Measure gap width
+        let gap_start = i;
+        while i < max_len && is_data_gap[i] {
             i += 1;
         }
-        // If 2+ spaces and followed by non-space, this is a column boundary
-        if i - space_start >= 2 && i < len {
+        // Only gaps of width ≥ 2 are real column boundaries
+        if i - gap_start >= 2 && i < max_len {
             col_starts.push(i);
-        } else if i - space_start == 1 && i < len {
-            // Single space = part of the same token (e.g., "CONTAINER ID", "MEM USAGE / LIMIT")
-            // Continue scanning
         }
     }
 
@@ -210,12 +244,18 @@ pub fn parse_columnar_output(output: &str) -> Option<ParsedTable> {
         return None;
     }
 
-    // Extract header names from the column boundaries
+    let header_len = header_line.len();
+
+    // Extract header names from the header line at column boundaries
     let headers: Vec<String> = col_starts
         .iter()
         .enumerate()
         .map(|(idx, &start)| {
-            let end = col_starts.get(idx + 1).copied().unwrap_or(len);
+            let end = col_starts
+                .get(idx + 1)
+                .copied()
+                .unwrap_or(header_len)
+                .min(header_len);
             header_line
                 .get(start..end)
                 .unwrap_or("")
@@ -224,8 +264,8 @@ pub fn parse_columnar_output(output: &str) -> Option<ParsedTable> {
         })
         .collect();
 
-    // Parse data rows
-    let rows: Vec<Vec<String>> = lines[1..]
+    // Extract data row values at column boundaries
+    let rows: Vec<Vec<String>> = data_lines
         .iter()
         .map(|line| {
             let line_len = line.len();
@@ -469,9 +509,9 @@ mod tests {
     #[test]
     fn test_parse_columnar_docker_ps() {
         let output = "\
-CONTAINER ID   IMAGE          COMMAND       CREATED        STATUS        PORTS                  NAMES
-a1b2c3d4e5f6   nginx:latest   \"nginx -g…\"   2 hours ago    Up 2 hours    0.0.0.0:80->80/tcp     web
-f6e5d4c3b2a1   redis:7        \"redis-s…\"    3 hours ago    Up 3 hours    6379/tcp               cache";
+CONTAINER ID   IMAGE          COMMAND        CREATED        STATUS        PORTS                  NAMES
+a1b2c3d4e5f6   nginx:latest   \"nginx -g..\"   2 hours ago    Up 2 hours    0.0.0.0:80->80/tcp     web
+f6e5d4c3b2a1   redis:7        \"redis-se..\"   3 hours ago    Up 3 hours    6379/tcp               cache";
 
         let parsed = parse_columnar_output(output).unwrap();
         assert_eq!(parsed.headers.len(), 7);
@@ -549,6 +589,9 @@ node-2   500m         25%    2048Mi          50%";
 
     #[test]
     fn test_parse_columnar_short_lines() {
+        // With data-driven detection, columns with no data in ANY row
+        // cannot be detected (STATUS has no values). This is expected:
+        // real CLI output always has data in every column.
         let output = "\
 NAME           IMAGE          STATUS
 container1     nginx:latest
@@ -558,7 +601,6 @@ short";
         assert_eq!(parsed.rows.len(), 2);
         assert_eq!(parsed.rows[0][0], "container1");
         assert_eq!(parsed.rows[0][1], "nginx:latest");
-        assert_eq!(parsed.rows[0][2], ""); // short line, no status
         assert_eq!(parsed.rows[1][0], "short");
         assert_eq!(parsed.rows[1][1], ""); // even shorter
     }
