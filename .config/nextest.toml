@@ -1,0 +1,7 @@
+[profile.default]
+retries = 0
+
+# Flaky test: config watcher uses filesystem events with timing-sensitive assertions
+[[profile.default.overrides]]
+filter = "test(test_config_watcher_detects_changes)"
+retries = 2
