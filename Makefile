@@ -94,7 +94,7 @@ coverage:
 
 # Code coverage with minimum threshold (fail if below)
 coverage-check:
-	@command -v cargo-tarpaulin >/dev/null 2>&1 && cargo tarpaulin --engine llvm --out xml --output-dir coverage --fail-under 50 || echo "cargo-tarpaulin not installed, run: cargo install cargo-tarpaulin"
+	@command -v cargo-tarpaulin >/dev/null 2>&1 && cargo tarpaulin --engine llvm --out xml --output-dir coverage --fail-under 60 || echo "cargo-tarpaulin not installed, run: cargo install cargo-tarpaulin"
 
 # Mutation testing (security module only - fast)
 mutants:
@@ -255,7 +255,7 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  coverage         - Generate HTML coverage report (cargo-tarpaulin)"
-	@echo "  coverage-check   - Coverage with minimum threshold (--fail-under 50)"
+	@echo "  coverage-check   - Coverage with minimum threshold (--fail-under 60)"
 	@echo "  mutants          - Mutation testing (security module)"
 	@echo "  mutants-db       - Mutation testing (domain/database)"
 	@echo "  mutants-full     - Mutation testing (full project)"

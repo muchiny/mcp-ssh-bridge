@@ -1,0 +1,44 @@
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/security/**
+          - deny.toml
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+
+rust:
+  - changed-files:
+      - any-glob-to-any-file:
+          - Cargo.toml
+          - Cargo.lock
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - Dockerfile
+          - docker-compose*.yml
+
+tools:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/mcp/tool_handlers/**
+
+domain:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/domain/**
+
+windows:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/mcp/tool_handlers/windows_*
+          - src/domain/use_cases/windows_*
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - docs/**
