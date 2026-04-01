@@ -1,10 +1,11 @@
+<!-- markdownlint-disable MD041 -->
 ## Summary
 
 <!-- What does this PR do and why? -->
 
 ## Changes
 
-- 
+-
 
 ## Checklist
 
