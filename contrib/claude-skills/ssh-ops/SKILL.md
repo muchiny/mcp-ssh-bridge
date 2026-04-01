@@ -1,12 +1,13 @@
 ---
 name: ssh-ops
-description: Remote server operations via mcp-ssh-bridge CLI. Use when managing infrastructure, SSH hosts, Docker, K8s, services, files, or running remote commands. Always prefer CLI over MCP for token efficiency.
+description: This skill should be used when the user asks to "run a command on a server", "check Docker containers", "restart a service", "read a remote file", "check disk usage", or mentions managing remote infrastructure via SSH. Teaches CLI-first workflow with progressive tool discovery.
 argument-hint: [tool-name|group|search-term]
+compatibility: "2.1+"
 ---
 
 # Remote Infrastructure Operations
 
-You have access to **337 tools** via the `mcp-ssh-bridge` CLI for managing remote servers over SSH.
+**338 tools** are available via the `mcp-ssh-bridge` CLI for managing remote servers over SSH.
 
 ## Golden Rule
 
@@ -15,7 +16,7 @@ CLI saves 10-32x tokens compared to MCP by loading schemas on-demand.
 
 ## Progressive Discovery Workflow
 
-When you need a tool but don't know its exact name, follow these steps:
+To find the right tool, follow these steps:
 
 ### Step 1 — Browse groups (~2K tokens)
 ```bash
@@ -37,7 +38,7 @@ mcp-ssh-bridge describe-tool ssh_docker_ps
 mcp-ssh-bridge tool ssh_docker_ps host=myserver --json
 ```
 
-You can also search by keyword: `mcp-ssh-bridge list-tools --search kubernetes`
+Search by keyword: `mcp-ssh-bridge list-tools --search kubernetes`
 
 ## Syntax Reference
 
@@ -48,11 +49,11 @@ mcp-ssh-bridge tool ssh_exec host=prod command="df -h"
 # Complex/nested args via JSON
 mcp-ssh-bridge tool ssh_k8s_get --json-args '{"host":"k8s","resource":"pods","namespace":"default"}'
 
+# Multi-file write (inline content + local file upload in one call)
+mcp-ssh-bridge tool ssh_files_write --json-args '{"host":"prod","files":[{"remote_path":"/tmp/a.conf","content":"key=val"},{"remote_path":"/opt/b.bin","local_path":"/local/b.bin"}]}'
+
 # JSON output for reliable parsing
 mcp-ssh-bridge tool ssh_docker_ps host=prod --json
-
-# Global JSON flag (works on all commands)
-mcp-ssh-bridge --json status
 
 # Aliases: t = tool, dt = describe-tool
 mcp-ssh-bridge t ssh_exec host=prod command="whoami"
@@ -107,11 +108,11 @@ mcp-ssh-bridge t ssh_service_status host=HOST service=nginx
 # Read a remote file
 mcp-ssh-bridge t ssh_file_read host=HOST path=/etc/nginx/nginx.conf
 
+# Write a file (any size — large content auto-streams via SFTP)
+mcp-ssh-bridge t ssh_file_write host=HOST path=/tmp/config.yaml content="key: value"
+
 # Check disk usage
 mcp-ssh-bridge t ssh_disk_usage host=HOST
-
-# Kubernetes pods
-mcp-ssh-bridge t ssh_k8s_get host=HOST resource=pods namespace=default
 
 # Recent logs
 mcp-ssh-bridge t ssh_service_logs host=HOST service=myapp lines=50
@@ -125,8 +126,9 @@ mcp-ssh-bridge t ssh_net_connections host=HOST
 
 ## Best Practices
 
-1. **Use `--json`** when you need to parse output programmatically
+1. **Use `--json`** when parsing output programmatically
 2. **Use `ssh_diagnose`** first for troubleshooting — it collects everything in one SSH call
 3. **Use `ssh_exec`** as fallback for any command not covered by specialized tools
 4. **Check exit code** to determine success/failure without parsing output
-5. **Use `describe-tool --json`** to get the exact schema before invoking unfamiliar tools
+5. **Use `ssh_files_write`** to write multiple files in a single SFTP session
+6. **Use `describe-tool --json`** to get the exact schema before invoking unfamiliar tools

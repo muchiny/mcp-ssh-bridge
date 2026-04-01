@@ -1,29 +1,30 @@
 ---
 name: ssh-diagnose
-description: Diagnose remote server issues — health checks, service failures, disk/memory/CPU problems, network issues. Use when debugging slow, unresponsive, or failing servers.
+description: This skill should be used when the user asks to "debug my server", "why is prod slow", "check why a service is down", "diagnose disk full", "server is unresponsive", or mentions troubleshooting remote server issues like CPU, memory, disk, or network problems.
 argument-hint: <host> [symptom]
+compatibility: "2.1+"
 ---
 
 # Server Diagnostics
 
 Systematically diagnose issues on a remote server using mcp-ssh-bridge CLI.
-Runs in a forked agent to avoid polluting the main conversation with verbose output.
 
-**Host:** `$0` (first argument)
-**Symptom:** `$1` (optional: slow, crash, oom, disk, network)
+**Delegation**: Use a general-purpose agent (via the Agent tool) to run these commands in isolation, so verbose diagnostic output does not pollute the main conversation.
+
+Parse `$ARGUMENTS`: first word = host, second word (optional) = symptom (slow, crash, oom, disk, network).
 
 ## Phase 1 — Quick Health Overview
 
 Always start here. One command collects uptime, CPU, memory, disk, processes, failed services, and recent errors:
 
 ```bash
-mcp-ssh-bridge tool ssh_diagnose host=$0 --json
+mcp-ssh-bridge tool ssh_diagnose host=HOST --json
 ```
 
 If a specific symptom was provided, also run adaptive triage:
 
 ```bash
-mcp-ssh-bridge tool ssh_incident_triage host=$0 symptom=$1 --json
+mcp-ssh-bridge tool ssh_incident_triage host=HOST symptom=SYMPTOM --json
 ```
 
 Valid symptoms: `slow`, `crash`, `oom`, `disk`, `network`
@@ -34,34 +35,34 @@ Based on Phase 1 findings, drill into the specific problem area.
 
 ### High CPU / Slow
 ```bash
-mcp-ssh-bridge tool ssh_process_top host=$0 --json
-mcp-ssh-bridge tool ssh_metrics host=$0 --json
+mcp-ssh-bridge tool ssh_process_top host=HOST --json
+mcp-ssh-bridge tool ssh_metrics host=HOST --json
 ```
 
 ### Out of Memory
 ```bash
-mcp-ssh-bridge tool ssh_exec host=$0 command="free -h && cat /proc/meminfo | head -20"
-mcp-ssh-bridge tool ssh_process_top host=$0 --json
+mcp-ssh-bridge tool ssh_exec host=HOST command="free -h && cat /proc/meminfo | head -20"
+mcp-ssh-bridge tool ssh_process_top host=HOST --json
 ```
 
 ### Disk Full
 ```bash
-mcp-ssh-bridge tool ssh_disk_usage host=$0 --json
-mcp-ssh-bridge tool ssh_exec host=$0 command="df -h && df -i"
-mcp-ssh-bridge tool ssh_exec host=$0 command="du -sh /* 2>/dev/null | sort -rh | head -10"
+mcp-ssh-bridge tool ssh_disk_usage host=HOST --json
+mcp-ssh-bridge tool ssh_exec host=HOST command="df -h && df -i"
+mcp-ssh-bridge tool ssh_exec host=HOST command="du -sh /* 2>/dev/null | sort -rh | head -10"
 ```
 
 ### Service Down
 ```bash
-mcp-ssh-bridge tool ssh_service_list host=$0 --json
-mcp-ssh-bridge tool ssh_service_logs host=$0 service=SERVICE_NAME lines=100
+mcp-ssh-bridge tool ssh_service_list host=HOST --json
+mcp-ssh-bridge tool ssh_service_logs host=HOST service=SERVICE_NAME lines=100
 ```
 
 ### Network Issues
 ```bash
-mcp-ssh-bridge tool ssh_net_connections host=$0 --json
-mcp-ssh-bridge tool ssh_net_interfaces host=$0 --json
-mcp-ssh-bridge tool ssh_exec host=$0 command="ss -tlnp"
+mcp-ssh-bridge tool ssh_net_connections host=HOST --json
+mcp-ssh-bridge tool ssh_net_interfaces host=HOST --json
+mcp-ssh-bridge tool ssh_exec host=HOST command="ss -tlnp"
 ```
 
 ## Phase 3 — Log Analysis
@@ -69,13 +70,13 @@ mcp-ssh-bridge tool ssh_exec host=$0 command="ss -tlnp"
 Check recent system logs for errors:
 
 ```bash
-mcp-ssh-bridge tool ssh_exec host=$0 command="journalctl -p err --since '1 hour ago' --no-pager | tail -50"
+mcp-ssh-bridge tool ssh_exec host=HOST command="journalctl -p err --since '1 hour ago' --no-pager | tail -50"
 ```
 
 For a specific service:
 
 ```bash
-mcp-ssh-bridge tool ssh_service_logs host=$0 service=SERVICE_NAME lines=200
+mcp-ssh-bridge tool ssh_service_logs host=HOST service=SERVICE_NAME lines=200
 ```
 
 ## Phase 4 — Report

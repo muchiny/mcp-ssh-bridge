@@ -1,16 +1,17 @@
 ---
 name: ssh-audit
-description: Security audit and compliance scanning — CIS benchmarks, vulnerability scans, certificate checks, firewall rules, open ports. Use for security reviews or compliance assessments.
+description: This skill should be used when the user asks to "run a security scan", "check for vulnerabilities", "audit compliance", "check certificate expiry", "scan open ports", or mentions security reviews, CIS benchmarks, or compliance assessments on remote servers.
 argument-hint: <host> [quick|full|network|compliance]
+compatibility: "2.1+"
 ---
 
 # Security Audit
 
 Run security audits on a remote server via mcp-ssh-bridge CLI.
-Runs in a forked agent to handle verbose scan output without polluting the main context.
 
-**Host:** `$0`
-**Scope:** `$1` (default: quick)
+**Delegation**: Use a general-purpose agent (via the Agent tool) to run these commands in isolation, so verbose scan output does not pollute the main conversation.
+
+Parse `$ARGUMENTS`: first word = host, second word (optional) = scope (default: quick).
 
 ## Scope: quick (~2 min)
 
@@ -18,19 +19,19 @@ Fast security overview — run this first:
 
 ```bash
 # Open ports
-mcp-ssh-bridge tool ssh_port_scan host=$0 --json
+mcp-ssh-bridge tool ssh_port_scan host=HOST --json
 
 # Certificate expiry
-mcp-ssh-bridge tool ssh_cert_expiry host=$0 --json
+mcp-ssh-bridge tool ssh_cert_expiry host=HOST --json
 
 # Fail2ban status
-mcp-ssh-bridge tool ssh_fail2ban_status host=$0 --json
+mcp-ssh-bridge tool ssh_fail2ban_status host=HOST --json
 
 # Firewall rules
-mcp-ssh-bridge tool ssh_firewall_list host=$0 --json
+mcp-ssh-bridge tool ssh_firewall_list host=HOST --json
 
 # Listening services
-mcp-ssh-bridge tool ssh_exec host=$0 command="ss -tlnp" --json
+mcp-ssh-bridge tool ssh_exec host=HOST command="ss -tlnp" --json
 ```
 
 ## Scope: network
@@ -39,16 +40,16 @@ Network-focused security assessment:
 
 ```bash
 # SSL/TLS audit
-mcp-ssh-bridge tool ssh_ssl_audit host=$0 --json
+mcp-ssh-bridge tool ssh_ssl_audit host=HOST --json
 
 # Port scan
-mcp-ssh-bridge tool ssh_port_scan host=$0 --json
+mcp-ssh-bridge tool ssh_port_scan host=HOST --json
 
 # Active connections
-mcp-ssh-bridge tool ssh_net_connections host=$0 --json
+mcp-ssh-bridge tool ssh_net_connections host=HOST --json
 
 # DNS configuration
-mcp-ssh-bridge tool ssh_net_dns host=$0 --json
+mcp-ssh-bridge tool ssh_net_dns host=HOST --json
 ```
 
 ## Scope: compliance
@@ -57,16 +58,16 @@ Standards-based compliance check:
 
 ```bash
 # CIS Benchmark
-mcp-ssh-bridge tool ssh_cis_benchmark host=$0 --json
+mcp-ssh-bridge tool ssh_cis_benchmark host=HOST --json
 
 # STIG check
-mcp-ssh-bridge tool ssh_stig_check host=$0 --json
+mcp-ssh-bridge tool ssh_stig_check host=HOST --json
 
 # Compliance score
-mcp-ssh-bridge tool ssh_compliance_score host=$0 --json
+mcp-ssh-bridge tool ssh_compliance_score host=HOST --json
 
 # Full compliance report
-mcp-ssh-bridge tool ssh_compliance_report host=$0 --json
+mcp-ssh-bridge tool ssh_compliance_report host=HOST --json
 ```
 
 ## Scope: full
@@ -77,23 +78,23 @@ Run all commands from `quick`, `network`, and `compliance` scopes, then add:
 
 ```bash
 # SBOM generation
-mcp-ssh-bridge tool ssh_sbom_generate host=$0 --json
+mcp-ssh-bridge tool ssh_sbom_generate host=HOST --json
 
 # Vulnerability scan
-mcp-ssh-bridge tool ssh_vuln_scan host=$0 --json
+mcp-ssh-bridge tool ssh_vuln_scan host=HOST --json
 
 # SELinux / AppArmor status
-mcp-ssh-bridge tool ssh_selinux_status host=$0 --json
-mcp-ssh-bridge tool ssh_apparmor_status host=$0 --json
+mcp-ssh-bridge tool ssh_selinux_status host=HOST --json
+mcp-ssh-bridge tool ssh_apparmor_status host=HOST --json
 
 # Security audit log
-mcp-ssh-bridge tool ssh_security_audit host=$0 --json
+mcp-ssh-bridge tool ssh_security_audit host=HOST --json
 
 # SSH key audit
-mcp-ssh-bridge tool ssh_key_audit host=$0 --json
+mcp-ssh-bridge tool ssh_key_audit host=HOST --json
 
 # User accounts review
-mcp-ssh-bridge tool ssh_user_list host=$0 --json
+mcp-ssh-bridge tool ssh_user_list host=HOST --json
 ```
 
 ## Audit Report Format

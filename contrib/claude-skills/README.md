@@ -2,7 +2,9 @@
 
 Pre-built Skills that teach Claude Code to manage remote infrastructure
 via the mcp-ssh-bridge CLI. Token-efficient progressive discovery of
-337 tools across 74 groups.
+338 tools across 74 groups.
+
+> Run `mcp-ssh-bridge list-tools --groups-only` to get the current tool/group count.
 
 ## Quick Install
 
@@ -31,10 +33,10 @@ That's it. Claude Code auto-discovers the skills on next session start.
 | Skill | Invoke | Mode | Description |
 |-------|--------|------|-------------|
 | **ssh-ops** | Auto | Inline | Main skill — CLI workflow, progressive discovery, syntax reference |
-| **ssh-diagnose** | Auto | Fork agent | Server diagnostics — systematic health checks by symptom |
+| **ssh-diagnose** | Auto | Agent | Server diagnostics — systematic health checks by symptom |
 | **ssh-deploy** | `/ssh-deploy` | Inline | Deployments — canary, rolling, K8s, Helm (manual-only for safety) |
-| **ssh-discover** | `/ssh-discover` | Inline | Explore the 337-tool catalog by group or keyword |
-| **ssh-audit** | Auto | Fork agent | Security audit — CIS, CVE, certs, ports, compliance |
+| **ssh-discover** | `/ssh-discover` | Inline | Explore the 338-tool catalog by group or keyword |
+| **ssh-audit** | Auto | Agent | Security audit — CIS, CVE, certs, ports, compliance |
 
 ### How they work
 

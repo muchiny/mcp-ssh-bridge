@@ -1,7 +1,8 @@
 ---
 name: ssh-discover
-description: Explore mcp-ssh-bridge tool catalog — browse 337 tools across 74 groups, search by keyword, view full schemas
+description: This skill should be used when the user asks to "show me the available tools", "what Docker tools exist", "search for kubernetes tools", "explore the tool catalog", or wants to browse the 338 mcp-ssh-bridge tools by group or keyword.
 argument-hint: [group-name|search-keyword]
+compatibility: "2.1+"
 ---
 
 # Tool Discovery
