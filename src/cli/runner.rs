@@ -10,8 +10,9 @@ use std::sync::Arc;
 
 use tracing::{info, warn};
 
-use crate::config::Config;
+use crate::config::{Config, ShellType};
 use crate::domain::ExecuteCommandUseCase;
+use crate::domain::use_cases::shell;
 use crate::error::{BridgeError, Result};
 use crate::mcp::CommandHistory;
 use crate::mcp::history::HistoryConfig;
@@ -256,11 +257,6 @@ pub async fn run_config_diff(config: Arc<Config>) -> Result<()> {
     Ok(())
 }
 
-/// Shell escape a string for safe use in shell commands
-fn shell_escape(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
-
 /// Create a `ToolContext` from configuration
 fn create_context(config: Arc<Config>) -> ToolContext {
     let validator = Arc::new(CommandValidator::new(&config.security));
@@ -343,7 +339,7 @@ pub async fn run_exec(
     // Build the actual command (with optional cd)
     let full_command = working_dir.map_or_else(
         || command.to_string(),
-        |dir| format!("cd {} && {}", shell_escape(dir), command),
+        |dir| format!("cd {} && {}", shell::escape(dir, ShellType::Posix), command),
     );
 
     // Get retry config
@@ -400,6 +396,11 @@ pub async fn run_exec(
 
     // Print the output
     println!("{}", response.output);
+
+    // Propagate remote exit code to CLI exit code
+    if response.exit_code != 0 {
+        std::process::exit(1);
+    }
 
     Ok(())
 }

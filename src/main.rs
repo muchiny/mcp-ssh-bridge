@@ -151,6 +151,11 @@ async fn main() -> Result<()> {
             search,
             json,
         }) => {
+            if json {
+                eprintln!(
+                    "warning: --json under list-tools is deprecated; use the global --json flag"
+                );
+            }
             run_list_tools(
                 config,
                 group.as_deref(),
