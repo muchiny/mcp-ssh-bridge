@@ -81,7 +81,6 @@ impl StandardTool for PkgListTool {
             args.filter.as_deref(),
         ))
     }
-
 }
 
 /// Handler for the `ssh_pkg_list` tool.

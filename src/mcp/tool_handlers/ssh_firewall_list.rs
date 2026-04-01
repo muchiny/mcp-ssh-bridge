@@ -81,7 +81,6 @@ impl StandardTool for FirewallListTool {
             args.chain.as_deref(),
         ))
     }
-
 }
 
 /// Handler for the `ssh_firewall_list` tool.

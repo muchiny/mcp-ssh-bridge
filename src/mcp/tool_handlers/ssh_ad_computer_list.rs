@@ -84,9 +84,7 @@ impl StandardTool for AdComputerListTool {
             for (i, h) in parsed.headers.iter().enumerate() {
                 obj.insert(
                     h.clone(),
-                    serde_json::Value::String(
-                        row.get(i).map_or_else(String::new, Clone::clone),
-                    ),
+                    serde_json::Value::String(row.get(i).map_or_else(String::new, Clone::clone)),
                 );
             }
             tbl = tbl.row(serde_json::Value::Object(obj));
