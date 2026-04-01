@@ -30,6 +30,8 @@ pub async fn run_list_tools(
     config: Arc<Config>,
     group: Option<&str>,
     json_output: bool,
+    groups_only: bool,
+    search: Option<&str>,
 ) -> Result<()> {
     use crate::mcp::registry::{create_filtered_registry, tool_group};
 
@@ -40,6 +42,43 @@ pub async fn run_list_tools(
     // Filter by group if specified
     if let Some(group_filter) = group {
         tools.retain(|t| tool_group(&t.name) == group_filter);
+    }
+
+    // Filter by search keyword (matches name or description, case-insensitive)
+    if let Some(query) = search {
+        let query_lower = query.to_lowercase();
+        tools.retain(|t| {
+            t.name.to_lowercase().contains(&query_lower)
+                || t.description.to_lowercase().contains(&query_lower)
+        });
+    }
+
+    // Groups-only mode: show just group names with tool counts
+    if groups_only {
+        let mut group_counts: std::collections::BTreeMap<&str, usize> =
+            std::collections::BTreeMap::new();
+        for tool in &tools {
+            *group_counts.entry(tool_group(&tool.name)).or_insert(0) += 1;
+        }
+
+        if json_output {
+            let map: std::collections::BTreeMap<&str, usize> = group_counts;
+            let json = serde_json::to_string_pretty(&map)
+                .map_err(|e| BridgeError::Config(e.to_string()))?;
+            println!("{json}");
+        } else {
+            println!("{:<30} TOOLS", "GROUP");
+            println!("{}", "-".repeat(40));
+            for (group_name, count) in &group_counts {
+                println!("{group_name:<30} {count}");
+            }
+            println!(
+                "\nTotal: {} groups, {} tools",
+                group_counts.len(),
+                tools.len()
+            );
+        }
+        return Ok(());
     }
 
     if json_output {
@@ -828,6 +867,216 @@ pub async fn run_download(
     }
 
     println!("{output}");
+
+    Ok(())
+}
+
+/// Invoke any registered MCP tool directly via CLI.
+///
+/// Accepts arguments as `key=value` pairs or a JSON string via `json_args`.
+/// Values are coerced to the type declared in the tool's input schema when possible.
+///
+/// Returns the remote exit code (0 = success, non-zero = tool reported an error).
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The tool is not found in the registry
+/// - Argument parsing fails
+/// - Tool execution fails
+pub async fn run_tool(
+    config: Arc<Config>,
+    tool_name: &str,
+    kv_args: &[String],
+    json_args: Option<&str>,
+    json_output: bool,
+) -> Result<i32> {
+    use crate::mcp::registry::create_filtered_registry;
+
+    let registry = create_filtered_registry(&config.tool_groups);
+    let ctx = create_context(Arc::clone(&config));
+
+    // Build the arguments JSON
+    let args: Option<serde_json::Value> = if let Some(raw) = json_args {
+        let val: serde_json::Value = serde_json::from_str(raw)
+            .map_err(|e| BridgeError::Config(format!("Invalid --json-args: {e}")))?;
+        Some(val)
+    } else if kv_args.is_empty() {
+        None
+    } else {
+        // Parse key=value pairs into a JSON object, coercing types via schema
+        let schema_json = registry.get(tool_name).map(|h| h.schema().input_schema);
+        let mut map = serde_json::Map::new();
+        for pair in kv_args {
+            if let Some((key, value)) = pair.split_once('=') {
+                let coerced = coerce_value(value, key, schema_json);
+                map.insert(key.to_string(), coerced);
+            } else {
+                return Err(BridgeError::Config(format!(
+                    "Invalid argument '{pair}': expected key=value format"
+                )));
+            }
+        }
+        Some(serde_json::Value::Object(map))
+    };
+
+    // Execute the tool
+    let result = registry.execute(tool_name, args, &ctx).await?;
+
+    let is_error = result.is_error.unwrap_or(false);
+    let exit_code = i32::from(is_error);
+
+    if json_output {
+        let json = serde_json::to_string_pretty(&result)
+            .map_err(|e| BridgeError::Config(e.to_string()))?;
+        println!("{json}");
+    } else {
+        // Print text content
+        for content in &result.content {
+            match content {
+                crate::mcp::protocol::ToolContent::Text { text } => {
+                    println!("{text}");
+                }
+                _ => {
+                    // For non-text content, serialize as JSON
+                    if let Ok(s) = serde_json::to_string_pretty(content) {
+                        println!("{s}");
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(exit_code)
+}
+
+/// Coerce a string value to the appropriate JSON type based on the tool's input schema.
+fn coerce_value(value: &str, key: &str, schema_json: Option<&str>) -> serde_json::Value {
+    // Try to extract the expected type from the JSON schema
+    if let Some(prop_type) = schema_json
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .and_then(|schema| {
+            schema
+                .get("properties")
+                .and_then(|p| p.get(key))
+                .and_then(|p| p.get("type"))
+                .and_then(|t| t.as_str())
+                .map(String::from)
+        })
+    {
+        return match prop_type.as_str() {
+            "integer" | "number" => value
+                .parse::<i64>()
+                .map(serde_json::Value::from)
+                .or_else(|_| value.parse::<f64>().map(serde_json::Value::from))
+                .unwrap_or_else(|_| serde_json::Value::String(value.to_string())),
+            "boolean" => match value {
+                "true" | "1" | "yes" => serde_json::Value::Bool(true),
+                "false" | "0" | "no" => serde_json::Value::Bool(false),
+                _ => serde_json::Value::String(value.to_string()),
+            },
+            "array" | "object" => serde_json::from_str(value)
+                .unwrap_or_else(|_| serde_json::Value::String(value.to_string())),
+            _ => serde_json::Value::String(value.to_string()),
+        };
+    }
+
+    // Auto-detect: try JSON literals first, then string
+    if (value.starts_with('{') || value.starts_with('['))
+        && let Ok(v) = serde_json::from_str(value)
+    {
+        return v;
+    }
+    if let Ok(b) = value.parse::<bool>() {
+        return serde_json::Value::Bool(b);
+    }
+    if let Ok(n) = value.parse::<i64>() {
+        return serde_json::Value::from(n);
+    }
+    serde_json::Value::String(value.to_string())
+}
+
+/// Show full schema and description for a single tool.
+///
+/// # Errors
+///
+/// Returns an error if the tool is not found in the registry.
+pub async fn run_describe_tool(
+    config: Arc<Config>,
+    tool_name: &str,
+    json_output: bool,
+) -> Result<()> {
+    use crate::mcp::registry::{create_filtered_registry, tool_group};
+
+    let registry = create_filtered_registry(&config.tool_groups);
+    let handler = registry
+        .get(tool_name)
+        .ok_or_else(|| BridgeError::McpUnknownTool {
+            tool: tool_name.to_string(),
+        })?;
+
+    let schema = handler.schema();
+    let group = tool_group(tool_name);
+
+    if json_output {
+        let input_schema: serde_json::Value =
+            serde_json::from_str(schema.input_schema).unwrap_or_default();
+        let obj = serde_json::json!({
+            "name": schema.name,
+            "group": group,
+            "description": schema.description,
+            "input_schema": input_schema,
+        });
+        let json =
+            serde_json::to_string_pretty(&obj).map_err(|e| BridgeError::Config(e.to_string()))?;
+        println!("{json}");
+    } else {
+        println!("Tool: {}", schema.name);
+        println!("Group: {group}");
+        println!("Description: {}", schema.description);
+        println!("\nInput Schema:");
+
+        // Pretty-print the schema, showing required fields and property types
+        if let Ok(input) = serde_json::from_str::<serde_json::Value>(schema.input_schema)
+            && let Some(props) = input.get("properties").and_then(|p| p.as_object())
+        {
+            let required: Vec<&str> = input
+                .get("required")
+                .and_then(|r| r.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+                .unwrap_or_default();
+
+            for (name, prop) in props {
+                let prop_type = prop.get("type").and_then(|t| t.as_str()).unwrap_or("any");
+                let is_required = required.contains(&name.as_str());
+                let req_marker = if is_required { " (required)" } else { "" };
+                let desc = prop
+                    .get("description")
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("");
+
+                println!("  {name}: {prop_type}{req_marker}");
+                if !desc.is_empty() {
+                    println!("    {desc}");
+                }
+
+                // Show enum values if present
+                if let Some(vals) = prop.get("enum").and_then(|e| e.as_array()) {
+                    let enum_strs: Vec<String> =
+                        vals.iter().map(std::string::ToString::to_string).collect();
+                    println!("    values: [{}]", enum_strs.join(", "));
+                }
+
+                // Show default if present
+                if let Some(default) = prop.get("default") {
+                    println!("    default: {default}");
+                }
+            }
+        }
+
+        println!("\nUsage:");
+        println!("  mcp-ssh-bridge tool {tool_name} key=value ...",);
+    }
 
     Ok(())
 }
@@ -1912,5 +2161,67 @@ mod tests {
             // Should not panic
             let _ = format!("{:?}", host.host_key_verification);
         }
+    }
+
+    // ============== coerce_value Tests ==============
+
+    #[test]
+    fn test_coerce_value_string_no_schema() {
+        let v = coerce_value("hello", "key", None);
+        assert_eq!(v, serde_json::Value::String("hello".to_string()));
+    }
+
+    #[test]
+    fn test_coerce_value_integer_auto() {
+        let v = coerce_value("42", "key", None);
+        assert_eq!(v, serde_json::json!(42));
+    }
+
+    #[test]
+    fn test_coerce_value_bool_auto() {
+        let v = coerce_value("true", "key", None);
+        assert_eq!(v, serde_json::json!(true));
+    }
+
+    #[test]
+    fn test_coerce_value_json_object_auto() {
+        let v = coerce_value(r#"{"a":1}"#, "key", None);
+        assert_eq!(v, serde_json::json!({"a": 1}));
+    }
+
+    #[test]
+    fn test_coerce_value_integer_from_schema() {
+        let schema = r#"{"type":"object","properties":{"timeout":{"type":"integer"}}}"#;
+        let v = coerce_value("30", "timeout", Some(schema));
+        assert_eq!(v, serde_json::json!(30));
+    }
+
+    #[test]
+    fn test_coerce_value_boolean_from_schema() {
+        let schema = r#"{"type":"object","properties":{"sudo":{"type":"boolean"}}}"#;
+        let v = coerce_value("yes", "sudo", Some(schema));
+        assert_eq!(v, serde_json::json!(true));
+    }
+
+    #[test]
+    fn test_coerce_value_string_from_schema() {
+        let schema = r#"{"type":"object","properties":{"host":{"type":"string"}}}"#;
+        let v = coerce_value("prod", "host", Some(schema));
+        assert_eq!(v, serde_json::Value::String("prod".to_string()));
+    }
+
+    #[test]
+    fn test_coerce_value_integer_invalid_stays_string() {
+        let schema = r#"{"type":"object","properties":{"port":{"type":"integer"}}}"#;
+        let v = coerce_value("abc", "port", Some(schema));
+        assert_eq!(v, serde_json::Value::String("abc".to_string()));
+    }
+
+    #[test]
+    fn test_coerce_value_unknown_key_uses_auto() {
+        let schema = r#"{"type":"object","properties":{"host":{"type":"string"}}}"#;
+        // "extra" is not in schema, falls through to auto-detect
+        let v = coerce_value("42", "extra", Some(schema));
+        assert_eq!(v, serde_json::json!(42));
     }
 }

@@ -4,6 +4,57 @@
 
 MCP SSH Bridge is a Rust MCP server that enables Claude Code to securely execute commands on air-gapped environments via SSH. JSON-RPC over stdio, strict security controls. **337 tools** across **74 groups** (59 Linux, 13 Windows, 2 cross-platform).
 
+## CLI-as-Tool Mode (Alternative to MCP)
+
+All 337 MCP tools are accessible directly via CLI, enabling **10-32x token savings** compared to MCP mode. Use CLI for dev workflows, MCP for enterprise integration.
+
+### Quick Reference
+
+```bash
+# Invoke any tool directly (same as MCP, but via CLI)
+mcp-ssh-bridge tool ssh_docker_ps host=prod
+mcp-ssh-bridge tool ssh_exec host=prod command="df -h" --json
+mcp-ssh-bridge tool ssh_k8s_get --json-args '{"host":"k8s","resource":"pods","namespace":"default"}'
+
+# Progressive discovery (token-efficient for AI agents)
+mcp-ssh-bridge list-tools --groups-only          # 74 groups (~2K tokens)
+mcp-ssh-bridge list-tools --group docker          # tools in group (~500 tokens)
+mcp-ssh-bridge list-tools --search kubernetes     # keyword search
+mcp-ssh-bridge describe-tool ssh_docker_ps        # full schema for 1 tool (~200 tokens)
+mcp-ssh-bridge describe-tool ssh_exec --json      # schema as JSON
+
+# Global --json flag works on all commands
+mcp-ssh-bridge --json status
+mcp-ssh-bridge --json tool ssh_service_status host=web1 service=nginx
+```
+
+### When to Use CLI vs MCP
+
+| Use Case | CLI | MCP |
+|----------|-----|-----|
+| Dev workflows, scripting | Preferred (token-efficient) | Works |
+| AI agent integration (Claude Code Bash) | Preferred (progressive discovery) | Works (dumps all schemas) |
+| Enterprise (auth, audit, multi-user) | Works | Preferred |
+| Claude Desktop / DXT extension | N/A | Required |
+| Persistent sessions, output cache | Limited | Full support |
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Tool execution error (command failed on remote host) |
+| 2 | CLI usage error (unknown tool, bad args) |
+| 3 | Connection error (SSH failure) |
+| 4 | Security denial (command blocked by policy) |
+| 5 | Configuration error |
+
+### Aliases
+
+- `tool` / `t` — invoke a tool
+- `describe-tool` / `dt` — show tool schema
+- `list-tools` — list tools with filtering
+
 ## Build Commands
 
 ```bash
