@@ -3,11 +3,14 @@
 //! Lists users on a remote Linux host.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::config::HostConfig;
 use crate::domain::use_cases::user_management::UserCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshUserListArgs {
@@ -70,6 +73,42 @@ impl StandardTool for UserListTool {
         Ok(UserCommandBuilder::build_user_list_command(
             args.system.unwrap_or(false),
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshUserListArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.len() < 2 {
+            return result;
+        }
+        let mut tbl = table("Users")
+            .column("user", "User")
+            .column("uid", "UID")
+            .column("gid", "GID")
+            .column("home", "Home")
+            .column("shell", "Shell");
+        for line in &lines[1..] {
+            let cols: Vec<&str> = line.split('\t').collect();
+            if cols.len() >= 5 {
+                tbl = tbl.row(json!({
+                    "user": cols[0],
+                    "uid": cols[1],
+                    "gid": cols[2],
+                    "home": cols[3],
+                    "shell": cols[4],
+                }));
+            }
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_user_list",
+            Some(json!({"host": args.host})),
+        );
+        ToolCallResult::text(output).with_app(tbl.build())
     }
 }
 

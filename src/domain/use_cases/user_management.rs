@@ -14,14 +14,16 @@ fn shell_escape(s: &str) -> String {
 pub struct UserCommandBuilder;
 
 impl UserCommandBuilder {
-    /// Build a command to list system users.
+    /// Build a command to list system users in TSV format.
+    ///
+    /// Produces tab-separated output with columns: USER, UID, GID, HOME, SHELL.
     #[must_use]
     pub fn build_user_list_command(system: bool) -> String {
         if system {
-            "getent passwd".to_string()
+            r#"awk -F: 'BEGIN{printf "USER\tUID\tGID\tHOME\tSHELL\n"}{printf "%s\t%s\t%s\t%s\t%s\n",$1,$3,$4,$6,$7}' /etc/passwd"#.to_string()
         } else {
             // Only regular users (UID >= 1000, excluding nobody)
-            "awk -F: '$3 >= 1000 && $1 != \"nobody\" {print}' /etc/passwd".to_string()
+            r#"awk -F: 'BEGIN{printf "USER\tUID\tGID\tHOME\tSHELL\n"}$3>=1000 && $1!="nobody"{printf "%s\t%s\t%s\t%s\t%s\n",$1,$3,$4,$6,$7}' /etc/passwd"#.to_string()
         }
     }
 
@@ -109,10 +111,12 @@ impl UserCommandBuilder {
         }
     }
 
-    /// Build a command to list groups.
+    /// Build a command to list groups in TSV format.
+    ///
+    /// Produces tab-separated output with columns: GROUP, GID, MEMBERS.
     #[must_use]
     pub fn build_group_list_command() -> String {
-        "getent group".to_string()
+        r#"awk -F: 'BEGIN{printf "GROUP\tGID\tMEMBERS\n"}{printf "%s\t%s\t%s\n",$1,$3,$4}' /etc/group"#.to_string()
     }
 
     /// Build a groupadd command.
@@ -145,12 +149,15 @@ mod tests {
         let cmd = UserCommandBuilder::build_user_list_command(false);
         assert!(cmd.contains("awk"));
         assert!(cmd.contains("1000"));
+        assert!(cmd.contains("USER\\tUID\\tGID\\tHOME\\tSHELL"));
     }
 
     #[test]
     fn test_user_list_system() {
         let cmd = UserCommandBuilder::build_user_list_command(true);
-        assert_eq!(cmd, "getent passwd");
+        assert!(cmd.contains("awk"));
+        assert!(cmd.contains("/etc/passwd"));
+        assert!(cmd.contains("USER\\tUID\\tGID\\tHOME\\tSHELL"));
     }
 
     #[test]
@@ -210,7 +217,9 @@ mod tests {
     #[test]
     fn test_group_list() {
         let cmd = UserCommandBuilder::build_group_list_command();
-        assert_eq!(cmd, "getent group");
+        assert!(cmd.contains("awk"));
+        assert!(cmd.contains("/etc/group"));
+        assert!(cmd.contains("GROUP\\tGID\\tMEMBERS"));
     }
 
     #[test]

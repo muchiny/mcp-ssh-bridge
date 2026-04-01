@@ -3,11 +3,14 @@
 //! Lists all groups on a remote Linux host.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::config::HostConfig;
 use crate::domain::use_cases::user_management::UserCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshGroupListArgs {
@@ -60,6 +63,38 @@ impl StandardTool for GroupListTool {
 
     fn build_command(_args: &SshGroupListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(UserCommandBuilder::build_group_list_command())
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshGroupListArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.len() < 2 {
+            return result;
+        }
+        let mut tbl = table("Groups")
+            .column("group", "Group")
+            .column("gid", "GID")
+            .column("members", "Members");
+        for line in &lines[1..] {
+            let cols: Vec<&str> = line.split('\t').collect();
+            if cols.len() >= 3 {
+                tbl = tbl.row(json!({
+                    "group": cols[0],
+                    "gid": cols[1],
+                    "members": cols[2],
+                }));
+            }
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_group_list",
+            Some(json!({"host": args.host})),
+        );
+        ToolCallResult::text(output).with_app(tbl.build())
     }
 }
 
