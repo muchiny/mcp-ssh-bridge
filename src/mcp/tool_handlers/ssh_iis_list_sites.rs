@@ -3,12 +3,15 @@
 //! Lists all IIS websites with name, ID, state, and physical path.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::iis::IisCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshIisListSitesArgs {
@@ -58,6 +61,43 @@ impl StandardTool for IisListSitesTool {
 
     fn build_command(_args: &SshIisListSitesArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(IisCommandBuilder::build_list_sites_command())
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshIisListSitesArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        let mut tbl = table("IIS Sites");
+        for h in &parsed.headers {
+            tbl = tbl.column(h, h.to_uppercase());
+        }
+        for row in &parsed.rows {
+            let first = row.first().map_or("", String::as_str);
+            if first.is_empty() {
+                continue;
+            }
+            let mut obj = serde_json::Map::new();
+            for (i, h) in parsed.headers.iter().enumerate() {
+                obj.insert(
+                    h.clone(),
+                    serde_json::Value::String(
+                        row.get(i).map_or_else(String::new, Clone::clone),
+                    ),
+                );
+            }
+            tbl = tbl.row(serde_json::Value::Object(obj));
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_iis_list_sites",
+            Some(json!({"host": args.host})),
+        );
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

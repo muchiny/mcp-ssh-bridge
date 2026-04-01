@@ -3,11 +3,14 @@
 //! Lists all VMs registered on an `ESXi` host via `vim-cmd vmsvc/getallvms`.
 
 use serde::Deserialize;
+use serde_json::{Value, json};
 
 use crate::config::HostConfig;
 use crate::domain::use_cases::esxi::EsxiCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshEsxiVmListArgs {
@@ -61,6 +64,41 @@ impl StandardTool for EsxiVmListTool {
 
     fn build_command(_args: &SshEsxiVmListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(EsxiCommandBuilder::build_vm_list_command())
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshEsxiVmListArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        let mut tbl = table("ESXi VMs");
+        for h in &parsed.headers {
+            tbl = tbl.column(h, h.to_uppercase());
+        }
+        for row in &parsed.rows {
+            let first = row.first().map_or("", String::as_str);
+            if first.is_empty() {
+                continue;
+            }
+            let mut obj = serde_json::Map::new();
+            for (i, h) in parsed.headers.iter().enumerate() {
+                obj.insert(
+                    h.clone(),
+                    Value::String(row.get(i).map_or_else(String::new, Clone::clone)),
+                );
+            }
+            tbl = tbl.row(Value::Object(obj));
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_esxi_vm_list",
+            Some(json!({"host": args.host})),
+        );
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

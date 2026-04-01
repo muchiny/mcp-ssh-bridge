@@ -4,11 +4,12 @@
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tracing::{info, warn};
 
 use crate::domain::output_truncator::truncate_output_with_cache;
 use crate::error::{BridgeError, Result};
+use crate::mcp::apps::table;
 use crate::mcp::protocol::ToolCallResult;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::ssh::{is_retryable_error, with_retry_if};
@@ -193,8 +194,45 @@ impl ToolHandler for SshDiskUsageHandler {
             }
         }
 
-        Ok(ToolCallResult::text(output_text))
+        let result = ToolCallResult::text(output_text);
+        Ok(post_process_disk_usage(result, &args, &response.stdout))
     }
+}
+
+/// Post-process disk usage output into a table component.
+fn post_process_disk_usage(
+    result: ToolCallResult,
+    args: &SshDiskUsageArgs,
+    output: &str,
+) -> ToolCallResult {
+    let Some(parsed) = super::utils::parse_columnar_output(output) else {
+        return result;
+    };
+    let mut tbl = table("Disk Usage");
+    for h in &parsed.headers {
+        tbl = tbl.column(h, h.to_uppercase());
+    }
+    for row in &parsed.rows {
+        let first = row.first().map_or("", String::as_str);
+        if first.is_empty() {
+            continue;
+        }
+        let mut obj = serde_json::Map::new();
+        for (i, h) in parsed.headers.iter().enumerate() {
+            obj.insert(
+                h.clone(),
+                serde_json::Value::String(row.get(i).map_or_else(String::new, Clone::clone)),
+            );
+        }
+        tbl = tbl.row(serde_json::Value::Object(obj));
+    }
+    tbl = tbl.action(
+        "refresh",
+        "Refresh",
+        "ssh_disk_usage",
+        Some(json!({"host": args.host})),
+    );
+    ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
 }
 
 #[cfg(test)]

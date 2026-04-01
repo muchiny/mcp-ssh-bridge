@@ -4,11 +4,14 @@
 //! Auto-detects `docker` or `podman` binary.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshDockerImagesArgs {
@@ -91,6 +94,41 @@ impl StandardTool for DockerImagesTool {
             args.filter.as_deref(),
             args.format.as_deref(),
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshDockerImagesArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        let mut tbl = table("Docker Images");
+        for h in &parsed.headers {
+            tbl = tbl.column(h, h.to_uppercase());
+        }
+        for row in &parsed.rows {
+            let first = row.first().map_or("", String::as_str);
+            if first.is_empty() {
+                continue;
+            }
+            let mut obj = serde_json::Map::new();
+            for (i, h) in parsed.headers.iter().enumerate() {
+                obj.insert(
+                    h.clone(),
+                    serde_json::Value::String(row.get(i).map_or_else(String::new, Clone::clone)),
+                );
+            }
+            tbl = tbl.row(serde_json::Value::Object(obj));
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_docker_images",
+            Some(json!({"host": args.host})),
+        );
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

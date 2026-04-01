@@ -3,12 +3,15 @@
 //! Shows cron execution history from system logs.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::cron_analysis::CronAnalysisCommandBuilder;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshCronHistoryArgs {
@@ -84,6 +87,43 @@ impl StandardTool for CronHistoryTool {
 
     fn build_command(args: &SshCronHistoryArgs, _host_config: &HostConfig) -> Result<String> {
         CronAnalysisCommandBuilder::build_cron_history_command(args.lines, args.since.as_deref())
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshCronHistoryArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        let mut tbl = table("Cron History");
+        for h in &parsed.headers {
+            tbl = tbl.column(h, h.to_uppercase());
+        }
+        for row in &parsed.rows {
+            let first = row.first().map_or("", String::as_str);
+            if first.is_empty() {
+                continue;
+            }
+            let mut obj = serde_json::Map::new();
+            for (i, h) in parsed.headers.iter().enumerate() {
+                obj.insert(
+                    h.clone(),
+                    serde_json::Value::String(
+                        row.get(i).map_or_else(String::new, Clone::clone),
+                    ),
+                );
+            }
+            tbl = tbl.row(serde_json::Value::Object(obj));
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_cron_history",
+            Some(json!({"host": args.host})),
+        );
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

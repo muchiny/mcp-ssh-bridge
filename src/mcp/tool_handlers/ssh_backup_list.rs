@@ -4,11 +4,14 @@
 //! Shows files with their sizes and dates.
 
 use serde::Deserialize;
+use serde_json::json;
 
 use super::utils::shell_escape;
 use crate::config::HostConfig;
 use crate::error::Result;
+use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshBackupListArgs {
@@ -73,6 +76,43 @@ impl StandardTool for BackupListTool {
             "tar {tar_flag} {}",
             shell_escape(&args.archive_file)
         ))
+    }
+
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshBackupListArgs,
+        output: &str,
+    ) -> ToolCallResult {
+        let Some(parsed) = super::utils::parse_columnar_output(output) else {
+            return result;
+        };
+        let mut tbl = table("Backups");
+        for h in &parsed.headers {
+            tbl = tbl.column(h, h.to_uppercase());
+        }
+        for row in &parsed.rows {
+            let first = row.first().map_or("", String::as_str);
+            if first.is_empty() {
+                continue;
+            }
+            let mut obj = serde_json::Map::new();
+            for (i, h) in parsed.headers.iter().enumerate() {
+                obj.insert(
+                    h.clone(),
+                    serde_json::Value::String(
+                        row.get(i).map_or_else(String::new, Clone::clone),
+                    ),
+                );
+            }
+            tbl = tbl.row(serde_json::Value::Object(obj));
+        }
+        tbl = tbl.action(
+            "refresh",
+            "Refresh",
+            "ssh_backup_list",
+            Some(json!({"host": args.host, "archive_file": args.archive_file})),
+        );
+        ToolCallResult::text(parsed.to_tsv()).with_app(tbl.build())
     }
 }
 

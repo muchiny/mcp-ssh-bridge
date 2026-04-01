@@ -76,6 +76,7 @@ impl StandardTool for StorageLsblkTool {
             args.json_output.unwrap_or(false),
         ))
     }
+
 }
 
 /// Handler for the `ssh_storage_lsblk` tool.
