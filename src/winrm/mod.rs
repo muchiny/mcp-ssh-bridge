@@ -293,4 +293,38 @@ mod tests {
         let xml = "<baz>qux</baz>";
         assert_eq!(extract_xml_value(xml, "foo"), None);
     }
+
+    #[test]
+    fn test_parse_winrm_response_stdout_stderr() {
+        let body = r#"<Stream Name="stdout">Hello World</Stream><Stream Name="stderr">Error msg</Stream><ExitCode>1</ExitCode>"#;
+        let (stdout, stderr, exit_code) = parse_winrm_response(body);
+        assert_eq!(stdout, "Hello World");
+        assert_eq!(stderr, "Error msg");
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn test_parse_winrm_response_empty_body() {
+        let (stdout, stderr, exit_code) = parse_winrm_response("");
+        assert!(stdout.is_empty());
+        assert!(stderr.is_empty());
+        assert_eq!(exit_code, 0);
+    }
+
+    #[test]
+    fn test_parse_winrm_response_only_stdout() {
+        let body = r#"<Stream Name="stdout">output data</Stream>"#;
+        let (stdout, stderr, exit_code) = parse_winrm_response(body);
+        assert_eq!(stdout, "output data");
+        assert!(stderr.is_empty());
+        assert_eq!(exit_code, 0);
+    }
+
+    #[test]
+    fn test_build_soap_envelope_contains_command() {
+        let envelope = build_winrm_command_envelope("https://host:5986/wsman", "Get-Process");
+        assert!(envelope.contains("Get-Process"));
+        assert!(envelope.contains("Envelope"));
+        assert!(envelope.contains("wsman"));
+    }
 }

@@ -462,4 +462,64 @@ Host myserver
         assert_eq!(host.user, "admin");
         assert_eq!(host.port, 3333);
     }
+
+    #[test]
+    fn test_parse_directive_equals_format() {
+        let result = parse_directive("HostName=10.0.0.1");
+        assert!(result.is_some());
+        let (key, value) = result.unwrap();
+        assert_eq!(key, "HostName");
+        assert_eq!(value, "10.0.0.1");
+    }
+
+    #[test]
+    fn test_parse_directive_empty_value() {
+        let result = parse_directive("HostName ");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_directive_empty_line() {
+        let result = parse_directive("");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_apply_directive_identity_file() {
+        let mut host = PartialHost::default();
+        apply_directive(&mut host, "IdentityFile", "~/.ssh/id_ed25519");
+        assert_eq!(host.identity_file, Some("~/.ssh/id_ed25519".to_string()));
+    }
+
+    #[test]
+    fn test_apply_directive_proxy_jump() {
+        let mut host = PartialHost::default();
+        apply_directive(&mut host, "ProxyJump", "bastion");
+        assert_eq!(host.proxy_jump, Some("bastion".to_string()));
+    }
+
+    #[test]
+    fn test_apply_directive_invalid_port_ignored() {
+        let mut host = PartialHost::default();
+        apply_directive(&mut host, "Port", "not_a_number");
+        assert!(host.port.is_none());
+    }
+
+    #[test]
+    fn test_apply_directive_unknown_key_ignored() {
+        let mut host = PartialHost::default();
+        apply_directive(&mut host, "ForwardAgent", "yes");
+        // Should not panic or affect known fields
+        assert!(host.hostname.is_none());
+    }
+
+    #[test]
+    fn test_partial_host_no_hostname_returns_none() {
+        let host = PartialHost {
+            user: Some("admin".to_string()),
+            ..PartialHost::default()
+        };
+        let defaults = PartialHost::default();
+        assert!(host.to_host_config(&defaults).is_none());
+    }
 }

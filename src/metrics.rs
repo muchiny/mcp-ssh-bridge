@@ -186,6 +186,51 @@ mod tests {
     }
 
     #[test]
+    fn test_record_tool_error() {
+        let m = Metrics::new();
+        m.record_tool_error();
+        m.record_tool_error();
+        assert_eq!(m.tool_errors_total.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn test_ssh_connection_counters() {
+        let m = Metrics::new();
+        m.ssh_connections_total.fetch_add(3, Ordering::Relaxed);
+        m.ssh_connection_errors.fetch_add(1, Ordering::Relaxed);
+        m.ssh_connections_active.fetch_add(2, Ordering::Relaxed);
+        assert_eq!(m.ssh_connections_total.load(Ordering::Relaxed), 3);
+        assert_eq!(m.ssh_connection_errors.load(Ordering::Relaxed), 1);
+        assert_eq!(m.ssh_connections_active.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn test_requests_counter() {
+        let m = Metrics::new();
+        m.requests_total.fetch_add(5, Ordering::Relaxed);
+        assert_eq!(m.requests_total.load(Ordering::Relaxed), 5);
+    }
+
+    #[test]
+    fn test_metrics_default() {
+        let m = Metrics::default();
+        assert_eq!(m.tool_calls_total.load(Ordering::Relaxed), 0);
+        assert!(m.start_time > 0);
+    }
+
+    #[test]
+    fn test_render_prometheus_with_ssh_metrics() {
+        let m = Metrics::new();
+        m.ssh_connections_total.fetch_add(10, Ordering::Relaxed);
+        m.ssh_connections_active.fetch_add(2, Ordering::Relaxed);
+        m.requests_total.fetch_add(50, Ordering::Relaxed);
+        let output = m.render_prometheus();
+        assert!(output.contains("mcp_ssh_bridge_ssh_connections_total 10"));
+        assert!(output.contains("mcp_ssh_bridge_ssh_connections_active 2"));
+        assert!(output.contains("mcp_ssh_bridge_requests_total 50"));
+    }
+
+    #[test]
     fn test_render_prometheus() {
         let m = Metrics::new();
         m.record_tool_call("ssh_exec", "prod-1");
