@@ -163,4 +163,35 @@ mod tests {
         let result = serde_json::from_value::<SshServiceStatusArgs>(json);
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_os_guard_rejects_windows_host() {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType as Os};
+        use std::collections::HashMap;
+        let mut hosts = HashMap::new();
+        hosts.insert(
+            "winbox".to_string(),
+            HostConfig {
+                hostname: "10.0.0.1".to_string(),
+                port: 22,
+                user: "admin".to_string(),
+                auth: AuthConfig::Agent,
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: Os::Windows,
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
+        let ctx = crate::ports::mock::create_test_context_with_hosts(hosts);
+        let handler = SshServiceStatusHandler::new();
+        let args = json!({"host": "winbox", "service": "nginx"});
+        let result = handler.execute(Some(args), &ctx).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
 }

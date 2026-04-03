@@ -166,4 +166,13 @@ mod tests {
         let result = serde_json::from_value::<SshWinServiceStatusArgs>(json);
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_os_guard_rejects_linux_host() {
+        let handler = SshWinServiceStatusHandler::new();
+        let ctx = crate::ports::mock::create_test_context_with_host();
+        let args = json!({"host": "server1", "name": "wuauserv"});
+        let result = handler.execute(Some(args), &ctx).await.unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
 }
