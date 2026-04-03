@@ -601,8 +601,7 @@ mod tests {
         let id = recorder.start_session("host1", None).unwrap();
         let info = recorder.stop_session(&id).unwrap();
 
-        let result =
-            SessionRecorder::verify_recording(Path::new(&info.file_path), &key).unwrap();
+        let result = SessionRecorder::verify_recording(Path::new(&info.file_path), &key).unwrap();
         assert!(result.valid);
         assert_eq!(result.total_events, 0);
         assert_eq!(result.verified_events, 0);

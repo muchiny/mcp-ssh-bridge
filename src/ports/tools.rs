@@ -317,7 +317,10 @@ mod tests {
             uri: "file:///home/user/project".to_string(),
             name: Some("project".to_string()),
         }];
-        assert!(ctx.validate_root_scope("/home/user/project/src/main.rs").is_ok());
+        assert!(
+            ctx.validate_root_scope("/home/user/project/src/main.rs")
+                .is_ok()
+        );
     }
 
     #[test]
