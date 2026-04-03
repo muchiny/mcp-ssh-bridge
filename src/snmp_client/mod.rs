@@ -266,4 +266,87 @@ mod tests {
     fn test_parse_oid_invalid() {
         assert!(parse_oid("1.3.abc.1").is_err());
     }
+
+    #[test]
+    fn test_parse_oid_empty() {
+        let oid = parse_oid("").unwrap();
+        assert!(oid.is_empty());
+    }
+
+    #[test]
+    fn test_parse_oid_single() {
+        let oid = parse_oid("1").unwrap();
+        assert_eq!(oid, vec![1]);
+    }
+
+    #[test]
+    fn test_parse_oid_trailing_dot() {
+        let oid = parse_oid("1.3.6.").unwrap();
+        assert_eq!(oid, vec![1, 3, 6]);
+    }
+
+    #[test]
+    fn test_parse_oid_very_long() {
+        let oid = parse_oid("1.3.6.1.2.1.1.1.0.1.2.3.4.5.6.7.8.9").unwrap();
+        assert_eq!(oid.len(), 18);
+    }
+
+    #[test]
+    fn test_parse_oid_large_component() {
+        let oid = parse_oid("1.3.4294967295").unwrap();
+        assert_eq!(oid, vec![1, 3, u32::MAX]);
+    }
+
+    #[test]
+    fn test_parse_oid_overflow_component() {
+        assert!(parse_oid("1.3.4294967296").is_err());
+    }
+
+    #[test]
+    fn test_format_value_integer() {
+        let val = snmp::Value::Integer(42);
+        assert_eq!(format_value(&val), "INTEGER: 42");
+    }
+
+    #[test]
+    fn test_format_value_octet_string() {
+        let val = snmp::Value::OctetString(b"hello");
+        assert_eq!(format_value(&val), "STRING: hello");
+    }
+
+    #[test]
+    fn test_format_value_null() {
+        let val = snmp::Value::Null;
+        assert_eq!(format_value(&val), "NULL");
+    }
+
+    #[test]
+    fn test_format_value_counter32() {
+        let val = snmp::Value::Counter32(1000);
+        assert_eq!(format_value(&val), "Counter32: 1000");
+    }
+
+    #[test]
+    fn test_format_value_unsigned32() {
+        let val = snmp::Value::Unsigned32(500);
+        assert_eq!(format_value(&val), "Gauge32: 500");
+    }
+
+    #[test]
+    fn test_format_value_timeticks() {
+        let val = snmp::Value::Timeticks(123456);
+        assert_eq!(format_value(&val), "Timeticks: (123456)");
+    }
+
+    #[test]
+    fn test_format_value_counter64() {
+        let val = snmp::Value::Counter64(9999999999);
+        assert_eq!(format_value(&val), "Counter64: 9999999999");
+    }
+
+    #[test]
+    fn test_format_value_ip_address() {
+        let val = snmp::Value::IpAddress([192, 168, 1, 1]);
+        assert_eq!(format_value(&val), "IpAddress: 192.168.1.1");
+    }
 }

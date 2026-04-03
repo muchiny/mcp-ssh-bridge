@@ -321,6 +321,71 @@ mod tests {
     }
 
     #[test]
+    fn test_winrm_config_from_host_config_ssh_port_fallback() {
+        let host = HostConfig {
+            hostname: "10.0.0.2".to_string(),
+            port: 22,
+            user: "admin".to_string(),
+            auth: crate::config::AuthConfig::Password {
+                password: zeroize::Zeroizing::new("pass".to_string()),
+            },
+            description: None,
+            host_key_verification: crate::config::HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::Windows,
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        };
+        let config = WinRmConfig::from_host_config(&host);
+        assert_eq!(config.endpoint, "https://10.0.0.2:5986/wsman");
+        assert!(config.use_ssl);
+    }
+
+    #[test]
+    fn test_parse_winrm_response_fallback_stdout_tag() {
+        let body = "<stdout>fallback output</stdout><ExitCode>0</ExitCode>";
+        let (stdout, _, exit_code) = parse_winrm_response(body);
+        assert_eq!(stdout, "fallback output");
+        assert_eq!(exit_code, 0);
+    }
+
+    #[test]
+    fn test_parse_winrm_response_invalid_exit_code() {
+        let body = "<ExitCode>not_a_number</ExitCode>";
+        let (_, _, exit_code) = parse_winrm_response(body);
+        assert_eq!(exit_code, 0); // defaults to 0
+    }
+
+    #[test]
+    fn test_parse_winrm_response_fallback_stderr_tag() {
+        let body = "<stderr>error text</stderr>";
+        let (stdout, stderr, _) = parse_winrm_response(body);
+        assert!(stdout.is_empty());
+        assert_eq!(stderr, "error text");
+    }
+
+    #[test]
+    fn test_extract_xml_value_nested() {
+        let xml = "<outer><inner>value</inner></outer>";
+        assert_eq!(extract_xml_value(xml, "inner"), Some("value".to_string()));
+    }
+
+    #[test]
+    fn test_build_soap_envelope_structure() {
+        let envelope = build_winrm_command_envelope("https://host:5986/wsman", "ipconfig");
+        assert!(envelope.contains("xmlns:s="));
+        assert!(envelope.contains("xmlns:wsa="));
+        assert!(envelope.contains("xmlns:wsman="));
+        assert!(envelope.contains("wsa:Action"));
+        assert!(envelope.contains("wsman:ResourceURI"));
+        assert!(envelope.contains("cmd.exe /c ipconfig"));
+    }
+
+    #[test]
     fn test_build_soap_envelope_contains_command() {
         let envelope = build_winrm_command_envelope("https://host:5986/wsman", "Get-Process");
         assert!(envelope.contains("Get-Process"));

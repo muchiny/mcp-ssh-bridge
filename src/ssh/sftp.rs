@@ -1440,6 +1440,122 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // ============== RemoteDirEntry Tests ==============
+
+    #[test]
+    fn test_remote_dir_entry_serialization() {
+        let entry = RemoteDirEntry {
+            name: "test.txt".to_string(),
+            path: "/home/user/test.txt".to_string(),
+            is_dir: false,
+            size: Some(1024),
+            permissions: Some(0o644),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains("test.txt"));
+        assert!(json.contains("1024"));
+        assert!(json.contains("false"));
+    }
+
+    #[test]
+    fn test_remote_dir_entry_with_none_fields() {
+        let entry = RemoteDirEntry {
+            name: "dir".to_string(),
+            path: "/tmp/dir".to_string(),
+            is_dir: true,
+            size: None,
+            permissions: None,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains("\"size\":null"));
+        assert!(json.contains("\"permissions\":null"));
+        assert!(json.contains("\"is_dir\":true"));
+    }
+
+    #[test]
+    fn test_remote_dir_entry_debug() {
+        let entry = RemoteDirEntry {
+            name: "file".to_string(),
+            path: "/file".to_string(),
+            is_dir: false,
+            size: Some(0),
+            permissions: Some(0o755),
+        };
+        let debug_str = format!("{entry:?}");
+        assert!(debug_str.contains("RemoteDirEntry"));
+    }
+
+    #[test]
+    fn test_remote_dir_entry_clone() {
+        let entry = RemoteDirEntry {
+            name: "a.txt".to_string(),
+            path: "/a.txt".to_string(),
+            is_dir: false,
+            size: Some(42),
+            permissions: None,
+        };
+        let cloned = entry.clone();
+        assert_eq!(cloned.name, entry.name);
+        assert_eq!(cloned.size, entry.size);
+    }
+
+    // ============== DirectoryTransferResult Tests ==============
+
+    #[test]
+    fn test_directory_transfer_result_serialization() {
+        let result = DirectoryTransferResult {
+            files_transferred: 10,
+            bytes_transferred: 1024 * 1024,
+            directories_created: 3,
+            errors: vec!["error1".to_string(), "error2".to_string()],
+            duration_ms: 5000,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"files_transferred\":10"));
+        assert!(json.contains("error1"));
+        assert!(json.contains("5000"));
+    }
+
+    #[test]
+    fn test_directory_transfer_result_empty() {
+        let result = DirectoryTransferResult {
+            files_transferred: 0,
+            bytes_transferred: 0,
+            directories_created: 0,
+            errors: vec![],
+            duration_ms: 0,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"errors\":[]"));
+    }
+
+    #[test]
+    fn test_directory_transfer_result_debug() {
+        let result = DirectoryTransferResult {
+            files_transferred: 1,
+            bytes_transferred: 100,
+            directories_created: 0,
+            errors: vec![],
+            duration_ms: 10,
+        };
+        let debug_str = format!("{result:?}");
+        assert!(debug_str.contains("DirectoryTransferResult"));
+    }
+
+    #[test]
+    fn test_directory_transfer_result_clone() {
+        let result = DirectoryTransferResult {
+            files_transferred: 5,
+            bytes_transferred: 500,
+            directories_created: 2,
+            errors: vec!["err".to_string()],
+            duration_ms: 100,
+        };
+        let cloned = result.clone();
+        assert_eq!(cloned.files_transferred, 5);
+        assert_eq!(cloned.errors.len(), 1);
+    }
+
     #[test]
     fn test_validate_remote_path_rejects_traversal() {
         assert!(validate_remote_path("/home/../etc/passwd").is_err());

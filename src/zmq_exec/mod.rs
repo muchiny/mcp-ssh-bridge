@@ -195,6 +195,51 @@ mod tests {
     }
 
     #[test]
+    fn test_elapsed_ms() {
+        let start = Instant::now();
+        std::thread::sleep(Duration::from_millis(10));
+        let ms = elapsed_ms(start);
+        assert!(ms >= 10);
+    }
+
+    #[test]
+    fn test_elapsed_ms_immediate() {
+        let start = Instant::now();
+        let ms = elapsed_ms(start);
+        // Should be very small (< 1ms typically)
+        assert!(ms < 100);
+    }
+
+    #[test]
+    fn test_response_parsing_missing_fields() {
+        let response = serde_json::json!({});
+        assert_eq!(response["stdout"].as_str().unwrap_or_default(), "");
+        assert_eq!(response["stderr"].as_str().unwrap_or_default(), "");
+        assert_eq!(response["exit_code"].as_u64().unwrap_or(0), 0);
+    }
+
+    #[test]
+    fn test_response_parsing_null_fields() {
+        let response = serde_json::json!({
+            "stdout": null,
+            "stderr": null,
+            "exit_code": null,
+        });
+        assert_eq!(response["stdout"].as_str().unwrap_or_default(), "");
+        assert_eq!(response["exit_code"].as_u64().unwrap_or(0), 0);
+    }
+
+    #[test]
+    fn test_response_parsing_wrong_types() {
+        let response = serde_json::json!({
+            "stdout": 123,
+            "exit_code": "not_a_number",
+        });
+        assert_eq!(response["stdout"].as_str().unwrap_or_default(), "");
+        assert_eq!(response["exit_code"].as_u64().unwrap_or(0), 0);
+    }
+
+    #[test]
     fn test_response_parsing() {
         let response = serde_json::json!({
             "stdout": "root\n",

@@ -1212,6 +1212,100 @@ mod tests {
         assert!(MARKER_PREFIX.contains("SSHB"));
     }
 
+    // ============== build_init_command Tests ==============
+
+    #[test]
+    fn test_build_init_command_posix() {
+        let cmd = SessionManager::build_init_command(ShellType::Posix, "MARKER_123");
+        assert!(cmd.contains("stty -echo"));
+        assert!(cmd.contains("PS1=''"));
+        assert!(cmd.contains("MARKER_123"));
+    }
+
+    #[test]
+    fn test_build_init_command_cmd() {
+        let cmd = SessionManager::build_init_command(ShellType::Cmd, "MARKER_456");
+        assert!(cmd.contains("@echo off"));
+        assert!(cmd.contains("prompt $S"));
+        assert!(cmd.contains("MARKER_456"));
+    }
+
+    #[test]
+    fn test_build_init_command_powershell() {
+        let cmd = SessionManager::build_init_command(ShellType::PowerShell, "MARKER_789");
+        assert!(cmd.contains("function prompt"));
+        assert!(cmd.contains("SilentlyContinue"));
+        assert!(cmd.contains("MARKER_789"));
+    }
+
+    // ============== build_cwd_command Tests ==============
+
+    #[test]
+    fn test_build_cwd_command_posix() {
+        let cmd = SessionManager::build_cwd_command(ShellType::Posix, "CWD_MARKER");
+        assert!(cmd.contains("pwd"));
+        assert!(cmd.contains("CWD_MARKER"));
+    }
+
+    #[test]
+    fn test_build_cwd_command_cmd() {
+        let cmd = SessionManager::build_cwd_command(ShellType::Cmd, "CWD_MARKER");
+        assert!(cmd.contains("cd\r\n"));
+        assert!(cmd.contains("CWD_MARKER"));
+    }
+
+    #[test]
+    fn test_build_cwd_command_powershell() {
+        let cmd = SessionManager::build_cwd_command(ShellType::PowerShell, "CWD_MARKER");
+        assert!(cmd.contains("Get-Location"));
+        assert!(cmd.contains("CWD_MARKER"));
+    }
+
+    // ============== build_exec_wrapper Tests ==============
+
+    #[test]
+    fn test_build_exec_wrapper_posix() {
+        let cmd = SessionManager::build_exec_wrapper(ShellType::Posix, "ls -la", "BEGIN", "END");
+        assert!(cmd.contains("ls -la"));
+        assert!(cmd.contains("BEGIN"));
+        assert!(cmd.contains("END"));
+        assert!(cmd.contains("__sshb_rc=$?"));
+        assert!(cmd.contains("pwd"));
+    }
+
+    #[test]
+    fn test_build_exec_wrapper_cmd() {
+        let cmd = SessionManager::build_exec_wrapper(ShellType::Cmd, "dir", "BEGIN", "END");
+        assert!(cmd.contains("dir"));
+        assert!(cmd.contains("BEGIN"));
+        assert!(cmd.contains("END"));
+        assert!(cmd.contains("%ERRORLEVEL%"));
+        assert!(cmd.contains("cd\r\n"));
+    }
+
+    #[test]
+    fn test_build_exec_wrapper_powershell() {
+        let cmd = SessionManager::build_exec_wrapper(
+            ShellType::PowerShell,
+            "Get-Process",
+            "BEGIN",
+            "END",
+        );
+        assert!(cmd.contains("Get-Process"));
+        assert!(cmd.contains("BEGIN"));
+        assert!(cmd.contains("END"));
+        assert!(cmd.contains("$LASTEXITCODE"));
+        assert!(cmd.contains("Get-Location"));
+    }
+
+    // ============== get_session_host Tests ==============
+
+    #[tokio::test]
+    async fn test_get_session_host_nonexistent() {
+        let manager = SessionManager::new(SessionConfig::default());
+        assert!(manager.get_session_host("nonexistent").await.is_none());
+    }
+
     #[test]
     fn test_marker_not_in_common_output() {
         let common_outputs = [
