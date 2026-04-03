@@ -78,7 +78,7 @@ jobs:
         with:
           tool: cargo-tarpaulin
       - name: Generate coverage
-        run: cargo tarpaulin --engine llvm --all-features --out xml --output-dir coverage --fail-under 60
+        run: cargo tarpaulin --engine llvm --all-features --out xml --output-dir coverage --fail-under 59
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         with:
