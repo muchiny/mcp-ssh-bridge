@@ -137,14 +137,21 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         }
     }
 
+    fn supports_data_reduction(&self) -> bool {
+        true
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn execute(&self, args: Option<Value>, ctx: &ToolContext) -> Result<ToolCallResult> {
-        // Step 1: Parse args
-        let Some(v) = args else {
+        // Step 0: Extract universal data reduction params before tool-specific parsing
+        let Some(mut v) = args else {
             return Err(BridgeError::McpMissingParam {
                 param: "arguments".to_string(),
             });
         };
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+
+        // Step 1: Parse args
         let args: T::Args =
             serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))?;
 
@@ -249,7 +256,7 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         })?;
 
         // Step 13: Process success (audit + history + sanitize)
-        let response = ctx
+        let mut response = ctx
             .execute_use_case
             .process_success(&host, &command, &output.into());
 
@@ -261,6 +268,11 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
                 exit_code = response.exit_code,
                 "Tool returned non-zero exit code"
             );
+        }
+
+        // Step 14a–d: Data reduction (applied before truncation for maximum effect)
+        if !dr.is_empty() && response.exit_code == 0 {
+            apply_data_reduction(&mut response.stdout, &dr)?;
         }
 
         // Step 15: Truncate stdout for display
@@ -289,9 +301,121 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
             output_text = format!("{output_text}\n{info}");
         }
 
+        // Step 18: Post-process + auto-populate structuredContent from AppContent
         let result = ToolCallResult::text(output_text);
-        Ok(T::post_process(result, &args, &response.stdout))
+        let result = T::post_process(result, &args, &response.stdout);
+        Ok(auto_populate_structured_content(result))
     }
+}
+
+/// Apply data reduction steps to stdout in order:
+/// 1. `limit` — reduce row count
+/// 2. `fields` — filter columns (tabular output)
+/// 3. `jq_filter` — jq expression (with auto-JSON-ification of tabular text)
+/// 4. `output_mode=compact` — generate summary
+#[allow(clippy::unnecessary_wraps)] // Returns Err only when jq feature is enabled
+fn apply_data_reduction(
+    stdout: &mut String,
+    dr: &crate::domain::data_reduction::DataReductionArgs,
+) -> Result<()> {
+    use std::fmt::Write;
+
+    use crate::domain::data_reduction::{apply_row_limit, generate_compact_summary};
+    use crate::mcp::tool_handlers::utils::parse_columnar_output;
+
+    // 14a: Row limit
+    if let Some(limit) = dr.limit {
+        *stdout = apply_row_limit(stdout, limit);
+    }
+
+    // 14b: Fields filter (tabular output only)
+    if let Some(ref fields) = dr.fields
+        && let Some(table) = parse_columnar_output(stdout)
+    {
+        let filtered = table.filter_columns(fields);
+        if filtered.headers.is_empty() {
+            let _ = write!(
+                stdout,
+                "\n\n[fields filter: no matching columns. Available: {}]",
+                table.headers.join(", ")
+            );
+        } else {
+            *stdout = filtered.to_tsv();
+        }
+    }
+
+    // 14c: jq filter
+    #[cfg(feature = "jq")]
+    if let Some(ref filter) = dr.jq_filter {
+        // Try direct JSON parse first; if that fails, try auto-JSON-ification
+        // from tabular text via parse_columnar_output → JSON → jq
+        match crate::domain::jq_filter::apply_jq_filter(stdout, filter) {
+            Ok(filtered) => *stdout = filtered,
+            Err(_) => {
+                if let Some(table) = parse_columnar_output(stdout) {
+                    let json_str = table.to_json().to_string();
+                    *stdout = crate::domain::jq_filter::apply_jq_filter(&json_str, filter)?;
+                } else {
+                    return Err(BridgeError::McpInvalidRequest(
+                        "jq_filter: output is neither JSON nor tabular text. \
+                         Use 'fields' or 'limit' parameters instead."
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+    }
+
+    // 14d: Compact mode
+    if dr.output_mode.as_deref() == Some("compact") {
+        // Try tabular summary first (needs parse_columnar_output from adapter)
+        if let Some(table) = parse_columnar_output(stdout)
+            && table.headers.len() >= 2
+        {
+            let row_count = table.rows.len();
+            let cols = table.headers.join(", ");
+            let preview: Vec<String> = table
+                .rows
+                .iter()
+                .take(5)
+                .map(|row| row.join("\t"))
+                .collect();
+            *stdout = format!(
+                "{row_count} rows | columns: {cols}\n{header}\n{rows}",
+                header = table.headers.join("\t").to_uppercase(),
+                rows = preview.join("\n"),
+            );
+        } else {
+            // Fallback to domain-level compact (JSON / free text)
+            *stdout = generate_compact_summary(stdout);
+        }
+    }
+
+    Ok(())
+}
+
+/// Auto-populate `structuredContent` from `AppContent` data.
+///
+/// If the result contains an App component (table, dashboard, chart),
+/// extract its data into `structured_content` for MCP clients that
+/// support structured output (MCP 2025-06-18+).
+fn auto_populate_structured_content(mut result: ToolCallResult) -> ToolCallResult {
+    use crate::mcp::protocol::ToolContent;
+
+    // Only populate if not already set
+    if result.structured_content.is_some() {
+        return result;
+    }
+
+    // Find the first App content and extract its data
+    for content in &result.content {
+        if let ToolContent::App { app } = content {
+            result.structured_content = Some(app.data.clone());
+            break;
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]

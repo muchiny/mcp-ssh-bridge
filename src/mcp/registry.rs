@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::config::ToolGroupsConfig;
 use crate::error::{BridgeError, Result};
@@ -73,17 +73,25 @@ impl ToolRegistry {
             .map(|handler| {
                 let schema = handler.schema();
                 let annotations = tool_annotations(schema.name);
-                Tool {
-                    name: schema.name.to_string(),
-                    description: schema.description.to_string(),
-                    input_schema: serde_json::from_str(schema.input_schema).unwrap_or_else(|e| {
+                let mut input_schema: Value = serde_json::from_str(schema.input_schema)
+                    .unwrap_or_else(|e| {
                         tracing::error!(
                             tool = schema.name,
                             error = %e,
                             "Invalid tool input schema JSON, falling back to empty schema"
                         );
                         json!({})
-                    }),
+                    });
+
+                // Inject data reduction params for StandardToolHandler tools
+                if handler.supports_data_reduction() {
+                    inject_data_reduction_schema(&mut input_schema);
+                }
+
+                Tool {
+                    name: schema.name.to_string(),
+                    description: schema.description.to_string(),
+                    input_schema,
                     annotations: if annotations.is_empty() {
                         None
                     } else {
@@ -108,6 +116,47 @@ impl ToolRegistry {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.handlers.is_empty()
+    }
+}
+
+/// Inject data reduction parameters into a tool's JSON schema.
+///
+/// Adds `jq_filter`, `limit`, `fields`, and `output_mode` properties to
+/// the schema's `properties` object. These are available on all
+/// `StandardToolHandler` tools for server-side output reduction.
+fn inject_data_reduction_schema(schema: &mut Value) {
+    if let Some(props) = schema.get_mut("properties").and_then(Value::as_object_mut) {
+        props.insert(
+            "jq_filter".to_string(),
+            json!({
+                "type": "string",
+                "description": "jq expression applied server-side to JSON output before returning. Dramatically reduces tokens. Example: '.[] | {name, status}'. For tabular (non-JSON) output, auto-converts to JSON first."
+            }),
+        );
+        props.insert(
+            "limit".to_string(),
+            json!({
+                "type": "integer",
+                "minimum": 0,
+                "description": "Max data rows to return (header kept). 0 = no limit. Reduces output for listing tools."
+            }),
+        );
+        props.insert(
+            "fields".to_string(),
+            json!({
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Column names to include in tabular output (case-insensitive). Returns TSV. Example: [\"name\", \"status\", \"cpu\"]"
+            }),
+        );
+        props.insert(
+            "output_mode".to_string(),
+            json!({
+                "type": "string",
+                "enum": ["full", "compact"],
+                "description": "full (default): complete output. compact: summary with counts and top items only, saves tokens."
+            }),
+        );
     }
 }
 

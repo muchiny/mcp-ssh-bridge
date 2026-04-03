@@ -3,7 +3,10 @@
 //! This module contains the use cases and domain entities that
 //! represent the core business logic of the MCP SSH Bridge.
 
+pub mod data_reduction;
 pub mod history;
+#[cfg(feature = "jq")]
+pub mod jq_filter;
 pub mod output_cache;
 pub mod output_truncator;
 pub mod runbook;

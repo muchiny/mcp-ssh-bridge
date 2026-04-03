@@ -151,6 +151,52 @@ impl ParsedTable {
         }
         result
     }
+
+    /// Filter to only the specified columns (case-insensitive match).
+    ///
+    /// Returns a new `ParsedTable` with only the matching columns.
+    /// Column order follows the order in `fields`, not the original order.
+    /// Unmatched field names are silently ignored.
+    #[must_use]
+    pub fn filter_columns(&self, fields: &[String]) -> ParsedTable {
+        let fields_lower: Vec<String> = fields.iter().map(|f| f.to_lowercase()).collect();
+
+        // Find column indices that match requested fields (in fields order)
+        let indices: Vec<usize> = fields_lower
+            .iter()
+            .filter_map(|f| self.headers.iter().position(|h| h == f))
+            .collect();
+
+        let headers = indices.iter().map(|&i| self.headers[i].clone()).collect();
+        let rows = self
+            .rows
+            .iter()
+            .map(|row| indices.iter().map(|&i| row[i].clone()).collect())
+            .collect();
+
+        ParsedTable { headers, rows }
+    }
+
+    /// Convert to a JSON array of objects for use with `jq_filter`.
+    ///
+    /// Each row becomes an object with header names as keys.
+    #[must_use]
+    pub fn to_json(&self) -> serde_json::Value {
+        let arr: Vec<serde_json::Value> = self
+            .rows
+            .iter()
+            .map(|row| {
+                let obj: serde_json::Map<String, serde_json::Value> = self
+                    .headers
+                    .iter()
+                    .zip(row.iter())
+                    .map(|(h, v)| (h.clone(), serde_json::Value::String(v.clone())))
+                    .collect();
+                serde_json::Value::Object(obj)
+            })
+            .collect();
+        serde_json::Value::Array(arr)
+    }
 }
 
 /// Parse columnar CLI output using data-driven gutter detection.

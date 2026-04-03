@@ -132,6 +132,15 @@ pub trait ToolHandler: Send + Sync {
     /// # Returns
     /// The tool result, either success or error
     async fn execute(&self, args: Option<Value>, ctx: &ToolContext) -> Result<ToolCallResult>;
+
+    /// Whether this handler supports universal data reduction parameters
+    /// (`jq_filter`, `limit`, `fields`, `output_mode`).
+    ///
+    /// Only `StandardToolHandler` returns `true`. Custom handlers return
+    /// `false` (default) so these params are not advertised in their schema.
+    fn supports_data_reduction(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]

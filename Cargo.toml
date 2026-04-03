@@ -1,6 +1,6 @@
 [package]
 name = "mcp-ssh-bridge"
-version = "1.7.0"
+version = "1.8.0"
 edition = "2024"
 rust-version = "1.94"
 description = "MCP server that bridges Claude Code to air-gapped environments via SSH"
@@ -49,8 +49,11 @@ nats = ["dep:async-nats"]
 mqtt = ["dep:rumqttc"]
 messaging = ["zeromq", "nats", "mqtt"]
 
+# Data reduction (jq filtering for tool output)
+jq = ["dep:jaq-core", "dep:jaq-std", "dep:jaq-json"]
+
 # Bundles
-full = ["cli", "mimalloc", "http"]
+full = ["cli", "mimalloc", "http", "jq"]
 air-gapped = ["winrm", "telnet", "netconf"]
 all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "snmp", "ssm", "azure", "gcp", "zeromq", "nats", "mqtt"]
 
@@ -147,6 +150,11 @@ async-nats = { version = "0.46", optional = true }
 
 # MQTT adapter (optional) — IoT/Edge messaging
 rumqttc = { version = "0.25", optional = true }
+
+# jq filtering for tool output reduction (optional)
+jaq-core = { version = "3", optional = true }
+jaq-std = { version = "3", optional = true }
+jaq-json = { version = "2", features = ["serde"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
