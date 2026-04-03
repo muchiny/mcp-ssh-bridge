@@ -632,4 +632,38 @@ node-1   250m";
         let tsv = parsed.to_tsv();
         assert_eq!(tsv, "NAME\tCPU\nnode-1\t250m");
     }
+
+    #[test]
+    fn test_shell_escape_for_posix() {
+        let escaped = shell_escape_for("hello world", ShellType::Posix);
+        assert!(escaped.contains("hello world"));
+    }
+
+    #[test]
+    fn test_shell_escape_for_cmd() {
+        let escaped = shell_escape_for("hello world", ShellType::Cmd);
+        assert!(!escaped.is_empty());
+    }
+
+    #[test]
+    fn test_shell_escape_for_powershell() {
+        let escaped = shell_escape_for("it's a test", ShellType::PowerShell);
+        assert!(!escaped.is_empty());
+    }
+
+    #[test]
+    fn test_to_tsv_empty_rows() {
+        let table = ParsedTable {
+            headers: vec!["NAME".to_string(), "VALUE".to_string()],
+            rows: vec![],
+        };
+        let tsv = table.to_tsv();
+        assert_eq!(tsv, "NAME\tVALUE");
+    }
+
+    #[tokio::test]
+    async fn test_save_output_path_traversal_rejected() {
+        let result = save_output_to_file("../../../etc/passwd", "evil").await;
+        assert!(result.is_err());
+    }
 }

@@ -593,6 +593,56 @@ mod tests {
     }
 
     #[test]
+    fn test_verify_recording_empty_events() {
+        let tmp = TempDir::new().unwrap();
+        let key = b"test-key".to_vec();
+        let recorder = SessionRecorder::new(tmp.path().to_path_buf(), true, key.clone(), false);
+
+        let id = recorder.start_session("host1", None).unwrap();
+        let info = recorder.stop_session(&id).unwrap();
+
+        let result =
+            SessionRecorder::verify_recording(Path::new(&info.file_path), &key).unwrap();
+        assert!(result.valid);
+        assert_eq!(result.total_events, 0);
+        assert_eq!(result.verified_events, 0);
+        assert!(result.first_invalid_index.is_none());
+    }
+
+    #[test]
+    fn test_verify_recording_no_hash_chain() {
+        let tmp = TempDir::new().unwrap();
+        let recorder = SessionRecorder::new(tmp.path().to_path_buf(), false, Vec::new(), false);
+
+        let id = recorder.start_session("host1", None).unwrap();
+        recorder.record_event(&id, "o", "data").unwrap();
+        let info = recorder.stop_session(&id).unwrap();
+
+        let result =
+            SessionRecorder::verify_recording(Path::new(&info.file_path), b"any-key").unwrap();
+        assert!(result.valid);
+        assert_eq!(result.total_events, 1);
+        assert_eq!(result.verified_events, 0);
+    }
+
+    #[test]
+    fn test_list_recordings_with_field_assertions() {
+        let tmp = TempDir::new().unwrap();
+        let recorder = test_recorder(tmp.path());
+
+        let id = recorder.start_session("myhost", Some("test info")).unwrap();
+        recorder.record_event(&id, "i", "whoami").unwrap();
+        recorder.record_event(&id, "o", "root").unwrap();
+        let _ = recorder.stop_session(&id).unwrap();
+
+        let list = recorder.list_recordings().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].host, "myhost");
+        assert_eq!(list[0].event_count, 2);
+        assert!(!list[0].file_path.is_empty());
+    }
+
+    #[test]
     fn test_compute_hash_deterministic() {
         let h1 = SessionRecorder::compute_hash(b"key", "prev", "data");
         let h2 = SessionRecorder::compute_hash(b"key", "prev", "data");

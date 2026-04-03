@@ -289,6 +289,34 @@ mod tests {
     }
 
     #[test]
+    fn test_audit_event_with_tool_name() {
+        let event = AuditEvent::new(
+            "host1",
+            "redis-cli INFO",
+            CommandResult::Success {
+                exit_code: 0,
+                duration_ms: 50,
+            },
+        )
+        .with_tool_name("ssh_redis_cli");
+
+        assert_eq!(event.tool_name, Some("ssh_redis_cli".to_string()));
+    }
+
+    #[test]
+    fn test_audit_event_without_tool_name() {
+        let event = AuditEvent::new(
+            "host1",
+            "ls",
+            CommandResult::Success {
+                exit_code: 0,
+                duration_ms: 10,
+            },
+        );
+        assert_eq!(event.tool_name, None);
+    }
+
+    #[test]
     fn test_audit_event_creation() {
         let event = AuditEvent::new(
             "test-host",

@@ -1823,4 +1823,69 @@ mod tests {
         assert_eq!(retry.initial_delay_ms, Some(200));
         assert_eq!(retry.max_delay_ms, Some(60000));
     }
+
+    // ============== HostConfig Method Tests ==============
+
+    #[test]
+    fn test_effective_shell_explicit_override() {
+        let json = r#"{
+            "hostname": "test",
+            "user": "admin",
+            "auth": {"type": "agent"},
+            "os_type": "linux",
+            "shell": "powershell"
+        }"#;
+        let host: HostConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(host.effective_shell(), ShellType::PowerShell);
+    }
+
+    #[test]
+    fn test_effective_shell_inferred_linux() {
+        let json = r#"{
+            "hostname": "test",
+            "user": "admin",
+            "auth": {"type": "agent"},
+            "os_type": "linux"
+        }"#;
+        let host: HostConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(host.effective_shell(), ShellType::Posix);
+    }
+
+    #[test]
+    fn test_effective_shell_inferred_windows() {
+        let json = r#"{
+            "hostname": "test",
+            "user": "admin",
+            "auth": {"type": "agent"},
+            "os_type": "windows"
+        }"#;
+        let host: HostConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(host.effective_shell(), ShellType::Cmd);
+    }
+
+    #[test]
+    fn test_has_tag_case_insensitive() {
+        let json = r#"{
+            "hostname": "test",
+            "user": "admin",
+            "auth": {"type": "agent"},
+            "tags": ["Production", "Database"]
+        }"#;
+        let host: HostConfig = serde_json::from_str(json).unwrap();
+        assert!(host.has_tag("production"));
+        assert!(host.has_tag("PRODUCTION"));
+        assert!(host.has_tag("database"));
+        assert!(!host.has_tag("staging"));
+    }
+
+    #[test]
+    fn test_has_tag_empty() {
+        let json = r#"{
+            "hostname": "test",
+            "user": "admin",
+            "auth": {"type": "agent"}
+        }"#;
+        let host: HostConfig = serde_json::from_str(json).unwrap();
+        assert!(!host.has_tag("any"));
+    }
 }

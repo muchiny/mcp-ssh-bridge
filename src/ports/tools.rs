@@ -298,3 +298,46 @@ pub mod mock {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mcp::protocol::RootEntry;
+
+    #[test]
+    fn test_validate_root_scope_no_roots_allows_any_path() {
+        let ctx = mock::create_test_context();
+        assert!(ctx.validate_root_scope("/any/path").is_ok());
+    }
+
+    #[test]
+    fn test_validate_root_scope_matching_file_uri_root() {
+        let mut ctx = mock::create_test_context();
+        ctx.roots = vec![RootEntry {
+            uri: "file:///home/user/project".to_string(),
+            name: Some("project".to_string()),
+        }];
+        assert!(ctx.validate_root_scope("/home/user/project/src/main.rs").is_ok());
+    }
+
+    #[test]
+    fn test_validate_root_scope_slash_root_allows_all() {
+        let mut ctx = mock::create_test_context();
+        ctx.roots = vec![RootEntry {
+            uri: "/".to_string(),
+            name: None,
+        }];
+        assert!(ctx.validate_root_scope("/anything").is_ok());
+    }
+
+    #[test]
+    fn test_validate_root_scope_outside_root_rejected() {
+        let mut ctx = mock::create_test_context();
+        ctx.roots = vec![RootEntry {
+            uri: "file:///home/user/project".to_string(),
+            name: None,
+        }];
+        let err = ctx.validate_root_scope("/etc/passwd").unwrap_err();
+        assert!(err.to_string().contains("outside declared workspace roots"));
+    }
+}

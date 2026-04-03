@@ -724,4 +724,24 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(call_count, 1); // Only one attempt with no_retry
     }
+
+    #[test]
+    fn test_delay_with_jitter_exercises_rand_simple() {
+        let config = RetryConfig {
+            max_attempts: 3,
+            initial_delay_ms: 1000,
+            max_delay_ms: 5000,
+            backoff_multiplier: 2.0,
+            jitter: 0.5,
+        };
+
+        for _ in 0..20 {
+            let delay = config.delay_for_attempt(2);
+            assert!(
+                delay.as_millis() <= 5000,
+                "delay {} exceeds max",
+                delay.as_millis()
+            );
+        }
+    }
 }
