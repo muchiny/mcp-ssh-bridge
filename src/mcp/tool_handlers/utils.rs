@@ -152,31 +152,6 @@ impl ParsedTable {
         result
     }
 
-    /// Filter to only the specified columns (case-insensitive match).
-    ///
-    /// Returns a new `ParsedTable` with only the matching columns.
-    /// Column order follows the order in `fields`, not the original order.
-    /// Unmatched field names are silently ignored.
-    #[must_use]
-    pub fn filter_columns(&self, fields: &[String]) -> ParsedTable {
-        let fields_lower: Vec<String> = fields.iter().map(|f| f.to_lowercase()).collect();
-
-        // Find column indices that match requested fields (in fields order)
-        let indices: Vec<usize> = fields_lower
-            .iter()
-            .filter_map(|f| self.headers.iter().position(|h| h == f))
-            .collect();
-
-        let headers = indices.iter().map(|&i| self.headers[i].clone()).collect();
-        let rows = self
-            .rows
-            .iter()
-            .map(|row| indices.iter().map(|&i| row[i].clone()).collect())
-            .collect();
-
-        ParsedTable { headers, rows }
-    }
-
 }
 
 /// Parse columnar CLI output using data-driven gutter detection.

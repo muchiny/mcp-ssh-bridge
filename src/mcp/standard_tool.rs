@@ -270,9 +270,12 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
             );
         }
 
-        // Step 14a–d: Data reduction (applied before truncation for maximum effect)
-        if !dr.is_empty() && response.exit_code == 0 {
-            apply_data_reduction(&mut response.stdout, &dr)?;
+        // Step 14: jq filter (applied before truncation for maximum effect)
+        if !dr.is_empty()
+            && response.exit_code == 0
+            && let Some(filtered) = apply_data_reduction(&response.stdout, &dr)?
+        {
+            response.stdout = filtered;
         }
 
         // Step 15: Truncate stdout for display
@@ -308,74 +311,22 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
     }
 }
 
-/// Apply data reduction steps to stdout in order:
-/// 1. `limit` — reduce row count
-/// 2. `fields` — filter columns (tabular output)
-/// 3. `jq_filter` — jq expression (with auto-JSON-ification of tabular text)
-/// 4. `output_mode=compact` — generate summary
+/// Apply jq filter to stdout if requested.
 #[allow(clippy::unnecessary_wraps)] // Returns Err only when jq feature is enabled
 fn apply_data_reduction(
-    stdout: &mut String,
+    stdout: &str,
     dr: &crate::domain::data_reduction::DataReductionArgs,
-) -> Result<()> {
-    use std::fmt::Write;
+) -> Result<Option<String>> {
+    let _ = (stdout, dr);
 
-    use crate::domain::data_reduction::{apply_row_limit, generate_compact_summary};
-    use crate::mcp::tool_handlers::utils::parse_columnar_output;
-
-    // 14a: Row limit
-    if let Some(limit) = dr.limit {
-        *stdout = apply_row_limit(stdout, limit);
-    }
-
-    // 14b: Fields filter (tabular output only)
-    if let Some(ref fields) = dr.fields
-        && let Some(table) = parse_columnar_output(stdout)
-    {
-        let filtered = table.filter_columns(fields);
-        if filtered.headers.is_empty() {
-            let _ = write!(
-                stdout,
-                "\n\n[fields filter: no matching columns. Available: {}]",
-                table.headers.join(", ")
-            );
-        } else {
-            *stdout = filtered.to_tsv();
-        }
-    }
-
-    // 14c: jq filter (JSON output only — use 'fields' for tabular output)
     #[cfg(feature = "jq")]
     if let Some(ref filter) = dr.jq_filter {
-        *stdout = crate::domain::jq_filter::apply_jq_filter(stdout, filter)?;
+        return Ok(Some(crate::domain::jq_filter::apply_jq_filter(
+            stdout, filter,
+        )?));
     }
 
-    // 14d: Compact mode
-    if dr.output_mode.as_deref() == Some("compact") {
-        // Try tabular summary first (needs parse_columnar_output from adapter)
-        if let Some(table) = parse_columnar_output(stdout)
-            && table.headers.len() >= 2
-        {
-            let row_count = table.rows.len();
-            let cols = table.headers.join(", ");
-            let preview: Vec<String> = table
-                .rows
-                .iter()
-                .take(5)
-                .map(|row| row.join("\t"))
-                .collect();
-            *stdout = format!(
-                "{row_count} rows | columns: {cols}\n{header}\n{rows}",
-                header = table.headers.join("\t").to_uppercase(),
-                rows = preview.join("\n"),
-            );
-        } else {
-            // Fallback to domain-level compact (JSON / free text)
-            *stdout = generate_compact_summary(stdout);
-        }
-    }
-
-    Ok(())
+    Ok(None)
 }
 
 /// Auto-populate `structuredContent` from `AppContent` data.

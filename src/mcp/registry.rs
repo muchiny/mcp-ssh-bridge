@@ -119,42 +119,16 @@ impl ToolRegistry {
     }
 }
 
-/// Inject data reduction parameters into a tool's JSON schema.
+/// Inject `jq_filter` parameter into a tool's JSON schema.
 ///
-/// Adds `jq_filter`, `limit`, `fields`, and `output_mode` properties to
-/// the schema's `properties` object. These are available on all
-/// `StandardToolHandler` tools for server-side output reduction.
+/// Added to all `StandardToolHandler` tools for server-side JSON filtering.
 fn inject_data_reduction_schema(schema: &mut Value) {
     if let Some(props) = schema.get_mut("properties").and_then(Value::as_object_mut) {
         props.insert(
             "jq_filter".to_string(),
             json!({
                 "type": "string",
-                "description": "jq expression applied server-side to JSON output before returning. Dramatically reduces tokens. Example: '.[] | {name, status}'. Only works on JSON output; use 'fields' and 'limit' for tabular/text output."
-            }),
-        );
-        props.insert(
-            "limit".to_string(),
-            json!({
-                "type": "integer",
-                "minimum": 0,
-                "description": "Max data rows to return (header kept). 0 = no limit. Reduces output for listing tools."
-            }),
-        );
-        props.insert(
-            "fields".to_string(),
-            json!({
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Column names to include in tabular output (case-insensitive). Returns TSV. Example: [\"name\", \"status\", \"cpu\"]"
-            }),
-        );
-        props.insert(
-            "output_mode".to_string(),
-            json!({
-                "type": "string",
-                "enum": ["full", "compact"],
-                "description": "full (default): complete output. compact: summary with counts and top items only, saves tokens."
+                "description": "jq expression applied server-side to JSON output before returning. Dramatically reduces tokens. Example: '.[] | {name, status}'. Only works when command output is valid JSON."
             }),
         );
     }
