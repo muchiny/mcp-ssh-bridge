@@ -130,7 +130,7 @@ fn inject_data_reduction_schema(schema: &mut Value) {
             "jq_filter".to_string(),
             json!({
                 "type": "string",
-                "description": "jq expression applied server-side to JSON output before returning. Dramatically reduces tokens. Example: '.[] | {name, status}'. For tabular (non-JSON) output, auto-converts to JSON first."
+                "description": "jq expression applied server-side to JSON output before returning. Dramatically reduces tokens. Example: '.[] | {name, status}'. Only works on JSON output; use 'fields' and 'limit' for tabular/text output."
             }),
         );
         props.insert(

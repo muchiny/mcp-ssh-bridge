@@ -344,26 +344,10 @@ fn apply_data_reduction(
         }
     }
 
-    // 14c: jq filter
+    // 14c: jq filter (JSON output only — use 'fields' for tabular output)
     #[cfg(feature = "jq")]
     if let Some(ref filter) = dr.jq_filter {
-        // Try direct JSON parse first; if that fails, try auto-JSON-ification
-        // from tabular text via parse_columnar_output → JSON → jq
-        match crate::domain::jq_filter::apply_jq_filter(stdout, filter) {
-            Ok(filtered) => *stdout = filtered,
-            Err(_) => {
-                if let Some(table) = parse_columnar_output(stdout) {
-                    let json_str = table.to_json().to_string();
-                    *stdout = crate::domain::jq_filter::apply_jq_filter(&json_str, filter)?;
-                } else {
-                    return Err(BridgeError::McpInvalidRequest(
-                        "jq_filter: output is neither JSON nor tabular text. \
-                         Use 'fields' or 'limit' parameters instead."
-                            .to_string(),
-                    ));
-                }
-            }
-        }
+        *stdout = crate::domain::jq_filter::apply_jq_filter(stdout, filter)?;
     }
 
     // 14d: Compact mode

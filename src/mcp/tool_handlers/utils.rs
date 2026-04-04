@@ -177,26 +177,6 @@ impl ParsedTable {
         ParsedTable { headers, rows }
     }
 
-    /// Convert to a JSON array of objects for use with `jq_filter`.
-    ///
-    /// Each row becomes an object with header names as keys.
-    #[must_use]
-    pub fn to_json(&self) -> serde_json::Value {
-        let arr: Vec<serde_json::Value> = self
-            .rows
-            .iter()
-            .map(|row| {
-                let obj: serde_json::Map<String, serde_json::Value> = self
-                    .headers
-                    .iter()
-                    .zip(row.iter())
-                    .map(|(h, v)| (h.clone(), serde_json::Value::String(v.clone())))
-                    .collect();
-                serde_json::Value::Object(obj)
-            })
-            .collect();
-        serde_json::Value::Array(arr)
-    }
 }
 
 /// Parse columnar CLI output using data-driven gutter detection.
