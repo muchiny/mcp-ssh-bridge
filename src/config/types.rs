@@ -611,7 +611,7 @@ pub struct LimitsConfig {
 
     /// Maximum output characters returned by tool calls (default: 20000).
     /// Individual tool calls can override this with their `max_output` parameter.
-    /// At ~3-4 chars/token, 20000 chars ≈ 5-7K tokens — a conservative default that
+    /// At ~3-4 chars/token, 40000 chars ≈ 10-13K tokens — a safe default that
     /// works with all AI models. Use `client_overrides` to raise for larger-context models.
     /// Set to 0 to disable truncation.
     #[serde(default = "default_max_output_chars")]
@@ -619,7 +619,9 @@ pub struct LimitsConfig {
 
     /// Per-client overrides for `max_output_chars`, matched by MCP client name.
     /// Detected automatically during MCP `initialize` handshake.
-    #[serde(default)]
+    /// Built-in defaults for known clients (Claude, Cursor, etc.) are applied
+    /// when this field is absent from YAML config.
+    #[serde(default = "default_client_overrides")]
     pub client_overrides: Vec<ClientOverride>,
 
     /// TTL in seconds for cached full outputs used by `ssh_output_fetch` pagination
@@ -674,7 +676,7 @@ impl Default for LimitsConfig {
             retry_initial_delay_ms: default_retry_initial_delay_ms(),
             rate_limit_per_second: default_rate_limit(),
             max_output_chars: default_max_output_chars(),
-            client_overrides: Vec::new(),
+            client_overrides: default_client_overrides(),
             output_cache_ttl_seconds: default_output_cache_ttl(),
             output_cache_max_entries: default_output_cache_max_entries(),
             max_tasks: default_max_tasks(),
@@ -784,7 +786,55 @@ const fn default_rate_limit() -> u32 {
 }
 
 const fn default_max_output_chars() -> usize {
-    20_000 // ~5-7K tokens, conservative default compatible with all AI models
+    40_000 // ~10-13K tokens, safe for 128K+ context models
+}
+
+/// Built-in client overrides for known MCP clients.
+///
+/// These are applied automatically when no `client_overrides` are configured
+/// in the YAML config. If the user provides any `client_overrides` in YAML,
+/// serde replaces this entire Vec with the user's list.
+fn default_client_overrides() -> Vec<ClientOverride> {
+    vec![
+        // Tier 1: Claude-based clients (200K context) → 80K chars (~20K tokens, ~10%)
+        ClientOverride {
+            name_contains: "claude".into(),
+            match_mode: MatchMode::Prefix,
+            max_output_chars: Some(80_000),
+        },
+        ClientOverride {
+            name_contains: "cline".into(),
+            match_mode: MatchMode::Prefix,
+            max_output_chars: Some(80_000),
+        },
+        // Tier 2: Multi-model clients (128-200K context) → 50K chars (~13K tokens)
+        ClientOverride {
+            name_contains: "cursor".into(),
+            match_mode: MatchMode::Prefix,
+            max_output_chars: Some(50_000),
+        },
+        ClientOverride {
+            name_contains: "windsurf".into(),
+            match_mode: MatchMode::Prefix,
+            max_output_chars: Some(50_000),
+        },
+        ClientOverride {
+            name_contains: "copilot".into(),
+            match_mode: MatchMode::Prefix,
+            max_output_chars: Some(50_000),
+        },
+        ClientOverride {
+            name_contains: "zed".into(),
+            match_mode: MatchMode::Prefix,
+            max_output_chars: Some(50_000),
+        },
+        // Tier 3: Model-agnostic clients (unknown context) → 30K chars (~8K tokens)
+        ClientOverride {
+            name_contains: "continue".into(),
+            match_mode: MatchMode::Prefix,
+            max_output_chars: Some(30_000),
+        },
+    ]
 }
 
 const fn default_output_cache_ttl() -> u64 {
@@ -1233,7 +1283,7 @@ mod tests {
         assert_eq!(config.retry_attempts, 3);
         assert_eq!(config.retry_initial_delay_ms, 100);
         assert_eq!(config.rate_limit_per_second, 10); // 10 req/s per host
-        assert_eq!(config.max_output_chars, 20_000);
+        assert_eq!(config.max_output_chars, 40_000);
         assert_eq!(config.output_cache_ttl_seconds, 300);
         assert_eq!(config.output_cache_max_entries, 100);
         assert_eq!(config.sftp_write_threshold_bytes, 65_536);
@@ -1577,26 +1627,38 @@ mod tests {
     #[test]
     fn test_effective_max_output_chars_default() {
         let config = LimitsConfig::default();
-        assert_eq!(config.effective_max_output_chars(None), 20_000);
+        // Default is 40K for unknown clients
+        assert_eq!(config.effective_max_output_chars(None), 40_000);
         assert_eq!(
             config.effective_max_output_chars(Some("unknown-client")),
-            20_000
+            40_000
         );
+        // Built-in overrides for known clients
+        assert_eq!(
+            config.effective_max_output_chars(Some("claude-code")),
+            80_000
+        );
+        assert_eq!(
+            config.effective_max_output_chars(Some("cursor-editor")),
+            50_000
+        );
+        assert_eq!(config.effective_max_output_chars(Some("cline")), 80_000);
     }
 
     #[test]
     fn test_effective_max_output_chars_with_override() {
+        // User-provided overrides replace built-in defaults entirely
         let config = LimitsConfig {
             client_overrides: vec![
                 ClientOverride {
                     name_contains: "claude".to_string(),
                     match_mode: MatchMode::default(),
-                    max_output_chars: Some(80_000),
+                    max_output_chars: Some(120_000),
                 },
                 ClientOverride {
                     name_contains: "cursor".to_string(),
                     match_mode: MatchMode::default(),
-                    max_output_chars: Some(50_000),
+                    max_output_chars: Some(60_000),
                 },
             ],
             ..Default::default()
@@ -1604,11 +1666,11 @@ mod tests {
 
         assert_eq!(
             config.effective_max_output_chars(Some("claude-code")),
-            80_000
+            120_000
         );
-        assert_eq!(config.effective_max_output_chars(Some("Cursor")), 50_000);
-        assert_eq!(config.effective_max_output_chars(Some("unknown")), 20_000);
-        assert_eq!(config.effective_max_output_chars(None), 20_000);
+        assert_eq!(config.effective_max_output_chars(Some("Cursor")), 60_000);
+        assert_eq!(config.effective_max_output_chars(Some("unknown")), 40_000);
+        assert_eq!(config.effective_max_output_chars(None), 40_000);
     }
 
     #[test]
@@ -1702,7 +1764,7 @@ mod tests {
         );
         assert_eq!(
             config.effective_max_output_chars(Some("not-claude")),
-            20_000
+            40_000
         );
     }
 
@@ -1728,9 +1790,9 @@ mod tests {
         );
         assert_eq!(
             config.effective_max_output_chars(Some("claude-code-v2")),
-            20_000
+            40_000
         );
-        assert_eq!(config.effective_max_output_chars(Some("claude")), 20_000);
+        assert_eq!(config.effective_max_output_chars(Some("claude")), 40_000);
     }
 
     #[test]
@@ -1752,7 +1814,7 @@ mod tests {
         assert_eq!(config.effective_max_output_chars(Some("claude")), 80_000);
         assert_eq!(
             config.effective_max_output_chars(Some("not-claude")),
-            20_000
+            40_000
         );
     }
 
@@ -1776,7 +1838,7 @@ mod tests {
             config.effective_max_output_chars(Some("not-claude")),
             80_000
         );
-        assert_eq!(config.effective_max_output_chars(Some("cursor")), 20_000);
+        assert_eq!(config.effective_max_output_chars(Some("cursor")), 40_000);
     }
 
     #[test]

@@ -141,7 +141,7 @@ mod tests {
         let result = handler.execute(None, &ctx).await.unwrap();
         let text = get_text_content(&result);
 
-        assert!(text.contains("max_output_chars: 20000"));
+        assert!(text.contains("max_output_chars: 40000"));
         assert!(text.contains("command_timeout_seconds:"));
         assert!(text.contains("max_concurrent_commands:"));
     }
@@ -155,7 +155,7 @@ mod tests {
         let result = handler.execute(Some(args), &ctx).await.unwrap();
         let text = get_text_content(&result);
 
-        assert!(text.contains("max_output_chars: 20000"));
+        assert!(text.contains("max_output_chars: 40000"));
         assert!(!text.contains("command_timeout_seconds"));
     }
 

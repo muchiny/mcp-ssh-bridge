@@ -171,7 +171,7 @@ mod tests {
         assert!(out.contains("standard mode"));
         assert!(!out.contains("DISABLED GROUPS"));
         assert!(out.contains("1800s command timeout"));
-        assert!(out.contains("20000 char output limit"));
+        assert!(out.contains("40000 char output limit"));
     }
 
     #[test]

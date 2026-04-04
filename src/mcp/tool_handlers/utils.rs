@@ -151,7 +151,6 @@ impl ParsedTable {
         }
         result
     }
-
 }
 
 /// Parse columnar CLI output using data-driven gutter detection.
