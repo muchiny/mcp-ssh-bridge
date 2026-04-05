@@ -20,8 +20,6 @@ pub mod ssh;
 
 #[cfg(any(feature = "azure", feature = "gcp"))]
 pub mod cloud_exec;
-#[cfg(feature = "grpc")]
-pub mod grpc_exec;
 #[cfg(feature = "k8s-exec")]
 pub mod k8s_exec;
 #[cfg(feature = "mqtt")]

@@ -6,14 +6,15 @@
 
 [![CI](https://github.com/muchiny/mcp-ssh-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/muchiny/mcp-ssh-bridge/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/mcp-ssh-bridge?style=flat-square&logo=rust)](https://crates.io/crates/mcp-ssh-bridge)
+[![docs.rs](https://img.shields.io/docsrs/mcp-ssh-bridge?style=flat-square)](https://docs.rs/mcp-ssh-bridge)
+[![Downloads](https://img.shields.io/crates/d/mcp-ssh-bridge?style=flat-square)](https://crates.io/crates/mcp-ssh-bridge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-2025--11--25-blueviolet?style=flat-square)](https://modelcontextprotocol.io)
 
-**A Rust MCP server that lets Claude Code securely manage remote infrastructure via SSH.**
-**338 tools across 74 groups — Linux, Windows, Docker, Kubernetes, network equipment, and more.**
+**A Rust MCP server for secure remote infrastructure management — 338 tools, 13 protocols.**
 
 ```
-Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──14 protocols──►  Your Infrastructure
+Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──13 protocols──►  Your Infrastructure
 ```
 
 </div>
@@ -38,7 +39,7 @@ Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──14 protocols�
 ## Features
 
 - **338 tools, 74 groups** — manage Linux, Windows, Docker, Kubernetes, Podman, databases, LDAP, network equipment, certificates, and more
-- **14 protocol adapters** — SSH, WinRM, Telnet, NETCONF, gRPC, K8s Exec, Serial, SNMP, AWS SSM, Azure, GCP, ZeroMQ, NATS, MQTT
+- **13 protocol adapters** — SSH, WinRM, Telnet, NETCONF, K8s Exec, Serial, SNMP, AWS SSM, Azure, GCP, ZeroMQ, NATS, MQTT
 - **Security-first** — command whitelist/blacklist, 56 secret-redaction patterns + entropy detection, tamper-proof session recording
 - **Auto-discovery** — reads `~/.ssh/config` automatically, merges with YAML config
 - **Smart output** — truncation with paginated fetch via `ssh_output_fetch`, per-client size limits, jq filtering
@@ -129,7 +130,7 @@ mcp-ssh-bridge status
 
 ## Architecture
 
-MCP SSH Bridge sits between Claude Code and your infrastructure. It routes commands through 14 protocol adapters with built-in security validation, output sanitization, and audit logging.
+MCP SSH Bridge sits between Claude Code and your infrastructure. It routes commands through 13 protocol adapters with built-in security validation, output sanitization, and audit logging.
 
 ```mermaid
 graph LR
@@ -143,7 +144,6 @@ graph LR
         ER -->|WinRM| P2[Windows]
         ER -->|Telnet| P3[Legacy Devices]
         ER -->|NETCONF| P4[YANG / Network]
-        ER -->|gRPC| P5[gRPC Services]
     end
 
     subgraph "Infrastructure Protocols"

@@ -117,8 +117,8 @@ dxt/                              # DXT packaging (Claude Desktop extension)
 
 - `default = ["cli"]` — CLI binary (disable for lib-only)
 - `full` — CLI + mimalloc + HTTP transport
-- `air-gapped` — WinRM + Telnet + NETCONF + gRPC
-- `all-protocols` — All 14 protocol adapters (SSH, WinRM, Telnet, NETCONF, gRPC, K8s, Serial, SNMP, SSM, Azure, GCP, ZeroMQ, NATS, MQTT)
+- `air-gapped` — WinRM + Telnet + NETCONF
+- `all-protocols` — All 13 protocol adapters (SSH, WinRM, Telnet, NETCONF, K8s, Serial, SNMP, SSM, Azure, GCP, ZeroMQ, NATS, MQTT)
 - See `Cargo.toml` for full feature matrix
 
 ## Key Principles

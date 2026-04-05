@@ -1,7 +1,7 @@
 //! Remote Executor Port
 //!
 //! This module defines the protocol-agnostic trait for remote command execution.
-//! Each protocol adapter (SSH, `WinRM`, Telnet, NETCONF, gRPC, etc.) implements
+//! Each protocol adapter (SSH, `WinRM`, Telnet, NETCONF, etc.) implements
 //! this trait, allowing the domain layer to remain protocol-agnostic.
 
 use std::path::Path;

@@ -18,7 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-machete]
-ignored = ["hyper-util", "prost", "quick-xml", "tower"]
+ignored = ["hyper-util", "quick-xml", "tower"]
 
 [features]
 default = ["cli"]
@@ -30,8 +30,6 @@ mimalloc = ["dep:mimalloc"]
 winrm = ["dep:reqwest", "dep:quick-xml"]
 telnet = ["dep:mini-telnet"]
 netconf = ["dep:netconf-rs"]
-grpc = ["dep:tonic", "dep:prost"]
-
 # Protocol adapters (Tier 2)
 k8s-exec = ["dep:kube", "dep:k8s-openapi"]
 serial = ["dep:tokio-serial"]
@@ -55,7 +53,7 @@ jq = ["dep:jaq-core", "dep:jaq-std", "dep:jaq-json"]
 # Bundles
 full = ["cli", "mimalloc", "http", "jq"]
 air-gapped = ["winrm", "telnet", "netconf"]
-all-protocols = ["winrm", "telnet", "netconf", "grpc", "k8s-exec", "serial", "snmp", "ssm", "azure", "gcp", "zeromq", "nats", "mqtt"]
+all-protocols = ["winrm", "telnet", "netconf", "k8s-exec", "serial", "snmp", "ssm", "azure", "gcp", "zeromq", "nats", "mqtt"]
 
 [dependencies]
 # Async runtime (explicit features instead of "full" for smaller binary)
@@ -123,10 +121,6 @@ mini-telnet = { version = "0.1", optional = true }
 
 # NETCONF adapter (optional) — RFC 6241 over SSH
 netconf-rs = { version = "0.2", optional = true }
-
-# gRPC adapter (optional) — cloud-native remote execution
-tonic = { version = "0.14", optional = true }
-prost = { version = "0.14", optional = true }
 
 # Kubernetes Exec adapter (optional) — direct pod exec via K8s API
 kube = { version = "3.1", default-features = false, features = ["client", "rustls-tls", "ws"], optional = true }

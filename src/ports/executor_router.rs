@@ -2,7 +2,7 @@
 //!
 //! `ExecutorRouter` wraps the SSH `ConnectionPool` and dispatches connections
 //! based on the `protocol` field in each host's configuration. Non-SSH
-//! protocol adapters (`WinRM`, Telnet, NETCONF, gRPC) are feature-gated.
+//! protocol adapters (`WinRM`, Telnet, NETCONF) are feature-gated.
 //!
 //! The router exposes the same public API as `ConnectionPool`, enabling a
 //! clean cut-over in `ToolContext` without changing any of the 337 tool handlers.
@@ -96,13 +96,6 @@ impl ExecutorRouter {
                     crate::netconf::NetconfConnection::connect(host_name, host_config, limits)
                         .await?;
                 Ok(ConnectionGuard::Netconf(conn))
-            }
-            #[cfg(feature = "grpc")]
-            Protocol::Grpc => {
-                let conn =
-                    crate::grpc_exec::GrpcConnection::connect(host_name, host_config, limits)
-                        .await?;
-                Ok(ConnectionGuard::Grpc(conn))
             }
             #[cfg(feature = "k8s-exec")]
             Protocol::K8sExec => {
@@ -214,9 +207,6 @@ pub enum ConnectionGuard<'a> {
     /// NETCONF session (RFC 6241 over SSH).
     #[cfg(feature = "netconf")]
     Netconf(crate::netconf::NetconfConnection),
-    /// gRPC channel (HTTP/2).
-    #[cfg(feature = "grpc")]
-    Grpc(crate::grpc_exec::GrpcConnection),
     /// Kubernetes Exec (direct K8s API pod exec).
     #[cfg(feature = "k8s-exec")]
     K8sExec(crate::k8s_exec::K8sExecConnection),
@@ -265,8 +255,6 @@ impl ConnectionGuard<'_> {
             Self::Telnet(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "netconf")]
             Self::Netconf(conn) => conn.exec(command, limits).await,
-            #[cfg(feature = "grpc")]
-            Self::Grpc(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "k8s-exec")]
             Self::K8sExec(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "serial")]
@@ -298,8 +286,6 @@ impl ConnectionGuard<'_> {
             Self::Telnet(conn) => conn.mark_failed(),
             #[cfg(feature = "netconf")]
             Self::Netconf(conn) => conn.mark_failed(),
-            #[cfg(feature = "grpc")]
-            Self::Grpc(conn) => conn.mark_failed(),
             #[cfg(feature = "k8s-exec")]
             Self::K8sExec(conn) => conn.mark_failed(),
             #[cfg(feature = "serial")]

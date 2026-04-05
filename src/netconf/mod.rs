@@ -8,6 +8,15 @@
 //! `tokio::task::spawn_blocking` for async compatibility.
 //!
 //! Feature-gated behind `netconf`.
+//!
+//! # Current Limitations
+//!
+//! Only `get-config` RPCs are supported. The `netconf-rs` 0.2 crate exposes
+//! only `Connection::get_config()` and keeps its SSH transport private.
+//! Arbitrary `<rpc>` operations (edit-config, commit, lock, get, etc.) return
+//! an `Unsupported` error. A full implementation requires either upgrading to
+//! a future `netconf-rs` release that exposes raw RPC, or replacing the
+//! dependency with a fork/alternative crate.
 
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -101,15 +110,19 @@ impl NetconfConnection {
 
         let conn = Arc::clone(&self.conn);
         let cmd = command.to_string();
+        let host_name = self.host_name.clone();
 
         let response = tokio::task::spawn_blocking(move || {
             let mut guard = conn.lock().expect("NETCONF mutex poisoned");
             if cmd.trim() == "get-config" || cmd.contains("<get-config") {
                 guard.get_config()
             } else {
-                // netconf-rs only exposes get_config(); raw RPC requires
-                // a fork with pub transport. Return the command as-is
-                // wrapped in an error message for now.
+                warn!(
+                    host = %host_name,
+                    command = %cmd,
+                    "NETCONF: only 'get-config' is supported by netconf-rs 0.2; \
+                     raw RPC requires a fork with public transport"
+                );
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
                     format!(

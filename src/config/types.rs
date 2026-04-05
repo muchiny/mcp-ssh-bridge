@@ -281,9 +281,6 @@ pub enum Protocol {
     /// NETCONF — modern network device configuration (RFC 6241 over SSH)
     #[cfg(feature = "netconf")]
     Netconf,
-    /// gRPC — cloud-native remote execution via gRPC service
-    #[cfg(feature = "grpc")]
-    Grpc,
     /// Kubernetes Exec — direct pod command execution via K8s API
     #[cfg(feature = "k8s-exec")]
     #[serde(alias = "kubernetes", alias = "k8s")]
