@@ -160,6 +160,7 @@ fn build_ctx_with_mode(
         runtime_max_output_chars: None,
         roots: Vec::new(),
         session_recorder: None,
+        metrics: None,
     }
 }
 

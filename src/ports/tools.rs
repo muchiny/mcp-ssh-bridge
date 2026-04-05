@@ -51,6 +51,8 @@ pub struct ToolContext {
     pub roots: Vec<crate::mcp::protocol::RootEntry>,
     /// Optional session recorder for compliance auditing.
     pub session_recorder: Option<Arc<crate::security::SessionRecorder>>,
+    /// Optional metrics collector for token consumption analytics.
+    pub metrics: Option<Arc<crate::metrics::Metrics>>,
 }
 
 impl ToolContext {
@@ -81,6 +83,7 @@ impl ToolContext {
             runtime_max_output_chars: None,
             roots: Vec::new(),
             session_recorder: None,
+            metrics: None,
         }
     }
 
@@ -276,6 +279,7 @@ pub mod mock {
             runtime_max_output_chars: None,
             roots: Vec::new(),
             session_recorder: None,
+            metrics: None,
         }
     }
 
@@ -309,6 +313,7 @@ pub mod mock {
             runtime_max_output_chars: None,
             roots: Vec::new(),
             session_recorder: None,
+            metrics: None,
         }
     }
 }

@@ -126,6 +126,7 @@ fn build_docker_ctx() -> ToolContext {
         runtime_max_output_chars: None,
         roots: Vec::new(),
         session_recorder: None,
+        metrics: None,
     }
 }
 

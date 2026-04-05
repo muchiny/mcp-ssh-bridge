@@ -288,6 +288,7 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         let mut response = ctx
             .execute_use_case
             .process_success(&host, &command, &output.into());
+        let raw_chars = response.stdout.len();
 
         // Step 14: Warn on non-zero exit
         if response.exit_code != 0 {
@@ -305,6 +306,8 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         if response.exit_code == 0 && !dr.is_empty() {
             apply_typed_reduction(&mut response.stdout, &dr, T::OUTPUT_KIND)?;
         }
+
+        let post_reduction_chars = response.stdout.len();
 
         // Step 15: Truncate stdout for display
         #[allow(clippy::cast_possible_truncation)]
@@ -330,6 +333,17 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         let mut output_text = response.format_for_llm(&truncated_stdout);
         if let Some(info) = save_info {
             output_text = format!("{output_text}\n{info}");
+        }
+
+        // Record pipeline stats for token consumption analytics
+        if let Some(ref metrics) = ctx.metrics {
+            let truncated = truncated_stdout.len() < post_reduction_chars;
+            metrics.record_pipeline_stats(
+                raw_chars as u64,
+                post_reduction_chars as u64,
+                truncated,
+                &format!("{:?}", T::OUTPUT_KIND),
+            );
         }
 
         // Step 18: Post-process + auto-populate structuredContent from AppContent

@@ -79,6 +79,8 @@ pub struct McpServer {
     roots: Arc<RwLock<Vec<RootEntry>>>,
     /// Whether the client supports `roots/list`.
     client_supports_roots: AtomicBool,
+    /// Application metrics for token consumption analytics.
+    metrics: Arc<crate::metrics::Metrics>,
 }
 
 impl McpServer {
@@ -183,6 +185,7 @@ impl McpServer {
             resource_subscriptions: Arc::new(RwLock::new(HashMap::new())),
             roots: Arc::new(RwLock::new(Vec::new())),
             client_supports_roots: AtomicBool::new(false),
+            metrics: Arc::new(crate::metrics::Metrics::new()),
         };
 
         (server, audit_task)
@@ -219,6 +222,7 @@ impl McpServer {
         ctx.output_cache = Some(Arc::clone(&self.output_cache));
         ctx.runtime_max_output_chars = Some(Arc::clone(&self.runtime_max_output_chars));
         ctx.roots = self.roots.read().await.to_vec();
+        ctx.metrics = Some(Arc::clone(&self.metrics));
         ctx
     }
 
@@ -874,6 +878,13 @@ impl McpServer {
 
         let start = Instant::now();
         let tool_name = call_params.name.clone();
+        let host_for_metrics = call_params
+            .arguments
+            .as_ref()
+            .and_then(|v| v.get("host"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("local")
+            .to_string();
 
         match self
             .registry
@@ -887,21 +898,28 @@ impl McpServer {
                     reporter.report(3, Some("Done"));
                 }
 
+                // Compute output size for logging and metrics
+                let output_chars: usize = result
+                    .content
+                    .iter()
+                    .map(|c| match c {
+                        ToolContent::Text { text } => text.len(),
+                        _ => 0,
+                    })
+                    .sum();
+                let is_truncated = result.content.iter().any(|c| {
+                    matches!(c,
+                    ToolContent::Text { text } if text.contains("output_id:"))
+                });
+
+                // Record metrics
+                self.metrics
+                    .record_tool_call(&tool_name, &host_for_metrics);
+                self.metrics
+                    .record_tool_output(&tool_name, output_chars as u64);
+
                 // Contextual log: give Claude structured info about the execution
                 if let Some(logger) = self.mcp_logger.read().await.as_ref() {
-                    let output_chars: usize = result
-                        .content
-                        .iter()
-                        .map(|c| match c {
-                            ToolContent::Text { text } => text.len(),
-                            _ => 0,
-                        })
-                        .sum();
-                    let is_truncated = result.content.iter().any(|c| {
-                        matches!(c,
-                        ToolContent::Text { text } if text.contains("output_id:"))
-                    });
-
                     logger.log(
                         super::protocol::LogLevel::Debug,
                         "mcp-ssh-bridge",
@@ -924,6 +942,8 @@ impl McpServer {
             Err(e) => {
                 let elapsed_ms = start.elapsed().as_millis();
                 error!(error = %e, "Tool call failed");
+                self.metrics.record_tool_call(&tool_name, "unknown");
+                self.metrics.record_tool_error();
 
                 if let Some(logger) = self.mcp_logger.read().await.as_ref() {
                     logger.log(

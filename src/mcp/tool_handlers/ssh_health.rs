@@ -139,6 +139,11 @@ impl ToolHandler for SshHealthHandler {
             ctx.config.limits.rate_limit_per_second
         );
 
+        // Token Consumption Analytics
+        if let Some(ref metrics) = ctx.metrics {
+            result.push_str(&metrics.render_token_summary());
+        }
+
         Ok(ToolCallResult::text(result))
     }
 }
