@@ -303,8 +303,10 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         // Step 14: Typed data reduction pipeline (applied before truncation)
         // Save raw output for post_process (which needs the original for App content)
         let raw_output = response.stdout.clone();
+        let mut jq_was_applied = false;
         if response.exit_code == 0 && !dr.is_empty() {
-            apply_typed_reduction(&mut response.stdout, &dr, T::OUTPUT_KIND)?;
+            jq_was_applied =
+                apply_typed_reduction(&mut response.stdout, &dr, T::OUTPUT_KIND)?;
         }
 
         let post_reduction_chars = response.stdout.len();
@@ -347,44 +349,55 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         }
 
         // Step 18: Post-process + auto-populate structuredContent from AppContent
+        // Skip post_process when jq already filtered the output — post_process
+        // would try to parse the raw output as columnar text, overwriting jq's work.
         let result = ToolCallResult::text(output_text);
-        let result = T::post_process(result, &args, &raw_output, &dr);
+        let result = if jq_was_applied {
+            result
+        } else {
+            T::post_process(result, &args, &raw_output, &dr)
+        };
         Ok(auto_populate_structured_content(result))
     }
 }
 
 /// Apply typed data reduction based on [`OutputKind`].
 ///
+/// Returns `true` if a jq filter was applied (so `post_process` should be skipped).
+///
 /// - `Json` → apply `jq_filter` if present
-/// - `Tabular` → apply `columns` filter if present (parse columnar → select → TSV)
-/// - `Auto` → try JSON+jq first, fall back to tabular+columns
+/// - `Tabular` → apply `columns`/`limit` filter (parse columnar → select → TSV)
+/// - `Auto` → try JSON+jq first, fall back to tabular+columns+limit
 /// - `RawText` → no-op
 #[allow(clippy::unnecessary_wraps)]
 fn apply_typed_reduction(
     stdout: &mut String,
     dr: &crate::domain::data_reduction::DataReductionArgs,
     kind: crate::domain::output_kind::OutputKind,
-) -> Result<()> {
+) -> Result<bool> {
     use crate::domain::output_kind::OutputKind;
+
+    let mut jq_applied = false;
 
     match kind {
         OutputKind::Json => {
-            try_apply_jq(stdout, dr)?;
+            jq_applied = try_apply_jq(stdout, dr)?;
         }
         OutputKind::Tabular => {
             try_apply_tabular_reduction(stdout, dr);
         }
         OutputKind::Auto => {
             // Try JSON + jq first (if jq_filter is present and output parses as JSON)
-            if !try_apply_jq(stdout, dr)? {
-                // Fall back to tabular + columns
+            jq_applied = try_apply_jq(stdout, dr)?;
+            if !jq_applied {
+                // Fall back to tabular + columns/limit
                 try_apply_tabular_reduction(stdout, dr);
             }
         }
         OutputKind::RawText => {}
     }
 
-    Ok(())
+    Ok(jq_applied)
 }
 
 /// Try to apply a `jq_filter` to stdout. Returns `true` if applied.
