@@ -225,8 +225,17 @@ impl ToolCallResult {
     /// the MCP-spec types (`text`, `image`, `audio`, `resource`).
     #[must_use]
     pub fn without_apps(mut self) -> Self {
+        let had_apps = self
+            .content
+            .iter()
+            .any(|c| matches!(c, ToolContent::App { .. }));
         self.content
             .retain(|c| !matches!(c, ToolContent::App { .. }));
+        // If Apps were present, structured_content is a clone of App data —
+        // clear it to avoid sending duplicate JSON alongside the TSV text.
+        if had_apps {
+            self.structured_content = None;
+        }
         self
     }
 
