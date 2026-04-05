@@ -142,7 +142,8 @@ fn inject_reduction_schema(
                 "description": "RECOMMENDED: jq expression applied server-side to JSON output \
                     before returning to reduce token consumption. Always extract only the fields \
                     you need. Examples: '.[] | {name, status}' (select fields), \
-                    '[.[] | [.name, .status] | join(\"\\t\")] | join(\"\\n\")' (TSV output). \
+                    '.items[0:5]' (first 5 items), \
+                    '[.items[] | {name: .metadata.name}]' (K8s pod names). \
                     Only works when command output is valid JSON."
             }),
         );

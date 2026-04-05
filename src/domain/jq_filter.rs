@@ -205,6 +205,48 @@ mod tests {
         assert_eq!(result, r#""a""#);
     }
 
+    // ============== K8s-style patterns ==============
+
+    #[test]
+    fn test_k8s_items_field_access() {
+        let input = r#"{"items":[{"name":"a"},{"name":"b"},{"name":"c"}]}"#;
+        let result = apply_jq_filter(input, ".items").unwrap();
+        assert!(result.contains(r#""a""#));
+    }
+
+    #[test]
+    fn test_k8s_items_slice() {
+        let input =
+            r#"{"items":[{"name":"a"},{"name":"b"},{"name":"c"},{"name":"d"},{"name":"e"}]}"#;
+        let result = apply_jq_filter(input, "[.items[:2][] | {name}]").unwrap();
+        assert!(result.contains(r#""a""#), "got: {result}");
+        assert!(result.contains(r#""b""#), "got: {result}");
+        assert!(!result.contains(r#""c""#), "should not contain c, got: {result}");
+    }
+
+    #[test]
+    fn test_k8s_nested_field_extraction() {
+        let input = r#"{"items":[{"metadata":{"name":"pod1","namespace":"ns1"},"status":{"phase":"Running"}}]}"#;
+        let result = apply_jq_filter(
+            input,
+            r#"[.items[] | {name: .metadata.name, ns: .metadata.namespace, phase: .status.phase}]"#,
+        )
+        .unwrap();
+        assert!(result.contains("pod1"), "got: {result}");
+        assert!(result.contains("ns1"), "got: {result}");
+        assert!(result.contains("Running"), "got: {result}");
+    }
+
+    #[test]
+    fn test_tab_join_workaround() {
+        // @tsv is not supported by jaq-core, but join("\t") works
+        let input = r#"[{"a":"1","b":"2"},{"a":"3","b":"4"}]"#;
+        let result = apply_jq_filter(input, r#".[] | [.a, .b] | join("\t")"#).unwrap();
+        // jaq returns JSON strings: "1\t2" (with literal \t inside quotes)
+        assert!(result.contains(r"1\t2"), "got: {result}");
+        assert!(result.contains(r"3\t4"), "got: {result}");
+    }
+
     #[test]
     fn test_group_by() {
         let input = r#"[{"type": "a", "v": 1}, {"type": "b", "v": 2}, {"type": "a", "v": 3}]"#;

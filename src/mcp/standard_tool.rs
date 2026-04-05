@@ -397,7 +397,14 @@ fn try_apply_jq(
 
     #[cfg(feature = "jq")]
     if let Some(ref filter) = dr.jq_filter {
+        let before = stdout.len();
         *stdout = crate::domain::jq_filter::apply_jq_filter(stdout, filter)?;
+        tracing::debug!(
+            before_chars = before,
+            after_chars = stdout.len(),
+            filter = filter.as_str(),
+            "jq_filter applied"
+        );
         return Ok(true);
     }
 
