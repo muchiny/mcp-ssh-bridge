@@ -85,6 +85,7 @@ impl StandardTool for ContainerEventsTool {
         },
         "required": ["host"]
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(args: &SshContainerEventsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(ContainerLogCommandBuilder::build_events_command(

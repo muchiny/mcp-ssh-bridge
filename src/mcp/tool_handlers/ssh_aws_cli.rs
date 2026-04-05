@@ -80,6 +80,7 @@ impl StandardTool for AwsCliTool {
                 },
                 "required": ["host", "service", "subcommand"]
             }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn validate(args: &SshAwsCliArgs, _host_config: &HostConfig) -> Result<()> {
         CloudCommandBuilder::validate_aws_service(&args.service)?;

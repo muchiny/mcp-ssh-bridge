@@ -58,6 +58,7 @@ impl StandardTool for IisListPoolsTool {
     }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Windows);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(_args: &SshIisListPoolsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(IisCommandBuilder::build_list_pools_command())
@@ -67,10 +68,12 @@ impl StandardTool for IisListPoolsTool {
         result: ToolCallResult,
         args: &SshIisListPoolsArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table("IIS App Pools");
         for h in &parsed.headers {
             tbl = tbl.column(h, h.to_uppercase());

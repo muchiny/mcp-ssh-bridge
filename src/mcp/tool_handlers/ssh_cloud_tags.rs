@@ -69,6 +69,7 @@ impl StandardTool for CloudTagsTool {
                 },
                 "required": ["host"]
             }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(args: &SshCloudTagsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(CloudCommandBuilder::build_cloud_tags_command(

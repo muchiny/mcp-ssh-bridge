@@ -61,6 +61,7 @@ impl StandardTool for CloudMetadataTool {
                 },
                 "required": ["host"]
             }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(_args: &SshCloudMetadataArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(CloudCommandBuilder::build_cloud_metadata_command())

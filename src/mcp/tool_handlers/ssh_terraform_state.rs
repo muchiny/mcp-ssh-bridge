@@ -63,6 +63,8 @@ impl StandardTool for TerraformStateTool {
                 "required": ["host", "dir", "subcommand"]
             }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshTerraformStateArgs, _host_config: &HostConfig) -> Result<String> {
         TerraformCommandBuilder::build_state_command(
             &args.dir,

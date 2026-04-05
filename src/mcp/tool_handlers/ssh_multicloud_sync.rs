@@ -61,6 +61,7 @@ impl StandardTool for MulticloudSyncTool {
                 },
                 "required": ["host"]
             }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(_args: &SshMulticloudSyncArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(MulticloudCommandBuilder::build_multicloud_sync_command())

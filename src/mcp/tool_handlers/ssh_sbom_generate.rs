@@ -59,6 +59,7 @@ impl StandardTool for SbomGenerateTool {
         },
         "required": ["host"]
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(_args: &SshSbomGenerateArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SbomCommandBuilder::build_sbom_command())
@@ -68,6 +69,7 @@ impl StandardTool for SbomGenerateTool {
         result: ToolCallResult,
         _args: &SshSbomGenerateArgs,
         output: &str,
+        _dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         // Extract the TSV package list between === INSTALLED PACKAGES === and next ===
         // dpkg-query already outputs tab-separated: Package\tVersion\tArch\tStatus

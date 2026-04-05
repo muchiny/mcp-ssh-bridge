@@ -63,6 +63,8 @@ impl StandardTool for TerraformOutputTool {
                 "required": ["host", "dir"]
             }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshTerraformOutputArgs, _host_config: &HostConfig) -> Result<String> {
         TerraformCommandBuilder::build_output_command(
             &args.dir,

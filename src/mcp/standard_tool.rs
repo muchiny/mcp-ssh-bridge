@@ -74,6 +74,11 @@ pub trait StandardTool: Send + Sync + 'static {
     /// `Some(OsType::Windows)` = reject non-Windows hosts.
     const OS_GUARD: Option<OsType> = None;
 
+    /// Expected output format. Controls which data-reduction params are
+    /// advertised in the schema and which reduction pipeline runs at runtime.
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::RawText;
+
     /// Build the shell command from parsed arguments.
     ///
     /// This is the only method that MUST be implemented per tool.
@@ -89,12 +94,26 @@ pub trait StandardTool: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Paths to validate against workspace root scope.
+    ///
+    /// Override for file-operation tools to enforce path scoping.
+    /// Default: empty (no scoping).
+    fn scoped_paths(_args: &Self::Args) -> Vec<&str> {
+        Vec::new()
+    }
+
     /// Optional post-processing to enrich the result with App content.
     ///
     /// Override this to add dashboard, table, or chart components
     /// to the tool result. The default is a no-op (returns result as-is).
     /// `output` is the raw (unsanitized) command output text.
-    fn post_process(result: ToolCallResult, _args: &Self::Args, _output: &str) -> ToolCallResult {
+    /// `dr` contains data-reduction params (e.g. `columns` for column filtering).
+    fn post_process(
+        result: ToolCallResult,
+        _args: &Self::Args,
+        _output: &str,
+        _dr: &crate::domain::data_reduction::DataReductionArgs,
+    ) -> ToolCallResult {
         result
     }
 }
@@ -137,8 +156,8 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         }
     }
 
-    fn supports_data_reduction(&self) -> bool {
-        true
+    fn output_kind(&self) -> crate::domain::output_kind::OutputKind {
+        T::OUTPUT_KIND
     }
 
     #[allow(clippy::too_many_lines)]
@@ -189,6 +208,11 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
 
         // Step 4: Domain validation (optional)
         T::validate(&args, host_config)?;
+
+        // Step 4b: Root scope validation for file-operation tools
+        for path in T::scoped_paths(&args) {
+            ctx.validate_root_scope(path)?;
+        }
 
         // Step 5: Build command
         let command = T::build_command(&args, host_config)?;
@@ -270,12 +294,11 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
             );
         }
 
-        // Step 14: jq filter (applied before truncation for maximum effect)
-        if !dr.is_empty()
-            && response.exit_code == 0
-            && let Some(filtered) = apply_data_reduction(&response.stdout, &dr)?
-        {
-            response.stdout = filtered;
+        // Step 14: Typed data reduction pipeline (applied before truncation)
+        // Save raw output for post_process (which needs the original for App content)
+        let raw_output = response.stdout.clone();
+        if response.exit_code == 0 && !dr.is_empty() {
+            apply_typed_reduction(&mut response.stdout, &dr, T::OUTPUT_KIND)?;
         }
 
         // Step 15: Truncate stdout for display
@@ -306,27 +329,73 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
 
         // Step 18: Post-process + auto-populate structuredContent from AppContent
         let result = ToolCallResult::text(output_text);
-        let result = T::post_process(result, &args, &response.stdout);
+        let result = T::post_process(result, &args, &raw_output, &dr);
         Ok(auto_populate_structured_content(result))
     }
 }
 
-/// Apply jq filter to stdout if requested.
-#[allow(clippy::unnecessary_wraps)] // Returns Err only when jq feature is enabled
-fn apply_data_reduction(
-    stdout: &str,
+/// Apply typed data reduction based on [`OutputKind`].
+///
+/// - `Json` → apply `jq_filter` if present
+/// - `Tabular` → apply `columns` filter if present (parse columnar → select → TSV)
+/// - `Auto` → try JSON+jq first, fall back to tabular+columns
+/// - `RawText` → no-op
+#[allow(clippy::unnecessary_wraps)]
+fn apply_typed_reduction(
+    stdout: &mut String,
     dr: &crate::domain::data_reduction::DataReductionArgs,
-) -> Result<Option<String>> {
-    let _ = (stdout, dr);
+    kind: crate::domain::output_kind::OutputKind,
+) -> Result<()> {
+    use crate::domain::output_kind::OutputKind;
+
+    match kind {
+        OutputKind::Json => {
+            try_apply_jq(stdout, dr)?;
+        }
+        OutputKind::Tabular => {
+            try_apply_columns(stdout, dr);
+        }
+        OutputKind::Auto => {
+            // Try JSON + jq first (if jq_filter is present and output parses as JSON)
+            if !try_apply_jq(stdout, dr)? {
+                // Fall back to tabular + columns
+                try_apply_columns(stdout, dr);
+            }
+        }
+        OutputKind::RawText => {}
+    }
+
+    Ok(())
+}
+
+/// Try to apply a `jq_filter` to stdout. Returns `true` if applied.
+#[allow(clippy::unnecessary_wraps)]
+fn try_apply_jq(
+    stdout: &mut String,
+    dr: &crate::domain::data_reduction::DataReductionArgs,
+) -> Result<bool> {
+    let _ = &(&stdout, &dr);
 
     #[cfg(feature = "jq")]
     if let Some(ref filter) = dr.jq_filter {
-        return Ok(Some(crate::domain::jq_filter::apply_jq_filter(
-            stdout, filter,
-        )?));
+        *stdout = crate::domain::jq_filter::apply_jq_filter(stdout, filter)?;
+        return Ok(true);
     }
 
-    Ok(None)
+    Ok(false)
+}
+
+/// Try to apply a `columns` filter to stdout (columnar text → filtered TSV).
+fn try_apply_columns(
+    stdout: &mut String,
+    dr: &crate::domain::data_reduction::DataReductionArgs,
+) {
+    if let Some(ref cols) = dr.columns
+        && let Some(table) =
+            crate::mcp::tool_handlers::utils::parse_columnar_output(stdout)
+    {
+        *stdout = table.select_columns(cols).to_tsv();
+    }
 }
 
 /// Auto-populate `structuredContent` from `AppContent` data.

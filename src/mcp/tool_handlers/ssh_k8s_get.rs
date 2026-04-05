@@ -118,6 +118,8 @@ impl StandardTool for K8sGetTool {
         "required": ["host", "resource"]
     }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshK8sGetArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(KubernetesCommandBuilder::build_get_command(
             args.kubectl_bin.as_deref(),
@@ -132,10 +134,11 @@ impl StandardTool for K8sGetTool {
         ))
     }
 
-    fn post_process(result: ToolCallResult, args: &SshK8sGetArgs, output: &str) -> ToolCallResult {
+    fn post_process(result: ToolCallResult, args: &SshK8sGetArgs, output: &str, dr: &crate::domain::data_reduction::DataReductionArgs) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table(format!("Kubernetes {}", args.resource));
         for h in &parsed.headers {
             tbl = tbl.column(h, h.to_uppercase());

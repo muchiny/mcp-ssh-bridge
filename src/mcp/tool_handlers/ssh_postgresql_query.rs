@@ -85,6 +85,8 @@ impl StandardTool for PostgresqlQueryTool {
         "required": ["host", "query"]
     }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshPostgresqlQueryArgs, _host_config: &HostConfig) -> Result<String> {
         let db = args.database.as_deref().unwrap_or("postgres");
         let user = args.db_user.as_deref().unwrap_or("postgres");

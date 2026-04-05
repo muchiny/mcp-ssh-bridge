@@ -78,6 +78,7 @@ impl StandardTool for NetConnectionsTool {
         }
     }
 }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshNetConnectionsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(NetworkCommandBuilder::build_connections_command(
@@ -91,10 +92,12 @@ impl StandardTool for NetConnectionsTool {
         result: ToolCallResult,
         args: &SshNetConnectionsArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table("Network Connections");
         for h in &parsed.headers {
             tbl = tbl.column(h, h.to_uppercase());

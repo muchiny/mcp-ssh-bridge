@@ -108,6 +108,8 @@ impl StandardTool for DbQueryTool {
         "required": ["host", "db_type", "query", "database"]
     }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshDbQueryArgs, _host_config: &HostConfig) -> Result<String> {
         let db_type = DatabaseType::from_str_checked(&args.db_type)?;
         let db_host = args.db_host.as_deref().unwrap_or("localhost");

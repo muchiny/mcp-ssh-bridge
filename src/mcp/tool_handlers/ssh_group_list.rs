@@ -60,6 +60,7 @@ impl StandardTool for GroupListTool {
             }
         }
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(_args: &SshGroupListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(UserCommandBuilder::build_group_list_command())
@@ -69,6 +70,7 @@ impl StandardTool for GroupListTool {
         result: ToolCallResult,
         args: &SshGroupListArgs,
         output: &str,
+        _dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
         if lines.len() < 2 {

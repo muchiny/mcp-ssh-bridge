@@ -79,6 +79,7 @@ impl StandardTool for PortScanTool {
             }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn validate(args: &SshPortScanArgs, _host_config: &HostConfig) -> Result<()> {
         if let Some(ref target) = args.target {
@@ -98,11 +99,13 @@ impl StandardTool for PortScanTool {
         result: ToolCallResult,
         _args: &SshPortScanArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         // ss/netstat output is columnar — convert to TSV for token efficiency
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         ToolCallResult::text(parsed.to_tsv())
     }
 }

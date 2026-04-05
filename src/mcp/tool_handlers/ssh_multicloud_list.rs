@@ -68,6 +68,7 @@ impl StandardTool for MulticloudListTool {
                 },
                 "required": ["host", "provider"]
             }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn validate(args: &SshMulticloudListArgs, _host_config: &HostConfig) -> Result<()> {
         MulticloudCommandBuilder::validate_provider(&args.provider)?;

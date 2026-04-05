@@ -64,6 +64,7 @@ impl StandardTool for TemplateListTool {
             }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(_args: &SshTemplateListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(TemplateCommandBuilder::build_template_list_command())
@@ -73,10 +74,12 @@ impl StandardTool for TemplateListTool {
         result: ToolCallResult,
         args: &SshTemplateListArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table("Templates");
         for h in &parsed.headers {
             tbl = tbl.column(h, h.to_uppercase());

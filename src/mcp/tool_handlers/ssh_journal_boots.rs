@@ -57,6 +57,7 @@ impl StandardTool for JournalBootsTool {
             }
         }
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(_args: &SshJournalBootsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(JournaldCommandBuilder::build_boots_command())
@@ -66,10 +67,12 @@ impl StandardTool for JournalBootsTool {
         result: ToolCallResult,
         args: &SshJournalBootsArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table("Journal Boots");
         for h in &parsed.headers {
             tbl = tbl.column(h, h.to_uppercase());

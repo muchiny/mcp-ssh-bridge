@@ -75,6 +75,7 @@ impl StandardTool for CloudCostTool {
                 },
                 "required": ["host"]
             }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(args: &SshCloudCostArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(CloudCommandBuilder::build_cloud_cost_command(

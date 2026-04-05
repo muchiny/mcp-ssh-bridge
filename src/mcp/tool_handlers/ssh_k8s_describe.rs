@@ -84,6 +84,8 @@ impl StandardTool for K8sDescribeTool {
         "required": ["host", "resource", "name"]
     }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshK8sDescribeArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(KubernetesCommandBuilder::build_describe_command(
             args.kubectl_bin.as_deref(),

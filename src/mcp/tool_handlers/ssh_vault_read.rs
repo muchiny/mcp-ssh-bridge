@@ -75,6 +75,8 @@ impl StandardTool for VaultReadTool {
                 "required": ["host", "path"]
             }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshVaultReadArgs, _host_config: &HostConfig) -> Result<String> {
         VaultCommandBuilder::build_read_command(
             &args.path,

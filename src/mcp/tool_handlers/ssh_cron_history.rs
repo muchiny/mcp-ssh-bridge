@@ -84,6 +84,7 @@ impl StandardTool for CronHistoryTool {
             }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshCronHistoryArgs, _host_config: &HostConfig) -> Result<String> {
         CronAnalysisCommandBuilder::build_cron_history_command(args.lines, args.since.as_deref())
@@ -93,10 +94,12 @@ impl StandardTool for CronHistoryTool {
         result: ToolCallResult,
         args: &SshCronHistoryArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table("Cron History");
         for h in &parsed.headers {
             tbl = tbl.column(h, h.to_uppercase());

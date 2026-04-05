@@ -83,10 +83,8 @@ impl ToolRegistry {
                         json!({})
                     });
 
-                // Inject data reduction params for StandardToolHandler tools
-                if handler.supports_data_reduction() {
-                    inject_data_reduction_schema(&mut input_schema);
-                }
+                // Inject data reduction params based on output kind
+                inject_reduction_schema(&mut input_schema, handler.output_kind());
 
                 Tool {
                     name: schema.name.to_string(),
@@ -119,11 +117,24 @@ impl ToolRegistry {
     }
 }
 
-/// Inject `jq_filter` parameter into a tool's JSON schema.
+/// Inject data-reduction parameters into a tool's JSON schema based on its
+/// [`OutputKind`].
 ///
-/// Added to all `StandardToolHandler` tools for server-side JSON filtering.
-fn inject_data_reduction_schema(schema: &mut Value) {
-    if let Some(props) = schema.get_mut("properties").and_then(Value::as_object_mut) {
+/// - `Json` → `jq_filter`
+/// - `Tabular` → `columns`
+/// - `Auto` → both
+/// - `RawText` → nothing
+fn inject_reduction_schema(
+    schema: &mut Value,
+    kind: crate::domain::output_kind::OutputKind,
+) {
+    use crate::domain::output_kind::OutputKind;
+
+    let Some(props) = schema.get_mut("properties").and_then(Value::as_object_mut) else {
+        return;
+    };
+
+    if kind.supports_jq() {
         props.insert(
             "jq_filter".to_string(),
             json!({
@@ -132,6 +143,20 @@ fn inject_data_reduction_schema(schema: &mut Value) {
             }),
         );
     }
+
+    if kind.supports_columns() {
+        props.insert(
+            "columns".to_string(),
+            json!({
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Filter output to these columns only (case-insensitive header match). Example: [\"NAME\", \"STATUS\", \"CPU\"]. Unknown columns are silently ignored."
+            }),
+        );
+    }
+
+    // RawText: nothing injected
+    let _ = kind == OutputKind::RawText;
 }
 
 /// Map a tool name to its group.

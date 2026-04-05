@@ -76,6 +76,8 @@ impl StandardTool for PodmanPsTool {
         "required": ["host"]
     }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshPodmanPsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(PodmanCommandBuilder::build_ps_command(
             args.all.unwrap_or(false),

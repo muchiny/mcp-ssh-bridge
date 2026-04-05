@@ -68,6 +68,7 @@ impl StandardTool for UserListTool {
             }
         }
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshUserListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(UserCommandBuilder::build_user_list_command(
@@ -79,6 +80,7 @@ impl StandardTool for UserListTool {
         result: ToolCallResult,
         args: &SshUserListArgs,
         output: &str,
+        _dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
         if lines.len() < 2 {

@@ -69,6 +69,7 @@ impl StandardTool for EsxiNetworkListTool {
         },
         "required": ["host"]
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn validate(args: &SshEsxiNetworkListArgs, _host_config: &HostConfig) -> Result<()> {
         if let Some(component) = &args.component {
@@ -87,10 +88,12 @@ impl StandardTool for EsxiNetworkListTool {
         result: ToolCallResult,
         args: &SshEsxiNetworkListArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table("ESXi Networks");
         for h in &parsed.headers {
             tbl = tbl.column(h, h.to_uppercase());

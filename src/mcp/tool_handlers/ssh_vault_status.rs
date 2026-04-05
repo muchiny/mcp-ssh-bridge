@@ -60,6 +60,8 @@ impl StandardTool for VaultStatusTool {
                 "required": ["host"]
             }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshVaultStatusArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(VaultCommandBuilder::build_status_command(
             args.vault_addr.as_deref(),

@@ -76,6 +76,7 @@ impl StandardTool for DockerNetworkInspectTool {
         },
         "required": ["host", "network"]
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(
         args: &SshDockerNetworkInspectArgs,

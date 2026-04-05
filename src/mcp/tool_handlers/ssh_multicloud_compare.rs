@@ -75,6 +75,7 @@ impl StandardTool for MulticloudCompareTool {
                 },
                 "required": ["host", "provider1", "provider2"]
             }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn validate(args: &SshMulticloudCompareArgs, _host_config: &HostConfig) -> Result<()> {
         MulticloudCommandBuilder::validate_provider(&args.provider1)?;

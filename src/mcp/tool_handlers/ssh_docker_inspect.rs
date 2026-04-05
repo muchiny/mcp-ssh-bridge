@@ -77,6 +77,7 @@ impl StandardTool for DockerInspectTool {
         },
         "required": ["host", "target"]
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(args: &SshDockerInspectArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(DockerCommandBuilder::build_inspect_command(

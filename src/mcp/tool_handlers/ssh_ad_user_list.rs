@@ -63,6 +63,7 @@ impl StandardTool for AdUserListTool {
     }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Windows);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshAdUserListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(ActiveDirectoryCommandBuilder::build_user_list_command(
@@ -74,10 +75,12 @@ impl StandardTool for AdUserListTool {
         result: ToolCallResult,
         args: &SshAdUserListArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table("AD Users");
         for h in &parsed.headers {
             tbl = tbl.column(h, h.to_uppercase());

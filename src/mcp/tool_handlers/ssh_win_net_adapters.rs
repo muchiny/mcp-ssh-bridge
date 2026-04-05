@@ -57,6 +57,7 @@ impl StandardTool for WinNetAdaptersTool {
     }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Windows);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(_args: &SshWinNetAdaptersArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(WindowsNetworkCommandBuilder::adapters())
@@ -66,10 +67,12 @@ impl StandardTool for WinNetAdaptersTool {
         result: ToolCallResult,
         args: &SshWinNetAdaptersArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table("Network Adapters");
         for h in &parsed.headers {
             tbl = tbl.column(h, h.to_uppercase());

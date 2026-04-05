@@ -5,6 +5,7 @@
 
 pub mod data_reduction;
 pub mod history;
+pub mod output_kind;
 #[cfg(feature = "jq")]
 pub mod jq_filter;
 pub mod output_cache;

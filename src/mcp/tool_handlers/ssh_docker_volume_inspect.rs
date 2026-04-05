@@ -76,6 +76,7 @@ impl StandardTool for DockerVolumeInspectTool {
         },
         "required": ["host", "volume"]
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(
         args: &SshDockerVolumeInspectArgs,

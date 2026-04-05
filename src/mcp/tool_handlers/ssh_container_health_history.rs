@@ -71,6 +71,7 @@ impl StandardTool for ContainerHealthHistoryTool {
         },
         "required": ["host", "container"]
     }"#;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(
         args: &SshContainerHealthHistoryArgs,

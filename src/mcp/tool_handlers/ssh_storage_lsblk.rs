@@ -70,6 +70,7 @@ impl StandardTool for StorageLsblkTool {
             }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshStorageLsblkArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(StorageCommandBuilder::build_lsblk_command(

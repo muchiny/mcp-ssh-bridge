@@ -84,6 +84,8 @@ impl StandardTool for MysqlQueryTool {
         "required": ["host", "query"]
     }"#;
 
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+
     fn build_command(args: &SshMysqlQueryArgs, _host_config: &HostConfig) -> Result<String> {
         let user = args.db_user.as_deref().unwrap_or("root");
         let port = args.db_port.unwrap_or(3306);

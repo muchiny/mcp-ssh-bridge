@@ -93,7 +93,10 @@ impl ToolContext {
         // Extract path from file:// URIs in roots
         for root in &self.roots {
             let root_path = root.uri.strip_prefix("file://").unwrap_or(&root.uri);
-            if path.starts_with(root_path) || root_path == "/" {
+            if root_path == "/"
+                || path == root_path
+                || path.starts_with(&format!("{root_path}/"))
+            {
                 return Ok(());
             }
         }
@@ -133,13 +136,15 @@ pub trait ToolHandler: Send + Sync {
     /// The tool result, either success or error
     async fn execute(&self, args: Option<Value>, ctx: &ToolContext) -> Result<ToolCallResult>;
 
-    /// Whether this handler supports universal data reduction parameters
-    /// (`jq_filter`, `limit`, `fields`, `output_mode`).
+    /// Declares the expected output format of this tool.
     ///
-    /// Only `StandardToolHandler` returns `true`. Custom handlers return
-    /// `false` (default) so these params are not advertised in their schema.
-    fn supports_data_reduction(&self) -> bool {
-        false
+    /// Used by the registry to inject the appropriate data-reduction params
+    /// (`jq_filter` for JSON, `columns` for tabular, both for auto)
+    /// and by `StandardToolHandler` to apply the correct reduction pipeline.
+    ///
+    /// Custom handlers return `RawText` (default) — no params advertised.
+    fn output_kind(&self) -> crate::domain::output_kind::OutputKind {
+        crate::domain::output_kind::OutputKind::RawText
     }
 }
 
@@ -348,5 +353,23 @@ mod tests {
         ctx.roots = vec![root("file:///home/user/project", None)];
         let err = ctx.validate_root_scope("/etc/passwd").unwrap_err();
         assert!(err.to_string().contains("outside declared workspace roots"));
+    }
+
+    #[test]
+    fn test_validate_root_scope_rejects_prefix_collision() {
+        let mut ctx = mock::create_test_context();
+        ctx.roots = vec![root("file:///home/user/project", None)];
+        // "/home/user/projectile" must NOT match root "/home/user/project"
+        let err = ctx
+            .validate_root_scope("/home/user/projectile/file.txt")
+            .unwrap_err();
+        assert!(err.to_string().contains("outside declared workspace roots"));
+    }
+
+    #[test]
+    fn test_validate_root_scope_exact_match() {
+        let mut ctx = mock::create_test_context();
+        ctx.roots = vec![root("file:///home/user/project", None)];
+        assert!(ctx.validate_root_scope("/home/user/project").is_ok());
     }
 }

@@ -74,6 +74,7 @@ impl StandardTool for ServiceListTool {
     }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshServiceListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SystemdCommandBuilder::build_list_command(
@@ -87,10 +88,12 @@ impl StandardTool for ServiceListTool {
         result: ToolCallResult,
         args: &SshServiceListArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         let mut tbl = table("Systemd Services")
             .column("unit", "Unit")
             .column("load", "Load")

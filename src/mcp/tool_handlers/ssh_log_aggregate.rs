@@ -69,6 +69,7 @@ impl StandardTool for LogAggregateTool {
             }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshLogAggregateArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(LogAggregationCommandBuilder::build_log_aggregate_command(
@@ -80,11 +81,13 @@ impl StandardTool for LogAggregateTool {
         result: ToolCallResult,
         _args: &SshLogAggregateArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         // Output is already TSV (FILE\tTOTAL\tERRORS\tWARNINGS) — parse for table
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         ToolCallResult::text(parsed.to_tsv())
     }
 }

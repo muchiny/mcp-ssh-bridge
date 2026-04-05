@@ -79,6 +79,7 @@ impl StandardTool for DiscoverHostsTool {
             }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
 
     fn validate(args: &SshDiscoverHostsArgs, _host_config: &HostConfig) -> Result<()> {
         InventoryCommandBuilder::validate_network(&args.network)?;
@@ -96,11 +97,13 @@ impl StandardTool for DiscoverHostsTool {
         result: ToolCallResult,
         _args: &SshDiscoverHostsArgs,
         output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
     ) -> ToolCallResult {
         // ip neigh / arp-scan produce columnar output — convert to TSV
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
+        let parsed = super::utils::maybe_select_columns(parsed, dr);
         ToolCallResult::text(parsed.to_tsv())
     }
 }

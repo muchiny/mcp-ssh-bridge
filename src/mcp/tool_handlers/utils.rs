@@ -129,6 +129,43 @@ impl ParsedTable {
     ///
     /// Returns uppercased header row + tab-separated data rows.
     /// TSV uses 30-40% fewer tokens than JSON for tabular data (pgEdge benchmark).
+    /// Select a subset of columns by name (case-insensitive).
+    ///
+    /// Columns not found in the table are silently ignored.
+    /// Returns a new `ParsedTable` with only the matching columns,
+    /// preserving their original order in the table.
+    #[must_use]
+    pub fn select_columns(&self, cols: &[String]) -> Self {
+        let lowercase_cols: Vec<String> = cols.iter().map(|c| c.to_lowercase()).collect();
+        let indices: Vec<usize> = self
+            .headers
+            .iter()
+            .enumerate()
+            .filter(|(_, h)| lowercase_cols.contains(h))
+            .map(|(i, _)| i)
+            .collect();
+
+        if indices.is_empty() {
+            return Self {
+                headers: Vec::new(),
+                rows: Vec::new(),
+            };
+        }
+
+        let headers = indices.iter().map(|&i| self.headers[i].clone()).collect();
+        let rows = self
+            .rows
+            .iter()
+            .map(|row| indices.iter().map(|&i| row[i].clone()).collect())
+            .collect();
+
+        Self { headers, rows }
+    }
+
+    /// Convert to TSV (tab-separated values) for token-efficient LLM consumption.
+    ///
+    /// Returns uppercased header row + tab-separated data rows.
+    /// TSV uses 30-40% fewer tokens than JSON for tabular data (pgEdge benchmark).
     #[must_use]
     pub fn to_tsv(&self) -> String {
         let mut result = String::new();
@@ -150,6 +187,19 @@ impl ParsedTable {
             }
         }
         result
+    }
+}
+
+/// Apply column filter to a `ParsedTable` if requested in data reduction args.
+#[must_use]
+pub fn maybe_select_columns(
+    table: ParsedTable,
+    dr: &crate::domain::data_reduction::DataReductionArgs,
+) -> ParsedTable {
+    if let Some(ref cols) = dr.columns {
+        table.select_columns(cols)
+    } else {
+        table
     }
 }
 
@@ -659,6 +709,68 @@ node-1   250m";
         };
         let tsv = table.to_tsv();
         assert_eq!(tsv, "NAME\tVALUE");
+    }
+
+    // ============== select_columns Tests ==============
+
+    #[test]
+    fn test_select_columns_basic() {
+        let table = ParsedTable {
+            headers: vec!["name".into(), "cpu".into(), "mem".into(), "status".into()],
+            rows: vec![
+                vec!["web".into(), "45%".into(), "128M".into(), "running".into()],
+                vec!["db".into(), "12%".into(), "256M".into(), "running".into()],
+            ],
+        };
+        let filtered = table.select_columns(&["NAME".into(), "STATUS".into()]);
+        assert_eq!(filtered.headers, vec!["name", "status"]);
+        assert_eq!(filtered.rows[0], vec!["web", "running"]);
+        assert_eq!(filtered.rows[1], vec!["db", "running"]);
+    }
+
+    #[test]
+    fn test_select_columns_case_insensitive() {
+        let table = ParsedTable {
+            headers: vec!["container id".into(), "image".into()],
+            rows: vec![vec!["abc123".into(), "nginx".into()]],
+        };
+        let filtered = table.select_columns(&["Container ID".into(), "IMAGE".into()]);
+        assert_eq!(filtered.headers, vec!["container id", "image"]);
+        assert_eq!(filtered.rows[0], vec!["abc123", "nginx"]);
+    }
+
+    #[test]
+    fn test_select_columns_unknown_ignored() {
+        let table = ParsedTable {
+            headers: vec!["name".into(), "cpu".into()],
+            rows: vec![vec!["web".into(), "45%".into()]],
+        };
+        let filtered = table.select_columns(&["NAME".into(), "NONEXISTENT".into()]);
+        assert_eq!(filtered.headers, vec!["name"]);
+        assert_eq!(filtered.rows[0], vec!["web"]);
+    }
+
+    #[test]
+    fn test_select_columns_all_unknown() {
+        let table = ParsedTable {
+            headers: vec!["name".into()],
+            rows: vec![vec!["web".into()]],
+        };
+        let filtered = table.select_columns(&["NOPE".into()]);
+        assert!(filtered.headers.is_empty());
+        assert!(filtered.rows.is_empty());
+    }
+
+    #[test]
+    fn test_select_columns_preserves_table_order() {
+        let table = ParsedTable {
+            headers: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            rows: vec![vec!["1".into(), "2".into(), "3".into(), "4".into()]],
+        };
+        // Request in reverse order — output follows table column order, not request order
+        let filtered = table.select_columns(&["D".into(), "B".into()]);
+        assert_eq!(filtered.headers, vec!["b", "d"]);
+        assert_eq!(filtered.rows[0], vec!["2", "4"]);
     }
 
     #[tokio::test]
