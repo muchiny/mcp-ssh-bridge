@@ -139,7 +139,11 @@ fn inject_reduction_schema(
             "jq_filter".to_string(),
             json!({
                 "type": "string",
-                "description": "jq expression applied server-side to JSON output before returning. Dramatically reduces tokens. Example: '.[] | {name, status}'. Only works when command output is valid JSON."
+                "description": "RECOMMENDED: jq expression applied server-side to JSON output \
+                    before returning to reduce token consumption. Always extract only the fields \
+                    you need. Examples: '.[] | {name, status}' (select fields), \
+                    '[.[] | [.name, .status] | join(\"\\t\")] | join(\"\\n\")' (TSV output). \
+                    Only works when command output is valid JSON."
             }),
         );
     }
@@ -150,7 +154,10 @@ fn inject_reduction_schema(
             json!({
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Filter output to these columns only (case-insensitive header match). Example: [\"NAME\", \"STATUS\", \"CPU\"]. Unknown columns are silently ignored."
+                "description": "RECOMMENDED: Filter output to only the columns you need to \
+                    reduce token consumption. Case-insensitive header match. Always specify \
+                    this when you don't need all columns. Example: [\"NAME\", \"STATUS\"]. \
+                    Unknown columns are silently ignored."
             }),
         );
     }

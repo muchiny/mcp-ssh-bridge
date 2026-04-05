@@ -112,7 +112,11 @@ pub fn build_instructions(config: &Config, tool_count: usize) -> String {
          ssh_output_fetch to get the rest.\n\
          \n\
          SESSIONS: For multi-step workflows needing shared state (cd, env vars), \
-         use ssh_session_create + ssh_session_exec. Close with ssh_session_close when done."
+         use ssh_session_create + ssh_session_exec. Close with ssh_session_close when done.\n\
+         \n\
+         TOKEN SAVINGS: Tools exposing jq_filter (JSON output) or columns (tabular output) \
+         support server-side data reduction. ALWAYS use these parameters to extract only \
+         the fields you need \u{2014} this reduces token consumption by 30-60%."
     );
 
     out
@@ -262,5 +266,6 @@ mod tests {
         assert!(out.contains("SESSIONS:"));
         assert!(out.contains("APPS:"));
         assert!(out.contains("ROOTS:"));
+        assert!(out.contains("TOKEN SAVINGS:"));
     }
 }
