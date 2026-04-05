@@ -80,6 +80,10 @@ impl StandardTool for FileChownTool {
         "required": ["host", "path", "owner"]
     }"#;
 
+    fn scoped_paths(args: &SshFileChownArgs) -> Vec<&str> {
+        vec![&args.path]
+    }
+
     fn build_command(args: &SshFileChownArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(FileOpsCommandBuilder::build_chown_command(
             &args.path,

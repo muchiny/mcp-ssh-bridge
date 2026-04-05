@@ -79,6 +79,10 @@ impl StandardTool for FileTemplateTool {
         "required": ["host", "template_path", "output_path"]
     }"#;
 
+    fn scoped_paths(args: &SshFileTemplateArgs) -> Vec<&str> {
+        vec![&args.template_path, &args.output_path]
+    }
+
     fn build_command(args: &SshFileTemplateArgs, _host_config: &HostConfig) -> Result<String> {
         let vars_vec: Vec<(String, String)> = args
             .variables

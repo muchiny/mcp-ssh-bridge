@@ -74,6 +74,10 @@ impl StandardTool for FileChmodTool {
         "required": ["host", "path", "mode"]
     }"#;
 
+    fn scoped_paths(args: &SshFileChmodArgs) -> Vec<&str> {
+        vec![&args.path]
+    }
+
     fn build_command(args: &SshFileChmodArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(FileOpsCommandBuilder::build_chmod_command(
             &args.path,

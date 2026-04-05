@@ -78,6 +78,18 @@ proptest! {
         }
     }
 
+    /// Cmd escaping must double all percent signs to prevent variable expansion.
+    #[test]
+    fn cmd_escape_doubles_percent_signs(s in "\\PC*") {
+        let escaped = shell::escape(&s, ShellType::Cmd);
+        let interior = &escaped[1..escaped.len()-1];
+        // Count % in input and %% in output interior
+        let input_pct = s.chars().filter(|&c| c == '%').count();
+        let output_pct = interior.matches("%%").count();
+        prop_assert_eq!(input_pct, output_pct,
+            "Expected {} doubled %% but found {} in: {}", input_pct, output_pct, escaped);
+    }
+
     /// cd_and_run must always produce a non-empty command.
     #[test]
     fn cd_and_run_never_empty(dir in "\\PC+", cmd in "\\PC+") {

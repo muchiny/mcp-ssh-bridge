@@ -29,6 +29,7 @@ pub fn escape(s: &str, shell: ShellType) -> String {
         ShellType::Cmd => {
             let escaped = s
                 .replace('^', "^^")
+                .replace('%', "%%")
                 .replace('&', "^&")
                 .replace('|', "^|")
                 .replace('<', "^<")
@@ -174,6 +175,19 @@ mod tests {
     #[test]
     fn test_cmd_escape_angle_brackets() {
         assert_eq!(escape("a<b>c", ShellType::Cmd), "\"a^<b^>c\"");
+    }
+
+    #[test]
+    fn test_cmd_escape_percent_sign() {
+        assert_eq!(escape("%TEMP%", ShellType::Cmd), "\"%%TEMP%%\"");
+    }
+
+    #[test]
+    fn test_cmd_escape_percent_in_path() {
+        assert_eq!(
+            escape("%PATH%\\evil", ShellType::Cmd),
+            "\"%%PATH%%\\evil\""
+        );
     }
 
     #[test]

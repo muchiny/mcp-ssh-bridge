@@ -112,6 +112,7 @@ impl ToolHandler for SshDownloadHandler {
         // Validate paths for traversal attacks
         validate_path(&args.remote_path)?;
         validate_path(&args.local_path)?;
+        ctx.validate_root_scope(&args.remote_path)?;
 
         // Get host config
         let host_config =

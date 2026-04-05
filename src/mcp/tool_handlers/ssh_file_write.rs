@@ -132,6 +132,7 @@ impl ToolHandler for SshFileWriteHandler {
 
         // Step 4: Validate path
         validate_path(&args.path)?;
+        ctx.validate_root_scope(&args.path)?;
 
         let append = args.append.unwrap_or(false);
         let threshold = ctx.config.limits.sftp_write_threshold_bytes;

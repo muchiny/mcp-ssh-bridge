@@ -143,6 +143,7 @@ impl ToolHandler for SshFilesWriteHandler {
                 _ => {}
             }
             validate_path(&entry.remote_path)?;
+            ctx.validate_root_scope(&entry.remote_path)?;
             if let Some(lp) = &entry.local_path {
                 validate_path(lp)?;
                 let expanded = shellexpand::tilde(lp).to_string();

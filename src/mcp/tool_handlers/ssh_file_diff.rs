@@ -76,6 +76,10 @@ impl StandardTool for FileDiffTool {
         "required": ["host", "file1", "file2"]
     }"#;
 
+    fn scoped_paths(args: &SshFileDiffArgs) -> Vec<&str> {
+        vec![&args.file1, &args.file2]
+    }
+
     fn build_command(args: &SshFileDiffArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(FileAdvancedCommandBuilder::build_diff_command(
             &args.file1,

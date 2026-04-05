@@ -182,6 +182,9 @@ impl Sanitizer {
         enabled: bool,
         entropy_detector: EntropyDetector,
     ) -> Self {
+        /// Maximum length for user-supplied custom sanitize patterns.
+        const MAX_CUSTOM_PATTERN_LEN: usize = 512;
+
         let mut patterns = Vec::with_capacity(defs.len() + custom.len());
         let mut regex_patterns = Vec::with_capacity(defs.len() + custom.len());
 
@@ -206,8 +209,16 @@ impl Sanitizer {
             }
         }
 
-        // Add custom patterns
+        // Add custom patterns (with size limit to prevent expensive compilation)
         for custom_pattern in custom {
+            if custom_pattern.pattern.len() > MAX_CUSTOM_PATTERN_LEN {
+                error!(
+                    pattern_len = custom_pattern.pattern.len(),
+                    max = MAX_CUSTOM_PATTERN_LEN,
+                    "Custom sanitize pattern too long, skipping"
+                );
+                continue;
+            }
             match Regex::new(&custom_pattern.pattern) {
                 Ok(regex) => {
                     regex_patterns.push(custom_pattern.pattern.clone());

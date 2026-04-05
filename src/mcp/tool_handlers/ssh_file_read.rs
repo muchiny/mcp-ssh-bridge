@@ -78,6 +78,10 @@ impl StandardTool for FileReadTool {
         "required": ["host", "path"]
     }"#;
 
+    fn scoped_paths(args: &SshFileReadArgs) -> Vec<&str> {
+        vec![&args.path]
+    }
+
     fn build_command(args: &SshFileReadArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(FileOpsCommandBuilder::build_read_command(
             &args.path,

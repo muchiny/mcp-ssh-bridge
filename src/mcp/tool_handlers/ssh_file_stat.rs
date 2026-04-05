@@ -63,6 +63,10 @@ impl StandardTool for FileStatTool {
         "required": ["host", "path"]
     }"#;
 
+    fn scoped_paths(args: &SshFileStatArgs) -> Vec<&str> {
+        vec![&args.path]
+    }
+
     fn build_command(args: &SshFileStatArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(FileOpsCommandBuilder::build_stat_command(&args.path))
     }

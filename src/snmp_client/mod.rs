@@ -334,13 +334,13 @@ mod tests {
 
     #[test]
     fn test_format_value_timeticks() {
-        let val = snmp::Value::Timeticks(123456);
+        let val = snmp::Value::Timeticks(123_456);
         assert_eq!(format_value(&val), "Timeticks: (123456)");
     }
 
     #[test]
     fn test_format_value_counter64() {
-        let val = snmp::Value::Counter64(9999999999);
+        let val = snmp::Value::Counter64(9_999_999_999);
         assert_eq!(format_value(&val), "Counter64: 9999999999");
     }
 

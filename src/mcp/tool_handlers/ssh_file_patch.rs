@@ -74,6 +74,10 @@ impl StandardTool for FilePatchTool {
         "required": ["host", "target_file", "patch_content"]
     }"#;
 
+    fn scoped_paths(args: &SshFilePatchArgs) -> Vec<&str> {
+        vec![&args.target_file]
+    }
+
     fn build_command(args: &SshFilePatchArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(FileAdvancedCommandBuilder::build_patch_command(
             &args.target_file,

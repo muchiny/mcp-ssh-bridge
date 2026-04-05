@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_length() {
-        let input = r#"[1, 2, 3, 4, 5]"#;
+        let input = r"[1, 2, 3, 4, 5]";
         let result = apply_jq_filter(input, "length").unwrap();
         assert_eq!(result, "5");
     }
@@ -145,11 +145,11 @@ mod tests {
 
     #[test]
     fn test_map() {
-        let input = r#"[1, 2, 3]"#;
+        let input = r"[1, 2, 3]";
         let result = apply_jq_filter(input, "map(. * 2)").unwrap();
-        assert!(result.contains("2"));
-        assert!(result.contains("4"));
-        assert!(result.contains("6"));
+        assert!(result.contains('2'));
+        assert!(result.contains('4'));
+        assert!(result.contains('6'));
     }
 
     #[test]
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_multiple_results() {
-        let input = r#"[1, 2, 3]"#;
+        let input = r"[1, 2, 3]";
         let result = apply_jq_filter(input, ".[]").unwrap();
         assert_eq!(result, "1\n2\n3");
     }
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn test_array_slice() {
-        let input = r#"[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]"#;
+        let input = r"[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]";
         let result = apply_jq_filter(input, ".[0:3]").unwrap();
         assert!(result.contains('0'));
         assert!(result.contains('1'));
