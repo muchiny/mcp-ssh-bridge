@@ -372,13 +372,13 @@ fn apply_typed_reduction(
             try_apply_jq(stdout, dr)?;
         }
         OutputKind::Tabular => {
-            try_apply_columns(stdout, dr);
+            try_apply_tabular_reduction(stdout, dr);
         }
         OutputKind::Auto => {
             // Try JSON + jq first (if jq_filter is present and output parses as JSON)
             if !try_apply_jq(stdout, dr)? {
                 // Fall back to tabular + columns
-                try_apply_columns(stdout, dr);
+                try_apply_tabular_reduction(stdout, dr);
             }
         }
         OutputKind::RawText => {}
@@ -404,16 +404,24 @@ fn try_apply_jq(
     Ok(false)
 }
 
-/// Try to apply a `columns` filter to stdout (columnar text → filtered TSV).
-fn try_apply_columns(
+/// Try to apply tabular reduction (`columns` + `limit`) to stdout.
+fn try_apply_tabular_reduction(
     stdout: &mut String,
     dr: &crate::domain::data_reduction::DataReductionArgs,
 ) {
-    if let Some(ref cols) = dr.columns
-        && let Some(table) =
-            crate::mcp::tool_handlers::utils::parse_columnar_output(stdout)
+    if dr.columns.is_none() && dr.limit.is_none() {
+        return;
+    }
+    if let Some(mut table) =
+        crate::mcp::tool_handlers::utils::parse_columnar_output(stdout)
     {
-        *stdout = table.select_columns(cols).to_tsv();
+        if let Some(ref cols) = dr.columns {
+            table = table.select_columns(cols);
+        }
+        if let Some(limit) = dr.limit {
+            table.limit_rows(usize::try_from(limit).unwrap_or(usize::MAX));
+        }
+        *stdout = table.to_tsv();
     }
 }
 

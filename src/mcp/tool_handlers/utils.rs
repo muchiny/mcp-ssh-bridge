@@ -162,6 +162,11 @@ impl ParsedTable {
         Self { headers, rows }
     }
 
+    /// Limit the number of data rows (header is unaffected).
+    pub fn limit_rows(&mut self, max: usize) {
+        self.rows.truncate(max);
+    }
+
     /// Convert to TSV (tab-separated values) for token-efficient LLM consumption.
     ///
     /// Returns uppercased header row + tab-separated data rows.
@@ -190,17 +195,19 @@ impl ParsedTable {
     }
 }
 
-/// Apply column filter to a `ParsedTable` if requested in data reduction args.
+/// Apply column filter and row limit to a `ParsedTable` from data reduction args.
 #[must_use]
-pub fn maybe_select_columns(
-    table: ParsedTable,
+pub fn maybe_reduce_table(
+    mut table: ParsedTable,
     dr: &crate::domain::data_reduction::DataReductionArgs,
 ) -> ParsedTable {
     if let Some(ref cols) = dr.columns {
-        table.select_columns(cols)
-    } else {
-        table
+        table = table.select_columns(cols);
     }
+    if let Some(limit) = dr.limit {
+        table.limit_rows(usize::try_from(limit).unwrap_or(usize::MAX));
+    }
+    table
 }
 
 /// Parse columnar CLI output using data-driven gutter detection.
@@ -771,6 +778,36 @@ node-1   250m";
         let filtered = table.select_columns(&["D".into(), "B".into()]);
         assert_eq!(filtered.headers, vec!["b", "d"]);
         assert_eq!(filtered.rows[0], vec!["2", "4"]);
+    }
+
+    // ============== limit_rows Tests ==============
+
+    #[test]
+    fn test_limit_rows() {
+        let mut table = ParsedTable {
+            headers: vec!["name".into(), "value".into()],
+            rows: vec![
+                vec!["a".into(), "1".into()],
+                vec!["b".into(), "2".into()],
+                vec!["c".into(), "3".into()],
+                vec!["d".into(), "4".into()],
+                vec!["e".into(), "5".into()],
+            ],
+        };
+        table.limit_rows(2);
+        assert_eq!(table.rows.len(), 2);
+        assert_eq!(table.rows[0][0], "a");
+        assert_eq!(table.rows[1][0], "b");
+    }
+
+    #[test]
+    fn test_limit_rows_larger_than_table() {
+        let mut table = ParsedTable {
+            headers: vec!["name".into()],
+            rows: vec![vec!["a".into()], vec!["b".into()]],
+        };
+        table.limit_rows(100);
+        assert_eq!(table.rows.len(), 2);
     }
 
     // ============== Locale-aware parsing Tests ==============

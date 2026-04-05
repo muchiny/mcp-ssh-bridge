@@ -21,6 +21,10 @@ pub struct DataReductionArgs {
     /// Case-insensitive header match; unknown columns are silently ignored.
     /// Example: `["NAME", "STATUS", "CPU"]`
     pub columns: Option<Vec<String>>,
+
+    /// Maximum number of data rows to return (header always kept).
+    /// Applied after column filtering.
+    pub limit: Option<u64>,
 }
 
 impl DataReductionArgs {
@@ -44,10 +48,13 @@ impl DataReductionArgs {
             })
         });
 
+        let limit = obj.remove("limit").and_then(|v| v.as_u64());
+
         Self {
             #[cfg(feature = "jq")]
             jq_filter,
             columns,
+            limit,
         }
     }
 
@@ -58,6 +65,9 @@ impl DataReductionArgs {
             return false;
         }
         if self.columns.is_some() {
+            return false;
+        }
+        if self.limit.is_some() {
             return false;
         }
         true
@@ -133,5 +143,28 @@ mod tests {
         let mut v = serde_json::json!({"columns": "NAME"});
         let args = DataReductionArgs::extract(&mut v);
         assert!(args.columns.is_none());
+    }
+
+    #[test]
+    fn test_extract_limit() {
+        let mut v = serde_json::json!({"host": "prod", "limit": 10});
+        let args = DataReductionArgs::extract(&mut v);
+        assert_eq!(args.limit, Some(10));
+        assert!(v.get("limit").is_none());
+        assert!(v.get("host").is_some());
+    }
+
+    #[test]
+    fn test_is_empty_with_limit() {
+        let mut v = serde_json::json!({"limit": 5});
+        let args = DataReductionArgs::extract(&mut v);
+        assert!(!args.is_empty());
+    }
+
+    #[test]
+    fn test_extract_limit_not_integer() {
+        let mut v = serde_json::json!({"limit": "ten"});
+        let args = DataReductionArgs::extract(&mut v);
+        assert!(args.limit.is_none());
     }
 }

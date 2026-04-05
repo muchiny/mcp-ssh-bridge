@@ -46,6 +46,12 @@ impl OutputKind {
     pub const fn supports_columns(&self) -> bool {
         matches!(self, Self::Tabular | Self::Auto)
     }
+
+    /// Whether this kind supports `limit`.
+    #[must_use]
+    pub const fn supports_limit(&self) -> bool {
+        matches!(self, Self::Tabular | Self::Auto)
+    }
 }
 
 #[cfg(test)]
@@ -71,6 +77,14 @@ mod tests {
         assert!(OutputKind::Tabular.supports_columns());
         assert!(!OutputKind::Json.supports_columns());
         assert!(OutputKind::Auto.supports_columns());
+    }
+
+    #[test]
+    fn test_supports_limit() {
+        assert!(!OutputKind::RawText.supports_limit());
+        assert!(OutputKind::Tabular.supports_limit());
+        assert!(!OutputKind::Json.supports_limit());
+        assert!(OutputKind::Auto.supports_limit());
     }
 
     #[test]

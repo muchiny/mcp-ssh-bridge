@@ -108,7 +108,7 @@ impl StandardTool for DockerPsTool {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };
-        let parsed = super::utils::maybe_select_columns(parsed, dr);
+        let parsed = super::utils::maybe_reduce_table(parsed, dr);
         let mut tbl = table("Docker Containers")
             .column("name", "Name")
             .column("image", "Image")

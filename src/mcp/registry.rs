@@ -162,6 +162,19 @@ fn inject_reduction_schema(
         );
     }
 
+    if kind.supports_limit() {
+        props.insert(
+            "limit".to_string(),
+            json!({
+                "type": "integer",
+                "minimum": 1,
+                "description": "RECOMMENDED: Maximum number of data rows to return \
+                    (header always kept). Use this to reduce token consumption when you \
+                    only need the top N results. Example: limit=10 returns only 10 rows."
+            }),
+        );
+    }
+
     // RawText: nothing injected
     let _ = kind == OutputKind::RawText;
 }
