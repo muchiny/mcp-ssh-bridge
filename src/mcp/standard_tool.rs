@@ -252,6 +252,11 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
                 .map(|jump_config| (jump_name.as_str(), jump_config))
         });
 
+        // Step 10b: Force C locale for consistent columnar output parsing.
+        // Only StandardToolHandler commands are prefixed — ssh_exec and
+        // other custom handlers preserve the user's native locale.
+        let command = format!("LC_ALL=C {command}");
+
         // Step 11: Execute with retry
         let output = with_retry_if(
             &retry_config,

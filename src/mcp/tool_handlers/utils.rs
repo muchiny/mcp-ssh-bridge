@@ -773,6 +773,44 @@ node-1   250m";
         assert_eq!(filtered.rows[0], vec!["2", "4"]);
     }
 
+    // ============== Locale-aware parsing Tests ==============
+
+    /// Verify that English `df -hT` output (produced by `LC_ALL=C`) is parseable.
+    #[test]
+    fn test_parse_english_df_output() {
+        // Realistic df -hT output with proper column alignment
+        let output = "\
+Filesystem      Type   Size  Used Avail Use% Mounted on\n\
+/dev/nvme0n1p2  ext4   917G  592G  279G  69% /\n\
+tmpfs           tmpfs  4.0G   32K  4.0G   1% /dev/shm\n\
+/dev/nvme0n1p1  vfat   510M   90M  421M  18% /boot/firmware";
+        let parsed = parse_columnar_output(output).unwrap();
+        let hdrs = &parsed.headers;
+        // Debug: print actual headers if assertion fails
+        assert!(
+            hdrs.iter().any(|h| h.contains("filesystem") || h.contains("type")),
+            "Expected filesystem-like header, got: {hdrs:?}"
+        );
+        assert!(parsed.rows.len() >= 2, "Expected ≥2 rows, got: {}", parsed.rows.len());
+    }
+
+    /// Verify that English `systemctl list-units` output is parseable.
+    #[test]
+    fn test_parse_english_systemctl_output() {
+        // Realistic systemctl output with proper spacing
+        let output = "\
+UNIT                          LOAD   ACTIVE SUB     DESCRIPTION\n\
+cron.service                  loaded active running Regular background program processing daemon\n\
+ssh.service                   loaded active running OpenBSD Secure Shell server";
+        let parsed = parse_columnar_output(output).unwrap();
+        let hdrs = &parsed.headers;
+        assert!(
+            hdrs.iter().any(|h| h.contains("unit") || h.contains("load")),
+            "Expected unit-like header, got: {hdrs:?}"
+        );
+        assert_eq!(parsed.rows.len(), 2, "Expected 2 rows");
+    }
+
     #[tokio::test]
     async fn test_save_output_path_traversal_rejected() {
         let result = save_output_to_file("../../../etc/passwd", "evil").await;
