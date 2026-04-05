@@ -5,6 +5,7 @@
 use serde::Deserialize;
 
 use crate::config::HostConfig;
+use crate::domain::use_cases::drift::DriftCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 
@@ -59,7 +60,10 @@ impl StandardTool for EnvDiffTool {
     }"#;
 
     fn build_command(_args: &SshEnvDiffArgs, _host_config: &HostConfig) -> Result<String> {
-        Ok("echo 'Use ssh_env_snapshot on two hosts with save_output, then diff the saved files locally'".to_string())
+        Ok(format!(
+            "echo '{}'",
+            DriftCommandBuilder::build_diff_instruction()
+        ))
     }
 }
 

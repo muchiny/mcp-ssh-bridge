@@ -55,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎯 Summary
 
-**262 → 281 tools** | **47 → 55 groups** | **4782 tests** | 10 major features implemented from the [research roadmap](RESEARCH-MISSING-FEATURES.md)
+**262 → 281 tools** | **47 → 55 groups** | **4782 tests** | 10 major features implemented from the research roadmap
 
 ### Added
 

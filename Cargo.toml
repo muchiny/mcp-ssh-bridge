@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/muchini/mcp-ssh-bridge"
 keywords = ["mcp", "ssh", "model-context-protocol", "devops", "automation"]
 categories = ["command-line-utilities", "network-programming"]
-homepage = "https://github.com/muchiny/mcp-ssh-bridge"
+homepage = "https://github.com/muchini/mcp-ssh-bridge"
 readme = "README.md"
 documentation = "https://docs.rs/mcp-ssh-bridge"
 

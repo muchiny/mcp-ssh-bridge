@@ -22,8 +22,5 @@ routeros = "routeros"
 extend-exclude = [
     "target/",
     "*.lock",
-    "plan.md",
     "PLAN.md",
-    "RESEARCH-MISSING-FEATURES.md",
-    "docs/research/",
 ]

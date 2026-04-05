@@ -2,73 +2,65 @@
 
 <div align="center">
 
+<img src="dxt/icon.svg" alt="MCP SSH Bridge" width="96" height="96">
+
 [![CI](https://github.com/muchiny/mcp-ssh-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/muchiny/mcp-ssh-bridge/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/mcp-ssh-bridge?style=flat-square&logo=rust)](https://crates.io/crates/mcp-ssh-bridge)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-2025--11--25-blueviolet?style=flat-square)](https://modelcontextprotocol.io)
 
-**A Rust MCP server that lets Claude Code securely execute commands on remote servers via SSH.**
-**337 tools across 74 groups — Linux, Windows, Docker, Kubernetes, Podman, LDAP, network equipment, and more.**
-
-</div>
-
----
-
-## 🔍 What is this?
-
-MCP SSH Bridge is a local server that sits between Claude Code and your remote infrastructure. Claude Code talks to it via JSON-RPC over stdio, and it routes commands through **14 protocol adapters** — SSH, WinRM, Telnet, NETCONF, gRPC, K8s Exec, Serial, SNMP, AWS SSM, Azure, GCP, ZeroMQ, NATS, and MQTT.
+**A Rust MCP server that lets Claude Code securely manage remote infrastructure via SSH.**
+**338 tools across 74 groups — Linux, Windows, Docker, Kubernetes, network equipment, and more.**
 
 ```
 Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──14 protocols──►  Your Infrastructure
 ```
 
-Without it, Claude cannot reach your servers. With it, Claude can run commands, transfer files, read logs, check metrics, manage Docker containers, Kubernetes clusters, Podman, LDAP directories, network equipment, systemd services, and much more — all through 337 purpose-built tools with built-in security controls.
-
-```mermaid
-graph LR
-    CC[🤖 Claude Code] -->|JSON-RPC stdio| BR[⚡ MCP SSH Bridge]
-
-    BR --> SEC[🛡️ Security<br/>Validator · Sanitizer · Audit]
-    SEC --> ER[🔀 Executor Router]
-
-    subgraph "Air-Gapped Protocols"
-        ER -->|SSH| P1[🖥️ Linux / Windows<br/>Docker · K8s · Network]
-        ER -->|WinRM| P2[🪟 Windows]
-        ER -->|Telnet| P3[📡 Legacy Devices]
-        ER -->|NETCONF| P4[🔧 YANG / Network]
-        ER -->|gRPC| P5[⚙️ gRPC Services]
-    end
-
-    subgraph "Infrastructure Protocols"
-        ER -->|K8s API| P6[☸️ K8s Exec]
-        ER -->|Serial| P7[🔌 Serial Devices]
-        ER -->|SNMP| P8[📊 SNMP Agents]
-    end
-
-    subgraph "Cloud Protocols"
-        ER -->|SSM · Azure · GCP| P9[☁️ Cloud Instances]
-    end
-
-    subgraph "Messaging Protocols"
-        ER -->|ZeroMQ · NATS · MQTT| P10[📬 Message Brokers]
-    end
-```
+</div>
 
 ---
 
-## 📦 Install
+## Table of Contents
 
-Pick one method:
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [Configuration](#configuration)
+- [Tool Groups](#tool-groups)
+- [MCP Prompts & Resources](#mcp-prompts--resources)
+- [CLI Usage](#cli-usage)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [License](#license)
 
-**Prebuilt binaries** (recommended):
+---
 
-Download from [GitHub Releases](https://github.com/muchiny/mcp-ssh-bridge/releases/latest) — available for Linux x86_64, Linux aarch64, macOS x86_64, macOS aarch64, Windows x86_64.
+## Features
+
+- **338 tools, 74 groups** — manage Linux, Windows, Docker, Kubernetes, Podman, databases, LDAP, network equipment, certificates, and more
+- **14 protocol adapters** — SSH, WinRM, Telnet, NETCONF, gRPC, K8s Exec, Serial, SNMP, AWS SSM, Azure, GCP, ZeroMQ, NATS, MQTT
+- **Security-first** — command whitelist/blacklist, 56 secret-redaction patterns + entropy detection, tamper-proof session recording
+- **Auto-discovery** — reads `~/.ssh/config` automatically, merges with YAML config
+- **Smart output** — truncation with paginated fetch via `ssh_output_fetch`, per-client size limits, jq filtering
+- **CLI + MCP** — all tools available as CLI commands (10-32x token savings) or via MCP JSON-RPC
+- **6300+ tests** — `#![forbid(unsafe_code)]`, Rust 2024 edition, strict clippy
+
+---
+
+## Quick Start
+
+### 1. Install
 
 ```bash
-# Linux x86_64
+# Linux x86_64 (recommended)
 curl -fsSL https://github.com/muchiny/mcp-ssh-bridge/releases/latest/download/mcp-ssh-bridge-linux-x86_64.tar.gz | tar xz
 sudo mv mcp-ssh-bridge /usr/local/bin/
+```
 
+<details>
+<summary>Other platforms & methods</summary>
+
+```bash
 # Linux aarch64 (Raspberry Pi, ARM servers)
 curl -fsSL https://github.com/muchiny/mcp-ssh-bridge/releases/latest/download/mcp-ssh-bridge-linux-arm64.tar.gz | tar xz
 sudo mv mcp-ssh-bridge /usr/local/bin/
@@ -76,108 +68,44 @@ sudo mv mcp-ssh-bridge /usr/local/bin/
 # macOS (Apple Silicon)
 curl -fsSL https://github.com/muchiny/mcp-ssh-bridge/releases/latest/download/mcp-ssh-bridge-macos-arm64.tar.gz | tar xz
 sudo mv mcp-ssh-bridge /usr/local/bin/
-```
 
-**Claude Desktop (DXT):** Download the `.dxt` file from [Releases](https://github.com/muchiny/mcp-ssh-bridge/releases/latest) and drag-and-drop into Claude Desktop.
-
-**Docker:**
-
-```bash
+# Docker
 docker pull ghcr.io/muchiny/mcp-ssh-bridge:latest
+
+# From source
+git clone https://github.com/muchiny/mcp-ssh-bridge && cd mcp-ssh-bridge && make release
 ```
 
-**From source:**
+**Claude Desktop (DXT):** download the `.dxt` file from [Releases](https://github.com/muchiny/mcp-ssh-bridge/releases/latest) and drag-and-drop into Claude Desktop.
 
-```bash
-git clone https://github.com/muchiny/mcp-ssh-bridge
-cd mcp-ssh-bridge
-make release
-```
+</details>
 
----
-
-## ⚙️ Configure
-
-### 1. Create the config file
+### 2. Configure
 
 ```bash
 mkdir -p ~/.config/mcp-ssh-bridge
 cp config/config.example.yaml ~/.config/mcp-ssh-bridge/config.yaml
 ```
 
-### 2. Add your SSH hosts
-
-Edit `~/.config/mcp-ssh-bridge/config.yaml`:
+Edit `~/.config/mcp-ssh-bridge/config.yaml` with your hosts:
 
 ```yaml
 hosts:
-  # Each key is a host alias — this is what you pass to tools as the "host" parameter
-  prod-server:
+  my-server:
     hostname: 192.168.1.100
     port: 22
     user: admin
     auth:
       type: key
       path: ~/.ssh/id_ed25519
-    description: "Production server"
-
-  dev-server:
-    hostname: 10.0.0.5
-    port: 22
-    user: deploy
-    auth:
-      type: agent  # Uses SSH_AUTH_SOCK
-    description: "Development server"
+    description: "My server"
 ```
 
-**Authentication methods:**
+> **Tip:** Hosts from `~/.ssh/config` are auto-discovered — you may not need to configure anything.
 
-| Method | Config | Notes |
-|--------|--------|-------|
-| SSH Key | `type: key` + `path: ~/.ssh/id_ed25519` | Recommended. Supports optional `passphrase`. |
-| SSH Agent | `type: agent` | Uses `SSH_AUTH_SOCK`. Recommended. |
-| Password | `type: password` + `password: "..."` | Avoid if possible. |
+### 3. Add to Claude Code
 
-> **Tip:** Verify your SSH access first: `ssh user@hostname "echo OK"`
-
-### 3. Configure security
-
-The `security` section controls which commands Claude can run:
-
-```yaml
-security:
-  # strict:     only whitelisted commands allowed (safest)
-  # standard:   whitelist for ssh_exec, built-in tools only check blacklist (default)
-  # permissive: only blacklist checked (most open)
-  mode: standard
-
-  whitelist:
-    - "^docker\\s+(ps|logs|inspect).*"
-    - "^kubectl\\s+(get|describe|logs).*"
-    - "^(ls|cat|head|tail|grep|df|free)\\s*.*"
-    - "^systemctl\\s+(status|list-units).*"
-    - "^git\\s+(status|log|diff|branch).*"
-
-  blacklist:
-    - "rm\\s+(-[a-zA-Z]*r|--(recursive|force))"
-    - "mkfs\\."
-    - "dd\\s+if="
-    - "chmod\\s+777"
-    - "curl.*\\|.*sh"
-    - "docker\\s+rm\\s+-f"
-    - "kubectl\\s+delete"
-```
-
-**How it works:**
-
-- **Blacklist** is always checked first — matched commands are always denied.
-- In **strict** mode, the command must also match a whitelist pattern.
-- In **standard** mode, the whitelist applies to `ssh_exec`/`ssh_session_exec` only; built-in tools (docker, k8s, etc.) only check the blacklist.
-- In **permissive** mode, only the blacklist is checked.
-
-### 4. Add to Claude Code
-
-Add to your `~/.claude/settings.json`:
+Add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -189,63 +117,118 @@ Add to your `~/.claude/settings.json`:
 }
 ```
 
-If you installed from source, use the full path:
+### 4. Verify
 
-```json
-{
-  "mcpServers": {
-    "ssh-bridge": {
-      "command": "/path/to/mcp-ssh-bridge/target/release/mcp-ssh-bridge"
-    }
-  }
-}
+Restart Claude Code, then ask: *"Check the health of my-server"* — or run:
+
+```bash
+mcp-ssh-bridge status
 ```
-
-That's it. Restart Claude Code and it will discover all available tools automatically.
 
 ---
 
-## 🔑 SSH hosts from ~/.ssh/config
+## Architecture
 
-Hosts from your `~/.ssh/config` are auto-discovered by default — no extra configuration needed. They are merged with YAML-defined hosts (YAML takes precedence on conflicts).
+MCP SSH Bridge sits between Claude Code and your infrastructure. It routes commands through 14 protocol adapters with built-in security validation, output sanitization, and audit logging.
 
-To disable or exclude specific hosts:
+```mermaid
+graph LR
+    CC[Claude Code] -->|JSON-RPC stdio| BR[MCP SSH Bridge]
+
+    BR --> SEC[Security<br/>Validator · Sanitizer · Audit]
+    SEC --> ER[Executor Router]
+
+    subgraph "Air-Gapped Protocols"
+        ER -->|SSH| P1[Linux / Windows<br/>Docker · K8s · Network]
+        ER -->|WinRM| P2[Windows]
+        ER -->|Telnet| P3[Legacy Devices]
+        ER -->|NETCONF| P4[YANG / Network]
+        ER -->|gRPC| P5[gRPC Services]
+    end
+
+    subgraph "Infrastructure Protocols"
+        ER -->|K8s API| P6[K8s Exec]
+        ER -->|Serial| P7[Serial Devices]
+        ER -->|SNMP| P8[SNMP Agents]
+    end
+
+    subgraph "Cloud Protocols"
+        ER -->|SSM · Azure · GCP| P9[Cloud Instances]
+    end
+
+    subgraph "Messaging Protocols"
+        ER -->|ZeroMQ · NATS · MQTT| P10[Message Brokers]
+    end
+```
+
+---
+
+## Configuration
+
+Config file: `~/.config/mcp-ssh-bridge/config.yaml` — see [config.example.yaml](config/config.example.yaml) for full reference.
+
+<details>
+<summary><strong>Authentication methods</strong></summary>
+
+| Method | Config | Notes |
+|--------|--------|-------|
+| SSH Key | `type: key` + `path: ~/.ssh/id_ed25519` | Recommended. Supports optional `passphrase`. |
+| SSH Agent | `type: agent` | Uses `SSH_AUTH_SOCK`. Recommended. |
+| Password | `type: password` + `password: "..."` | Avoid if possible. |
+
+Verify your SSH access first: `ssh user@hostname "echo OK"`
+
+</details>
+
+<details>
+<summary><strong>Security rules</strong></summary>
+
+Three modes control which commands Claude can run:
+
+| Mode | Behavior |
+|------|----------|
+| `strict` | Only whitelisted commands allowed (safest) |
+| `standard` | Whitelist for `ssh_exec`, built-in tools only check blacklist (default) |
+| `permissive` | Only blacklist checked (most open) |
+
+The **blacklist is always checked first** — matched commands are always denied.
 
 ```yaml
-ssh_config:
-  enabled: true          # Set to false to disable auto-discovery
-  exclude:
-    - personal-server    # Skip this host alias
+security:
+  mode: standard
+  whitelist:
+    - "^docker\\s+(ps|logs|inspect).*"
+    - "^kubectl\\s+(get|describe|logs).*"
+    - "^(ls|cat|head|tail|grep|df|free)\\s*.*"
+  blacklist:
+    - "rm\\s+(-[a-zA-Z]*r|--(recursive|force))"
+    - "mkfs\\."
+    - "dd\\s+if="
+    - "curl.*\\|.*sh"
 ```
 
----
+</details>
 
-## 🌐 Advanced host configuration
+<details>
+<summary><strong>Advanced hosts (jump hosts, SOCKS proxy, Windows, sudo)</strong></summary>
 
-### Jump hosts (bastion)
-
-Route SSH connections through a bastion server:
+**Jump hosts (bastion):**
 
 ```yaml
 hosts:
   bastion:
     hostname: bastion.example.com
     user: admin
-    auth:
-      type: agent
+    auth: { type: agent }
 
   internal-db:
-    hostname: 10.0.0.5       # Private IP, not reachable directly
+    hostname: 10.0.0.5
+    proxy_jump: bastion
     user: deploy
-    proxy_jump: bastion       # Route through bastion
-    auth:
-      type: key
-      path: ~/.ssh/id_ed25519
+    auth: { type: key, path: ~/.ssh/id_ed25519 }
 ```
 
-### SOCKS proxy
-
-Route through a SOCKS4/5 proxy:
+**SOCKS proxy:**
 
 ```yaml
 hosts:
@@ -255,19 +238,13 @@ hosts:
     socks_proxy:
       hostname: proxy.corp.com
       port: 1080
-      version: socks5          # socks5 (default) or socks4
-      # username: user         # Optional SOCKS5 auth
-      # password: pass
-    auth:
-      type: key
-      path: ~/.ssh/id_ed25519
+      version: socks5
+    auth: { type: key, path: ~/.ssh/id_ed25519 }
 ```
 
 > `proxy_jump` and `socks_proxy` are mutually exclusive on the same host.
 
-### Windows servers
-
-Add `os_type: windows` to enable 74 Windows-specific tools (PowerShell-based):
+**Windows servers** — add `os_type: windows` to enable 74 Windows-specific tools:
 
 ```yaml
 hosts:
@@ -275,15 +252,11 @@ hosts:
     hostname: 192.168.1.200
     user: Administrator
     os_type: windows
-    shell: powershell     # Optional, default: cmd
-    auth:
-      type: key
-      path: ~/.ssh/id_ed25519
+    shell: powershell
+    auth: { type: key, path: ~/.ssh/id_ed25519 }
 ```
 
-### Sudo support
-
-Configure per-host sudo password for commands that need elevation:
+**Sudo support:**
 
 ```yaml
 hosts:
@@ -291,66 +264,53 @@ hosts:
     hostname: 192.168.1.100
     user: deploy
     sudo_password: "your-sudo-password"
-    auth:
-      type: key
-      path: ~/.ssh/id_ed25519
+    auth: { type: key, path: ~/.ssh/id_ed25519 }
 ```
 
-Then use `"sudo": true` in tool calls like `ssh_exec`.
+**SSH config auto-discovery** — hosts from `~/.ssh/config` are merged automatically. To exclude specific hosts:
 
----
+```yaml
+ssh_config:
+  enabled: true
+  exclude: [personal-server]
+```
 
-## ⏱️ Limits and timeouts
+</details>
+
+<details>
+<summary><strong>Limits, sanitization & audit</strong></summary>
+
+**Limits:**
 
 ```yaml
 limits:
-  command_timeout_seconds: 60       # Max command duration
-  connection_timeout_seconds: 10    # SSH connect timeout
-  max_concurrent_commands: 5        # Parallel tool calls
-  max_output_chars: 20000           # Output truncation threshold (0 = unlimited)
-  rate_limit_per_second: 0          # Per-host rate limit (0 = disabled)
-  retry_attempts: 3                 # Auto-retry on transient SSH errors
+  command_timeout_seconds: 60
+  connection_timeout_seconds: 10
+  max_concurrent_commands: 5
+  max_output_chars: 20000          # 0 = unlimited
+  rate_limit_per_second: 0         # 0 = disabled
+  retry_attempts: 3
+  client_overrides:                # Per-client output limits
+    - name_contains: claude
+      max_output_chars: 80000
 ```
 
 Truncated outputs include an `output_id` — use `ssh_output_fetch` to retrieve the full content page by page.
 
-### Per-client output limits
-
-Automatically adjust output size based on the MCP client:
-
-```yaml
-limits:
-  client_overrides:
-    - name_contains: claude
-      max_output_chars: 80000
-    - name_contains: cursor
-      max_output_chars: 50000
-```
-
----
-
-## 🔒 Output sanitization
-
-Outputs are automatically scanned for secrets using **56 built-in regex patterns + Shannon entropy detection** covering: passwords, API keys (AWS, OpenAI, GitHub, GitLab, Slack, etc.), certificates, database connection strings, Kubernetes tokens, and more. Detected secrets are replaced with `[REDACTED]`.
+**Output sanitization** — 56 built-in regex patterns + Shannon entropy detection for secrets:
 
 ```yaml
 security:
   sanitize:
-    enabled: true                    # Default: true
-    entropy_detection: true          # 🆕 Detect high-entropy strings (unknown secrets)
-    entropy_threshold: 4.5           # Shannon entropy bits threshold
-    disable_builtin:
-      # - "gitlab"                   # Disable a specific category
+    enabled: true
+    entropy_detection: true
+    entropy_threshold: 4.5
     custom_patterns:
       - pattern: "INTERNAL_[A-Z0-9]{32}"
         replacement: "[INTERNAL_REDACTED]"
 ```
 
----
-
-## 📝 Audit logging
-
-All commands are logged to a JSON-lines audit file:
+**Audit logging:**
 
 ```yaml
 audit:
@@ -360,11 +320,7 @@ audit:
   retain_days: 30
 ```
 
-Each entry records: timestamp, host, command, result (success/error), exit code, duration.
-
-### 🎥 Session recording (compliance)
-
-Record full SSH sessions in asciinema v2 format with HMAC-SHA256 hash-chain for tamper-proof compliance auditing (SOC2, HIPAA, PCI-DSS):
+**Session recording** — asciinema v2 format with HMAC-SHA256 hash-chain (SOC2, HIPAA, PCI-DSS):
 
 ```yaml
 recording:
@@ -374,26 +330,24 @@ recording:
   hash_key_env: MCP_RECORDING_KEY
 ```
 
-Use `ssh_recording_start` / `ssh_recording_stop` to control recordings, `ssh_recording_verify` to validate integrity.
+</details>
 
 ---
 
-## 🧰 Tool groups
+## Tool Groups
 
-The 337 tools are organized in 74 groups. All groups are enabled by default. Disable groups you don't need to reduce the MCP context sent to the LLM:
+338 tools organized in 74 groups — all enabled by default. Disable groups you don't need:
 
 ```yaml
 tool_groups:
   groups:
-    sessions: false          # Disable persistent shell sessions
-    tunnels: false           # Disable SSH tunnels
-    database: false          # Disable db query/dump/restore
-    esxi: false              # Disable VMware ESXi tools
-    windows_services: false  # Disable Windows service management
-    # ... see config.example.yaml for all 74 groups
+    sessions: false
+    tunnels: false
+    database: false
 ```
 
-### 🐧 Linux groups (59 groups, 261 tools)
+<details>
+<summary><strong>Linux groups (59 groups, 261 tools)</strong></summary>
 
 | Group | Tools |
 |-------|-------|
@@ -438,7 +392,10 @@ tool_groups:
 | `network_equipment` | ssh_net_equip_show_run, ssh_net_equip_show_interfaces, ssh_net_equip_show_routes, ssh_net_equip_show_arp, ssh_net_equip_show_version, ssh_net_equip_show_vlans, ssh_net_equip_config, ssh_net_equip_save |
 | `ldap` | ssh_ldap_search, ssh_ldap_user_info, ssh_ldap_group_members, ssh_ldap_add, ssh_ldap_modify |
 
-### 🪟 Windows groups (13 groups, 74 tools)
+</details>
+
+<details>
+<summary><strong>Windows groups (13 groups, 74 tools)</strong></summary>
 
 | Group | Tools |
 |-------|-------|
@@ -456,7 +413,10 @@ tool_groups:
 | `windows_network` | ssh_win_net_ip, ssh_win_net_adapters, ssh_win_net_connections, ssh_win_net_routes, ssh_win_net_ping, ssh_win_net_dns |
 | `windows_process` | ssh_win_process_list, ssh_win_process_top, ssh_win_process_info, ssh_win_process_by_name, ssh_win_process_kill |
 
-### 🆕 Advanced groups (19 groups)
+</details>
+
+<details>
+<summary><strong>Advanced groups (19 groups)</strong></summary>
 
 | Group | Tools | Description |
 |-------|-------|-------------|
@@ -482,13 +442,14 @@ tool_groups:
 | `templates` | ssh_template_list, ssh_template_show, ssh_template_apply, ssh_template_validate, ssh_template_diff | Config template management |
 | `pty` | ssh_pty_exec, ssh_pty_interact, ssh_pty_resize | Interactive PTY sessions |
 
+</details>
+
 ---
 
-## 💡 MCP prompts and resources
+## MCP Prompts & Resources
 
-### Prompts
-
-Pre-built conversation templates that guide Claude through common workflows:
+<details>
+<summary><strong>Pre-built prompts</strong></summary>
 
 | Prompt | Description | Required args |
 |--------|-------------|---------------|
@@ -500,9 +461,10 @@ Pre-built conversation templates that guide Claude through common workflows:
 | `k8s-overview` | Kubernetes cluster state overview | `host` |
 | `backup-verify` | Backup integrity verification | `host` |
 
-### Resources
+</details>
 
-Direct data access via URI:
+<details>
+<summary><strong>Direct data resources</strong></summary>
 
 | URI pattern | Description |
 |-------------|-------------|
@@ -510,11 +472,13 @@ Direct data access via URI:
 | `file://{host}/{path}` | Remote file content |
 | `log://{host}/{path}` | Last lines of a log file |
 
+</details>
+
 ---
 
-## 💻 CLI usage
+## CLI Usage
 
-The binary can also be used standalone (outside MCP mode):
+The binary also works standalone (outside MCP mode):
 
 ```bash
 mcp-ssh-bridge                              # MCP server mode (default)
@@ -526,17 +490,28 @@ mcp-ssh-bridge upload <host> <local> <remote>
 mcp-ssh-bridge download <host> <remote> <local>
 ```
 
+All 338 MCP tools are also accessible via CLI for scripting and token-efficient AI workflows:
+
+```bash
+mcp-ssh-bridge tool ssh_docker_ps host=prod
+mcp-ssh-bridge list-tools --groups-only       # 74 groups (~2K tokens)
+mcp-ssh-bridge describe-tool ssh_exec         # Full schema for 1 tool
+```
+
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
-**"Unknown host: xxx"** — The host alias is not in your `config.yaml`. Run `ssh_status` to see configured hosts.
+<details>
+<summary><strong>Common issues</strong></summary>
 
-**"Command denied"** — The command doesn't match any whitelist pattern (strict/standard mode) or matches a blacklist pattern. Check your `security` config.
+**"Unknown host: xxx"** — The host alias is not in your config. Run `ssh_status` or `mcp-ssh-bridge status` to see configured hosts.
+
+**"Command denied"** — The command doesn't match a whitelist pattern (strict/standard mode) or matches a blacklist pattern. Check your `security` config.
 
 **"SSH connection failed"** — Verify: (1) the host is reachable (`ping hostname`), (2) SSH works manually (`ssh user@host`), (3) key permissions are correct (`chmod 600 ~/.ssh/id_*`).
 
-**"Unknown host key"** — The host key is not in `~/.ssh/known_hosts`. Add it: `ssh-keyscan hostname >> ~/.ssh/known_hosts`
+**"Unknown host key"** — Add it: `ssh-keyscan hostname >> ~/.ssh/known_hosts`
 
 **Host key verification modes:**
 
@@ -546,11 +521,13 @@ mcp-ssh-bridge download <host> <remote> <local>
 | `AcceptNew` | Accepts new keys, rejects changed keys |
 | `Off` | Accepts all keys (testing only) |
 
-Set per-host in config: `host_key_verification: AcceptNew`
+Set per-host: `host_key_verification: AcceptNew`
+
+</details>
 
 ---
 
-## 🏗️ Development
+## Development
 
 ```bash
 make build              # Debug build
@@ -562,12 +539,12 @@ make ci-full            # Full CI (ci + hack + geiger)
 make dxt                # Build DXT package for Claude Desktop
 ```
 
-Rust edition 2024, MSRV 1.94+. `#![forbid(unsafe_code)]`. 5700+ tests.
+Rust edition 2024, MSRV 1.94+. `#![forbid(unsafe_code)]`. 6300+ tests.
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+See [CHANGELOG.md](CHANGELOG.md) for version history and [THREAT_MODEL.md](docs/THREAT_MODEL.md) for security design.
 
 ---
 
-## 📄 License
+## License
 
 [MIT](LICENSE)
