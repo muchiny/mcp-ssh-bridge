@@ -44,6 +44,7 @@ jobs:
             type=sha
 
       - name: Build image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -54,10 +55,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Get scan target tag
+        id: scan_target
+        run: echo "tag=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)" >> "$GITHUB_OUTPUT"
+
       - name: Trivy scan (CRITICAL + HIGH — fail)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          image-ref: ${{ steps.scan_target.outputs.tag }}
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
@@ -67,7 +72,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@v0.35.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          image-ref: ${{ steps.scan_target.outputs.tag }}
           format: table
           severity: MEDIUM
           exit-code: 0
