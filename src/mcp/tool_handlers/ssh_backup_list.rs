@@ -68,7 +68,8 @@ impl StandardTool for BackupListTool {
         },
         "required": ["host", "archive_file"]
     }"#;
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshBackupListArgs, _host_config: &HostConfig) -> Result<String> {
         let verbose = args.verbose.unwrap_or(true);

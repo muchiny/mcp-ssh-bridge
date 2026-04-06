@@ -168,4 +168,51 @@ mod tests {
         let result = serde_json::from_value::<SshJournalFollowArgs>(json);
         assert!(result.is_err());
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshJournalFollowArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let host = test_host_config();
+        let cmd = JournalFollowTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        assert!(cmd.contains("journalctl"));
+        assert!(cmd.contains("-f") || cmd.contains("follow"));
+    }
+
+    #[test]
+    fn test_build_command_with_options() {
+        let args: SshJournalFollowArgs = serde_json::from_value(json!({
+            "host": "s",
+            "unit": "nginx.service",
+            "lines": 50
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = JournalFollowTool::build_command(&args, &host).unwrap();
+        assert!(cmd.contains("nginx.service"));
+        assert!(cmd.contains("50") || cmd.contains("-n"));
+    }
 }

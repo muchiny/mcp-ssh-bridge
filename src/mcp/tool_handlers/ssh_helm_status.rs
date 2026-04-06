@@ -92,7 +92,8 @@ impl StandardTool for HelmStatusTool {
         "required": ["host", "release"]
     }"#;
 
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshHelmStatusArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(HelmCommandBuilder::build_status_command(

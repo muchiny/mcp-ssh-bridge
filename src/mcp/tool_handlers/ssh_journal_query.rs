@@ -214,4 +214,105 @@ mod tests {
         let result = serde_json::from_value::<SshJournalQueryArgs>(json);
         assert!(result.is_err());
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshJournalQueryArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let host = test_host_config();
+        let cmd = JournalQueryTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        assert!(cmd.contains("journalctl"));
+    }
+
+    #[test]
+    fn test_build_command_with_options() {
+        let args: SshJournalQueryArgs = serde_json::from_value(json!({
+            "host": "s",
+            "unit": "nginx.service",
+            "priority": "err",
+            "since": "1 hour ago",
+            "until": "now",
+            "lines": 100,
+            "grep": "error",
+            "reverse": true
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = JournalQueryTool::build_command(&args, &host).unwrap();
+        assert!(cmd.contains("nginx.service"));
+        assert!(cmd.contains("err"));
+        assert!(cmd.contains("1 hour ago"));
+        assert!(cmd.contains("100") || cmd.contains("-n"));
+        assert!(cmd.contains("error"));
+        assert!(cmd.contains("-r") || cmd.contains("reverse"));
+    }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), crate::config::HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshJournalQueryHandler::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("Jan 01 00:00:00 server1 systemd[1]: Started Nginx."),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+    }
 }

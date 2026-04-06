@@ -164,6 +164,35 @@ mod tests {
         assert!(result.is_err());
     }
 
+    fn test_host_config() -> crate::config::HostConfig {
+        crate::config::HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: crate::config::HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshServiceStatusArgs =
+            serde_json::from_value(json!({"host": "s", "service": "nginx"})).unwrap();
+        let host = test_host_config();
+        let cmd = ServiceStatusTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        assert!(cmd.contains("nginx"));
+    }
+
     #[tokio::test]
     async fn test_os_guard_rejects_windows_host() {
         use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType as Os};
@@ -193,5 +222,52 @@ mod tests {
         let args = json!({"host": "winbox", "service": "nginx"});
         let result = handler.execute(Some(args), &ctx).await.unwrap();
         assert_eq!(result.is_error, Some(true));
+    }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType as Os};
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: Os::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshServiceStatusHandler::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("nginx.service - Nginx\n   Loaded: loaded\n   Active: active (running)"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1", "service": "nginx"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
     }
 }

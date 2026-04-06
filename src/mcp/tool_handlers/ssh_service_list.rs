@@ -74,7 +74,8 @@ impl StandardTool for ServiceListTool {
     }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshServiceListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SystemdCommandBuilder::build_list_command(
@@ -225,5 +226,131 @@ mod tests {
         let json = json!({"host": 123});
         let result = serde_json::from_value::<SshServiceListArgs>(json);
         assert!(result.is_err());
+    }
+
+    // ============== build_command & post_process Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshServiceListArgs = serde_json::from_value(json!({
+            "host": "s"
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = ServiceListTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        assert!(cmd.contains("systemctl") || cmd.contains("list-units"));
+    }
+
+    #[test]
+    fn test_build_command_with_options() {
+        let args: SshServiceListArgs = serde_json::from_value(json!({
+            "host": "s",
+            "state": "running",
+            "all": true,
+            "unit_type": "service"
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = ServiceListTool::build_command(&args, &host).unwrap();
+        assert!(cmd.contains("running"));
+        assert!(cmd.contains("--all"));
+        assert!(cmd.contains("service"));
+    }
+
+    #[test]
+    fn test_post_process_with_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshServiceListArgs = serde_json::from_value(json!({
+            "host": "s"
+        }))
+        .unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let output = "UNIT                  LOAD    ACTIVE  SUB\nnginx.service         loaded  active  running\nsshd.service          loaded  active  running\n";
+        let result = ServiceListTool::post_process(result, &args, output, &dr);
+        assert!(!result.content.is_empty());
+        assert!(result.content.len() > 1);
+    }
+
+    #[test]
+    fn test_post_process_empty_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshServiceListArgs = serde_json::from_value(json!({
+            "host": "s"
+        }))
+        .unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let result = ServiceListTool::post_process(result, &args, "", &dr);
+        assert!(!result.content.is_empty());
+    }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), crate::config::HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshServiceListHandler::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("UNIT                 LOAD   ACTIVE SUB     DESCRIPTION\nnginx.service        loaded active running Nginx\nsshd.service         loaded active running OpenSSH\n"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+        // post_process adds App content
+        assert!(result.content.len() >= 2);
+        assert!(result.structured_content.is_some());
     }
 }

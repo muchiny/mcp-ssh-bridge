@@ -195,4 +195,97 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshCronListArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let host = test_host_config();
+        let cmd = CronListTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        assert!(cmd.contains("crontab") || cmd.contains("cron"));
+    }
+
+    #[test]
+    fn test_build_command_with_options() {
+        let args: SshCronListArgs = serde_json::from_value(json!({
+            "host": "s",
+            "user": "www-data",
+            "system": true
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = CronListTool::build_command(&args, &host).unwrap();
+        assert!(cmd.contains("www-data"));
+        assert!(cmd.contains("/etc/cron") || cmd.contains("crontab"));
+    }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), crate::config::HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshCronListHandler::new();
+        // Default system=false avoids 2>/dev/null blacklist
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("*/5 * * * * /usr/bin/check_health\n0 2 * * * /usr/local/bin/backup.sh\n"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+    }
 }

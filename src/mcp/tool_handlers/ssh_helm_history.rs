@@ -89,7 +89,8 @@ impl StandardTool for HelmHistoryTool {
         "required": ["host", "release"]
     }"#;
 
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshHelmHistoryArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(HelmCommandBuilder::build_history_command(

@@ -61,7 +61,8 @@ impl StandardTool for EsxiVmListTool {
         },
         "required": ["host"]
     }"#;
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(_args: &SshEsxiVmListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(EsxiCommandBuilder::build_vm_list_command())

@@ -14,10 +14,7 @@ use crate::mcp::protocol::ToolCallResult;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::ssh::{is_retryable_error, with_retry_if};
 
-/// Shell-escape a string for safe use in shell commands.
-fn shell_escape(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
+use super::utils::shell_escape;
 
 /// Arguments for the `ssh_disk_usage` tool.
 #[derive(Debug, Deserialize)]
@@ -337,5 +334,52 @@ mod tests {
             BridgeError::McpInvalidRequest(_) => {}
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
+    }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshDiskUsageHandler;
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("Filesystem     1K-blocks    Used Available Use% Mounted on\n/dev/sda1       41284928 6173696  33000440  16% /\n"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
     }
 }

@@ -102,7 +102,8 @@ impl StandardTool for HelmListTool {
         "required": ["host"]
     }"#;
 
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshHelmListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(HelmCommandBuilder::build_list_command(

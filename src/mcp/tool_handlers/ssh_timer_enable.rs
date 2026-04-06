@@ -168,4 +168,54 @@ mod tests {
         let result = serde_json::from_value::<SshTimerEnableArgs>(json);
         assert!(result.is_err());
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshTimerEnableArgs = serde_json::from_value(json!({
+            "host": "s",
+            "timer": "apt-daily.timer"
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = TimerEnableTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        assert!(cmd.contains("enable"));
+        assert!(cmd.contains("apt-daily"));
+    }
+
+    #[test]
+    fn test_build_command_with_now() {
+        let args: SshTimerEnableArgs = serde_json::from_value(json!({
+            "host": "s",
+            "timer": "apt-daily.timer",
+            "now": true
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = TimerEnableTool::build_command(&args, &host).unwrap();
+        assert!(cmd.contains("--now") || cmd.contains("start"));
+    }
 }

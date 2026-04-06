@@ -69,7 +69,8 @@ impl StandardTool for EsxiNetworkListTool {
         },
         "required": ["host"]
     }"#;
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn validate(args: &SshEsxiNetworkListArgs, _host_config: &HostConfig) -> Result<()> {
         if let Some(component) = &args.component {

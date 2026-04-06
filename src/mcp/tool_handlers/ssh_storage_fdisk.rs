@@ -186,4 +186,133 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshStorageFdiskArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let host = test_host_config();
+        let cmd = StorageFdiskTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        assert!(cmd.contains("fdisk"));
+    }
+
+    #[test]
+    fn test_build_command_with_device() {
+        let args: SshStorageFdiskArgs =
+            serde_json::from_value(json!({"host": "s", "device": "/dev/sda"})).unwrap();
+        let host = test_host_config();
+        let cmd = StorageFdiskTool::build_command(&args, &host).unwrap();
+        assert!(cmd.contains("/dev/sda"));
+    }
+
+    #[test]
+    fn test_post_process_with_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshStorageFdiskArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let output = "Disk /dev/sda: 100 GiB\nSector size: 512\n";
+        let result = StorageFdiskTool::post_process(result, &args, output, &dr);
+        assert!(!result.content.is_empty());
+    }
+
+    #[test]
+    fn test_post_process_empty_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshStorageFdiskArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let result = StorageFdiskTool::post_process(result, &args, "", &dr);
+        assert!(!result.content.is_empty());
+    }
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), HostConfig {
+            hostname: "192.168.1.100".to_string(), port: 22, user: "test".to_string(),
+            auth: AuthConfig::Agent, description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None, socks_proxy: None, sudo_password: None,
+            tags: Vec::new(), os_type: OsType::default(), shell: None, retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    fn pipeline_ctx(output: crate::ssh::CommandOutput) -> crate::ports::ToolContext {
+        use std::sync::Arc;
+        use crate::config::{Config, SecurityConfig, SecurityMode};
+        use crate::domain::{CommandHistory, ExecuteCommandUseCase};
+        use crate::ports::ExecutorRouter;
+        use crate::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
+        use crate::ssh::SessionManager;
+        use crate::domain::TunnelManager;
+        let security = SecurityConfig {
+            mode: SecurityMode::Permissive,
+            blacklist: Vec::new(),
+            ..SecurityConfig::default()
+        };
+        let config = Config { hosts: server1_hosts(), security: security.clone(), ..Config::default() };
+        let validator = Arc::new(CommandValidator::new(&security));
+        let sanitizer = Arc::new(Sanitizer::with_defaults());
+        let audit_logger = Arc::new(AuditLogger::disabled());
+        let history = Arc::new(CommandHistory::new(&crate::domain::history::HistoryConfig::default()));
+        let execute_use_case = Arc::new(ExecuteCommandUseCase::new(
+            Arc::clone(&validator), Arc::clone(&sanitizer),
+            Arc::clone(&audit_logger), Arc::clone(&history),
+        ));
+        crate::ports::ToolContext {
+            config: Arc::new(config), validator, sanitizer, audit_logger, history,
+            connection_pool: Arc::new(ExecutorRouter::mock(output)),
+            execute_use_case,
+            rate_limiter: Arc::new(RateLimiter::new(0)),
+            session_manager: Arc::new(SessionManager::new(crate::config::SessionConfig::default())),
+            tunnel_manager: Arc::new(TunnelManager::new(20)),
+            output_cache: None, runtime_max_output_chars: None,
+            roots: Vec::new(), session_recorder: None, metrics: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshStorageFdiskHandler::new();
+        let ctx = pipeline_ctx(
+            mock_output("Disk /dev/sda: 50 GiB\nSector size: 512 bytes\nDevice Boot Start End Sectors Size Id Type\n/dev/sda1 2048 104857599 104855552 50G 83 Linux"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+        assert!(!result.content.is_empty());
+    }
 }

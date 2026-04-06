@@ -102,7 +102,8 @@ impl StandardTool for GitLogTool {
         "required": ["host", "path"]
     }"#;
 
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshGitLogArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(GitCommandBuilder::build_log_command(

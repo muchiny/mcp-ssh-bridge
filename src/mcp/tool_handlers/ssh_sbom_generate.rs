@@ -59,7 +59,8 @@ impl StandardTool for SbomGenerateTool {
         },
         "required": ["host"]
     }"#;
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(_args: &SshSbomGenerateArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SbomCommandBuilder::build_sbom_command())

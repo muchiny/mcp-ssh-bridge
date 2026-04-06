@@ -387,4 +387,52 @@ mod tests {
         assert!(cmd.contains("cat /proc/net/dev"));
         assert!(cmd.contains("cat /proc/loadavg"));
     }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshMetricsHandler;
+        // Simulate cpu metric output: first line of /proc/stat + nproc
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("cpu  12345 678 9012 345678 901 0 234 0 0 0\n4\n"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1", "metrics": ["cpu"]})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+    }
 }

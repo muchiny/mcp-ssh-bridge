@@ -195,4 +195,145 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    // ============== build_command Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshPkgListArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let host = test_host_config();
+        let cmd = PkgListTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+    }
+
+    #[test]
+    fn test_build_command_with_options() {
+        let args: SshPkgListArgs = serde_json::from_value(json!({
+            "host": "s",
+            "filter": "nginx",
+            "pkg_manager": "apt"
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = PkgListTool::build_command(&args, &host).unwrap();
+        assert!(cmd.contains("nginx") || cmd.contains("grep"));
+        assert!(cmd.contains("apt") || cmd.contains("dpkg"));
+    }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), crate::config::HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    /// Creates a test context with permissive security (empty blacklist)
+    /// because `build_list_command` always includes `2>/dev/null` which
+    /// is blocked by the default blacklist pattern `(?i)>\s*/dev/`.
+    fn create_permissive_mock_ctx(
+        hosts: std::collections::HashMap<String, crate::config::HostConfig>,
+        output: crate::ssh::CommandOutput,
+    ) -> crate::ports::ToolContext {
+        use std::sync::Arc;
+        use crate::config::{Config, SecurityConfig, SecurityMode};
+        use crate::domain::{CommandHistory, ExecuteCommandUseCase, HistoryConfig, TunnelManager};
+        use crate::ports::ExecutorRouter;
+        use crate::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
+
+        let security = SecurityConfig {
+            mode: SecurityMode::Permissive,
+            blacklist: vec![],
+            ..SecurityConfig::default()
+        };
+        let config = Config { hosts, security: security.clone(), ..Config::default() };
+        let validator = Arc::new(CommandValidator::new(&security));
+        let sanitizer = Arc::new(Sanitizer::with_defaults());
+        let audit_logger = Arc::new(AuditLogger::disabled());
+        let history = Arc::new(CommandHistory::new(&HistoryConfig::default()));
+        let execute_use_case = Arc::new(ExecuteCommandUseCase::new(
+            Arc::clone(&validator),
+            Arc::clone(&sanitizer),
+            Arc::clone(&audit_logger),
+            Arc::clone(&history),
+        ));
+        crate::ports::ToolContext {
+            config: Arc::new(config),
+            validator,
+            sanitizer,
+            audit_logger,
+            history,
+            connection_pool: Arc::new(ExecutorRouter::mock(output)),
+            execute_use_case,
+            rate_limiter: Arc::new(RateLimiter::new(0)),
+            session_manager: Arc::new(crate::ssh::SessionManager::new(
+                crate::config::SessionConfig::default(),
+            )),
+            tunnel_manager: Arc::new(TunnelManager::new(20)),
+            output_cache: None,
+            runtime_max_output_chars: None,
+            roots: Vec::new(),
+            session_recorder: None,
+            metrics: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshPkgListHandler::new();
+        let ctx = create_permissive_mock_ctx(
+            server1_hosts(),
+            mock_output("PACKAGE          VERSION          ARCH\nnginx            1.18.0-6         amd64\nopenssl          3.0.2-0          amd64\n"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1", "pkg_manager": "apt"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+    }
 }

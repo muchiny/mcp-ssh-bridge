@@ -84,7 +84,8 @@ impl StandardTool for CronHistoryTool {
             }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshCronHistoryArgs, _host_config: &HostConfig) -> Result<String> {
         CronAnalysisCommandBuilder::build_cron_history_command(args.lines, args.since.as_deref())

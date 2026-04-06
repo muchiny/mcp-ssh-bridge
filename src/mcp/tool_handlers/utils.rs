@@ -825,10 +825,15 @@ tmpfs           tmpfs  4.0G   32K  4.0G   1% /dev/shm\n\
         let hdrs = &parsed.headers;
         // Debug: print actual headers if assertion fails
         assert!(
-            hdrs.iter().any(|h| h.contains("filesystem") || h.contains("type")),
+            hdrs.iter()
+                .any(|h| h.contains("filesystem") || h.contains("type")),
             "Expected filesystem-like header, got: {hdrs:?}"
         );
-        assert!(parsed.rows.len() >= 2, "Expected ≥2 rows, got: {}", parsed.rows.len());
+        assert!(
+            parsed.rows.len() >= 2,
+            "Expected ≥2 rows, got: {}",
+            parsed.rows.len()
+        );
     }
 
     /// Verify that English `systemctl list-units` output is parseable.
@@ -842,7 +847,8 @@ ssh.service                   loaded active running OpenBSD Secure Shell server"
         let parsed = parse_columnar_output(output).unwrap();
         let hdrs = &parsed.headers;
         assert!(
-            hdrs.iter().any(|h| h.contains("unit") || h.contains("load")),
+            hdrs.iter()
+                .any(|h| h.contains("unit") || h.contains("load")),
             "Expected unit-like header, got: {hdrs:?}"
         );
         assert_eq!(parsed.rows.len(), 2, "Expected 2 rows");

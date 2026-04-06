@@ -79,7 +79,8 @@ impl StandardTool for DockerNetworkLsTool {
         },
         "required": ["host"]
     }"#;
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshDockerNetworkLsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(DockerCommandBuilder::build_network_ls_command(
@@ -293,6 +294,26 @@ mod tests {
     }
 
     #[test]
+    fn test_post_process_with_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshDockerNetworkLsArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let output = "NETWORK ID  NAME    DRIVER  SCOPE\nabc123      bridge  bridge  local\ndef456      host    host    local\n";
+        let result = DockerNetworkLsTool::post_process(result, &args, output, &dr);
+        assert!(!result.content.is_empty());
+        assert!(result.content.len() > 1);
+    }
+
+    #[test]
+    fn test_post_process_empty_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshDockerNetworkLsArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let result = DockerNetworkLsTool::post_process(result, &args, "", &dr);
+        assert!(!result.content.is_empty());
+    }
+
+    #[test]
     fn test_build_command_custom_bin() {
         let args = SshDockerNetworkLsArgs {
             host: "server1".to_string(),
@@ -340,5 +361,53 @@ mod tests {
             }
             _ => panic!("Expected Text content"),
         }
+    }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), crate::config::HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshDockerNetworkLsHandler::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("NETWORK ID  NAME    DRIVER  SCOPE\nabc123      bridge  bridge  local\ndef456      host    host    local\n"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1", "docker_bin": "docker"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+        assert!(result.content.len() >= 2);
+        assert!(result.structured_content.is_some());
     }
 }

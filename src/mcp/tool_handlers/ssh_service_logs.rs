@@ -93,7 +93,8 @@ impl StandardTool for ServiceLogsTool {
     }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshServiceLogsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(SystemdCommandBuilder::build_logs_command(

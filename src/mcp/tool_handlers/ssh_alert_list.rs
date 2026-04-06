@@ -64,7 +64,8 @@ impl StandardTool for AlertListTool {
             }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(_args: &SshAlertListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(AlertingCommandBuilder::build_alert_list_command())

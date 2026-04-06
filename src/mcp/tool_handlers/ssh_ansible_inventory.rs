@@ -97,7 +97,8 @@ impl StandardTool for AnsibleInventoryTool {
         },
         "required": ["host"]
     }"#;
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Json;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Json;
 
     fn build_command(args: &SshAnsibleInventoryArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(AnsibleCommandBuilder::build_inventory_command(

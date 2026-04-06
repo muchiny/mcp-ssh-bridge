@@ -78,7 +78,8 @@ impl StandardTool for NetConnectionsTool {
         }
     }
 }"#;
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshNetConnectionsArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(NetworkCommandBuilder::build_connections_command(
@@ -229,5 +230,125 @@ mod tests {
         let json = serde_json::json!({"host": 12345});
         let result = serde_json::from_value::<SshNetConnectionsArgs>(json);
         assert!(result.is_err());
+    }
+
+    // ============== build_command & post_process Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshNetConnectionsArgs =
+            serde_json::from_value(serde_json::json!({"host": "s"})).unwrap();
+        let host = test_host_config();
+        let cmd = NetConnectionsTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        assert!(cmd.contains("ss"));
+    }
+
+    #[test]
+    fn test_build_command_with_options() {
+        let args: SshNetConnectionsArgs = serde_json::from_value(serde_json::json!({
+            "host": "s",
+            "protocol": "tcp",
+            "state": "established",
+            "listening": true
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = NetConnectionsTool::build_command(&args, &host).unwrap();
+        // listening+tcp -> ss -tlnp
+        assert!(cmd.contains("tlnp"));
+        assert!(cmd.contains("established"));
+    }
+
+    #[test]
+    fn test_post_process_with_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshNetConnectionsArgs =
+            serde_json::from_value(serde_json::json!({"host": "s"})).unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let output = "STATE   LOCAL              PEER\nESTAB   127.0.0.1:22       192.168.1.1:54321\nLISTEN  0.0.0.0:80         *:*\n";
+        let result = NetConnectionsTool::post_process(result, &args, output, &dr);
+        assert!(!result.content.is_empty());
+        assert!(result.content.len() > 1);
+    }
+
+    #[test]
+    fn test_post_process_empty_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshNetConnectionsArgs =
+            serde_json::from_value(serde_json::json!({"host": "s"})).unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let result = NetConnectionsTool::post_process(result, &args, "", &dr);
+        assert!(!result.content.is_empty());
+    }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), crate::config::HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshNetConnectionsHandler::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("STATE   LOCAL              PEER\nESTAB   127.0.0.1:22       192.168.1.1:54321\nLISTEN  0.0.0.0:80         *:*\n"),
+        );
+        let result = handler
+            .execute(Some(serde_json::json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+        // post_process adds App content
+        assert!(result.content.len() >= 2);
+        assert!(result.structured_content.is_some());
     }
 }

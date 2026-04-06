@@ -91,7 +91,8 @@ impl StandardTool for K8sTopTool {
         "required": ["host", "resource_type"]
     }"#;
 
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshK8sTopArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(KubernetesCommandBuilder::build_top_command(
@@ -108,7 +109,12 @@ impl StandardTool for K8sTopTool {
         Ok(())
     }
 
-    fn post_process(result: ToolCallResult, args: &SshK8sTopArgs, output: &str, dr: &crate::domain::data_reduction::DataReductionArgs) -> ToolCallResult {
+    fn post_process(
+        result: ToolCallResult,
+        args: &SshK8sTopArgs,
+        output: &str,
+        dr: &crate::domain::data_reduction::DataReductionArgs,
+    ) -> ToolCallResult {
         let Some(parsed) = super::utils::parse_columnar_output(output) else {
             return result;
         };

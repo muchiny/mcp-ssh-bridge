@@ -69,7 +69,8 @@ impl StandardTool for LogAggregateTool {
             }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Linux);
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshLogAggregateArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(LogAggregationCommandBuilder::build_log_aggregate_command(

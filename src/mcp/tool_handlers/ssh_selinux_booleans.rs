@@ -170,4 +170,45 @@ mod tests {
         let result = serde_json::from_value::<SshSelinuxBooleansArgs>(json);
         assert!(result.is_err());
     }
+
+    fn test_host_config() -> crate::config::HostConfig {
+        crate::config::HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: crate::config::HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshSelinuxBooleansArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let host = test_host_config();
+        let cmd = SelinuxBooleansTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+    }
+
+    #[test]
+    fn test_build_command_with_name_and_value() {
+        let args: SshSelinuxBooleansArgs = serde_json::from_value(json!({
+            "host": "s",
+            "name": "httpd_can_network_connect",
+            "value": true
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = SelinuxBooleansTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        assert!(cmd.contains("httpd_can_network_connect"));
+    }
 }

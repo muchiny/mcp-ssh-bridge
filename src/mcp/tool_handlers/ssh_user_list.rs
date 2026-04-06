@@ -68,7 +68,8 @@ impl StandardTool for UserListTool {
             }
         }
     }"#;
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Tabular;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshUserListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(UserCommandBuilder::build_user_list_command(
@@ -159,5 +160,143 @@ mod tests {
         let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("host")));
+    }
+
+    // ============== build_command & post_process Tests ==============
+
+    use crate::config::{HostConfig, HostKeyVerification, OsType};
+
+    fn test_host_config() -> HostConfig {
+        HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshUserListArgs = serde_json::from_value(json!({
+            "host": "s"
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = UserListTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+        // Default: system=false, should filter UID >= 1000
+        assert!(cmd.contains("awk") || cmd.contains("getent") || cmd.contains("passwd"));
+    }
+
+    #[test]
+    fn test_build_command_with_system() {
+        let args: SshUserListArgs = serde_json::from_value(json!({
+            "host": "s",
+            "system": true
+        }))
+        .unwrap();
+        let host = test_host_config();
+        let cmd = UserListTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+    }
+
+    #[test]
+    fn test_post_process_with_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshUserListArgs = serde_json::from_value(json!({
+            "host": "s"
+        }))
+        .unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let output = "USER\tUID\tGID\tHOME\tSHELL\nroot\t0\t0\t/root\t/bin/bash\njohn\t1000\t1000\t/home/john\t/bin/bash\n";
+        let result = UserListTool::post_process(result, &args, output, &dr);
+        assert!(!result.content.is_empty());
+        assert!(result.content.len() > 1);
+    }
+
+    #[test]
+    fn test_post_process_empty_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshUserListArgs = serde_json::from_value(json!({
+            "host": "s"
+        }))
+        .unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let output = "";
+        let result = UserListTool::post_process(result, &args, output, &dr);
+        assert!(!result.content.is_empty());
+    }
+
+    #[test]
+    fn test_post_process_single_line() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshUserListArgs = serde_json::from_value(json!({
+            "host": "s"
+        }))
+        .unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        // Only header, no data rows — should return original result
+        let output = "USER\tUID\tGID\tHOME\tSHELL\n";
+        let result = UserListTool::post_process(result, &args, output, &dr);
+        assert!(!result.content.is_empty());
+    }
+
+    // ============== Full Pipeline Test ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert("server1".to_string(), crate::config::HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        });
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshUserListHandler::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("USER\tUID\tGID\tHOME\tSHELL\nroot\t0\t0\t/root\t/bin/bash\ntestuser\t1000\t1000\t/home/testuser\t/bin/bash\n"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+        // post_process adds App content
+        assert!(result.content.len() >= 2);
+        assert!(result.structured_content.is_some());
     }
 }
