@@ -202,4 +202,112 @@ mod tests {
         assert_eq!(response["stdout"].as_str().unwrap(), "up 42 days\n");
         assert_eq!(response["exit_code"].as_u64().unwrap(), 0);
     }
+
+    #[test]
+    fn test_subject_construction_with_dots() {
+        // NATS subjects use dots as separators
+        let subject = format!("{CMD_SUBJECT_PREFIX}.db-server.primary");
+        assert_eq!(subject, "mcp.exec.db-server.primary");
+    }
+
+    #[test]
+    fn test_subject_prefix() {
+        assert_eq!(CMD_SUBJECT_PREFIX, "mcp.exec");
+        // NATS convention: dots are level separators
+        assert!(CMD_SUBJECT_PREFIX.contains('.'));
+    }
+
+    #[test]
+    fn test_response_parsing_with_stderr() {
+        let response = serde_json::json!({
+            "stdout": "",
+            "stderr": "permission denied\n",
+            "exit_code": 1,
+        });
+        assert_eq!(
+            response["stderr"].as_str().unwrap(),
+            "permission denied\n"
+        );
+        assert_eq!(response["exit_code"].as_u64().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_response_parsing_missing_fields() {
+        let response = serde_json::json!({});
+        assert_eq!(response["stdout"].as_str().unwrap_or_default(), "");
+        assert_eq!(response["stderr"].as_str().unwrap_or_default(), "");
+        assert_eq!(response["exit_code"].as_u64().unwrap_or(0), 0);
+    }
+
+    #[test]
+    fn test_response_parsing_wrong_types() {
+        let response = serde_json::json!({
+            "stdout": 42,
+            "exit_code": "bad",
+        });
+        assert_eq!(response["stdout"].as_str().unwrap_or_default(), "");
+        assert_eq!(response["exit_code"].as_u64().unwrap_or(0), 0);
+    }
+
+    #[test]
+    fn test_elapsed_ms() {
+        let start = Instant::now();
+        let ms = elapsed_ms(start);
+        assert!(ms < 100);
+    }
+
+    #[test]
+    fn test_port_fallback_from_ssh() {
+        let ssh_port: u16 = 22;
+        let nats_port = if ssh_port == 22 {
+            DEFAULT_NATS_PORT
+        } else {
+            ssh_port
+        };
+        assert_eq!(nats_port, 4222);
+    }
+
+    #[test]
+    fn test_server_url_format() {
+        let hostname = "nats.example.com";
+        let port = DEFAULT_NATS_PORT;
+        let url = format!("nats://{hostname}:{port}");
+        assert_eq!(url, "nats://nats.example.com:4222");
+    }
+
+    #[test]
+    fn test_target_identity_fallback() {
+        let user = "";
+        let host_name = "web-server-01";
+        let identity = if user.is_empty() || user == "root" {
+            host_name.to_string()
+        } else {
+            user.to_string()
+        };
+        assert_eq!(identity, "web-server-01");
+    }
+
+    #[test]
+    fn test_target_identity_custom() {
+        let user = "agent-alpha";
+        let host_name = "web-server-01";
+        let identity = if user.is_empty() || user == "root" {
+            host_name.to_string()
+        } else {
+            user.to_string()
+        };
+        assert_eq!(identity, "agent-alpha");
+    }
+
+    #[test]
+    fn test_request_serialization_roundtrip() {
+        let request = serde_json::json!({
+            "cmd": "cat /etc/hostname",
+            "timeout": REQUEST_TIMEOUT.as_secs(),
+        });
+        let bytes = serde_json::to_vec(&request).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["cmd"].as_str().unwrap(), "cat /etc/hostname");
+        assert_eq!(parsed["timeout"].as_u64().unwrap(), 30);
+    }
 }

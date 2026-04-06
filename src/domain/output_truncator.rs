@@ -73,23 +73,26 @@ pub async fn truncate_output_with_cache(
     let tail_lines = tail.lines().count();
     let omitted = total_lines.saturating_sub(head_lines + tail_lines);
 
-    // Store in cache if available
-    let cache_hint = if let Some(cache) = cache {
+    if let Some(cache) = cache {
         let output_id = cache.store(output.to_string()).await;
         format!(
-            "\nUse ssh_output_fetch with output_id=\"{output_id}\" \
-             to retrieve the full output (offset/limit supported)."
+            "{head}\n\n\
+             ⚠️ MORE DATA AVAILABLE — Truncated: {total_lines} lines total, \
+             {omitted} lines omitted ({orig} → {new} chars).\n\
+             To get the complete output, call: \
+             ssh_output_fetch(output_id=\"{output_id}\", offset=0, limit=50000)\
+             \n\n{tail}",
+            orig = output.len(),
+            new = head.len() + tail.len(),
         )
     } else {
-        String::new()
-    };
-
-    format!(
-        "{head}\n\n--- [truncated: {total_lines} lines total, \
-         {omitted} lines omitted, {orig} → {new} chars] ---{cache_hint}\n\n{tail}",
-        orig = output.len(),
-        new = head.len() + tail.len(),
-    )
+        format!(
+            "{head}\n\n--- [truncated: {total_lines} lines total, \
+             {omitted} lines omitted, {orig} → {new} chars] ---\n\n{tail}",
+            orig = output.len(),
+            new = head.len() + tail.len(),
+        )
+    }
 }
 
 /// Take lines from the start of the string, up to `budget` bytes.
@@ -517,5 +520,21 @@ mod tests {
 
         assert_eq!(result, output);
         assert_eq!(cache.len().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_with_cache_directive_message() {
+        let cache = OutputCache::new(300, 100);
+        let mut output = String::new();
+        for i in 0..200 {
+            let _ = writeln!(output, "Line {i}: verbose log data here");
+        }
+
+        let result = truncate_output_with_cache(&output, 500, Some(&cache)).await;
+
+        // Directive markers that help LLMs paginate
+        assert!(result.contains("MORE DATA AVAILABLE"));
+        assert!(result.contains("To get the complete output, call:"));
+        assert!(result.contains("offset=0, limit=50000"));
     }
 }

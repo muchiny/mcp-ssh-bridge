@@ -184,10 +184,7 @@ mod tests {
 
     #[test]
     fn test_cmd_escape_percent_in_path() {
-        assert_eq!(
-            escape("%PATH%\\evil", ShellType::Cmd),
-            "\"%%PATH%%\\evil\""
-        );
+        assert_eq!(escape("%PATH%\\evil", ShellType::Cmd), "\"%%PATH%%\\evil\"");
     }
 
     #[test]

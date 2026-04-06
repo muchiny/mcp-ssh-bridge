@@ -349,4 +349,92 @@ mod tests {
         let val = snmp::Value::IpAddress([192, 168, 1, 1]);
         assert_eq!(format_value(&val), "IpAddress: 192.168.1.1");
     }
+
+    #[test]
+    fn test_parse_oid_negative_number() {
+        assert!(parse_oid("1.3.-1").is_err());
+    }
+
+    #[test]
+    fn test_parse_oid_double_dot() {
+        // Double dots produce empty segments which are filtered out
+        let oid = parse_oid("1..3.6").unwrap();
+        assert_eq!(oid, vec![1, 3, 6]);
+    }
+
+    #[test]
+    fn test_parse_oid_whitespace() {
+        assert!(parse_oid("1.3. 6").is_err());
+    }
+
+    #[test]
+    fn test_parse_oid_hex_component() {
+        assert!(parse_oid("1.3.0xFF").is_err());
+    }
+
+    #[test]
+    fn test_format_value_integer_negative() {
+        let val = snmp::Value::Integer(-42);
+        assert_eq!(format_value(&val), "INTEGER: -42");
+    }
+
+    #[test]
+    fn test_format_value_integer_zero() {
+        let val = snmp::Value::Integer(0);
+        assert_eq!(format_value(&val), "INTEGER: 0");
+    }
+
+    #[test]
+    fn test_format_value_octet_string_non_utf8() {
+        let val = snmp::Value::OctetString(&[0xFF, 0xFE, 0x00]);
+        let formatted = format_value(&val);
+        assert!(formatted.starts_with("STRING: "));
+    }
+
+    #[test]
+    fn test_format_value_octet_string_empty() {
+        let val = snmp::Value::OctetString(b"");
+        assert_eq!(format_value(&val), "STRING: ");
+    }
+
+    #[test]
+    fn test_format_value_counter32_zero() {
+        let val = snmp::Value::Counter32(0);
+        assert_eq!(format_value(&val), "Counter32: 0");
+    }
+
+    #[test]
+    fn test_format_value_counter32_max() {
+        let val = snmp::Value::Counter32(u32::MAX);
+        assert_eq!(format_value(&val), format!("Counter32: {}", u32::MAX));
+    }
+
+    #[test]
+    fn test_format_value_counter64_zero() {
+        let val = snmp::Value::Counter64(0);
+        assert_eq!(format_value(&val), "Counter64: 0");
+    }
+
+    #[test]
+    fn test_format_value_timeticks_zero() {
+        let val = snmp::Value::Timeticks(0);
+        assert_eq!(format_value(&val), "Timeticks: (0)");
+    }
+
+    #[test]
+    fn test_format_value_ip_address_zeros() {
+        let val = snmp::Value::IpAddress([0, 0, 0, 0]);
+        assert_eq!(format_value(&val), "IpAddress: 0.0.0.0");
+    }
+
+    #[test]
+    fn test_format_value_ip_address_broadcast() {
+        let val = snmp::Value::IpAddress([255, 255, 255, 255]);
+        assert_eq!(format_value(&val), "IpAddress: 255.255.255.255");
+    }
+
+    #[test]
+    fn test_default_community_string() {
+        assert_eq!(DEFAULT_COMMUNITY, "public");
+    }
 }

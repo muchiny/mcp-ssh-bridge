@@ -2226,4 +2226,397 @@ mod tests {
         let v = coerce_value("42", "extra", Some(schema));
         assert_eq!(v, serde_json::json!(42));
     }
+
+    // ============== Additional coerce_value Tests ==============
+
+    #[test]
+    fn test_coerce_value_number_float_from_schema() {
+        let schema = r#"{"type":"object","properties":{"rate":{"type":"number"}}}"#;
+        let v = coerce_value("3.14", "rate", Some(schema));
+        assert_eq!(v, serde_json::json!(3.14));
+    }
+
+    #[test]
+    fn test_coerce_value_boolean_false_variants() {
+        let schema = r#"{"type":"object","properties":{"flag":{"type":"boolean"}}}"#;
+        assert_eq!(
+            coerce_value("false", "flag", Some(schema)),
+            serde_json::json!(false)
+        );
+        assert_eq!(
+            coerce_value("0", "flag", Some(schema)),
+            serde_json::json!(false)
+        );
+        assert_eq!(
+            coerce_value("no", "flag", Some(schema)),
+            serde_json::json!(false)
+        );
+    }
+
+    #[test]
+    fn test_coerce_value_boolean_true_variants() {
+        let schema = r#"{"type":"object","properties":{"flag":{"type":"boolean"}}}"#;
+        assert_eq!(
+            coerce_value("true", "flag", Some(schema)),
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            coerce_value("1", "flag", Some(schema)),
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            coerce_value("yes", "flag", Some(schema)),
+            serde_json::json!(true)
+        );
+    }
+
+    #[test]
+    fn test_coerce_value_boolean_invalid_stays_string() {
+        let schema = r#"{"type":"object","properties":{"flag":{"type":"boolean"}}}"#;
+        let v = coerce_value("maybe", "flag", Some(schema));
+        assert_eq!(v, serde_json::Value::String("maybe".to_string()));
+    }
+
+    #[test]
+    fn test_coerce_value_array_from_schema() {
+        let schema = r#"{"type":"object","properties":{"tags":{"type":"array"}}}"#;
+        let v = coerce_value(r#"["a","b"]"#, "tags", Some(schema));
+        assert_eq!(v, serde_json::json!(["a", "b"]));
+    }
+
+    #[test]
+    fn test_coerce_value_array_invalid_stays_string() {
+        let schema = r#"{"type":"object","properties":{"tags":{"type":"array"}}}"#;
+        let v = coerce_value("not-json", "tags", Some(schema));
+        assert_eq!(v, serde_json::Value::String("not-json".to_string()));
+    }
+
+    #[test]
+    fn test_coerce_value_object_from_schema() {
+        let schema = r#"{"type":"object","properties":{"meta":{"type":"object"}}}"#;
+        let v = coerce_value(r#"{"key":"val"}"#, "meta", Some(schema));
+        assert_eq!(v, serde_json::json!({"key": "val"}));
+    }
+
+    #[test]
+    fn test_coerce_value_negative_integer() {
+        let v = coerce_value("-42", "key", None);
+        assert_eq!(v, serde_json::json!(-42));
+    }
+
+    #[test]
+    fn test_coerce_value_json_array_auto() {
+        let v = coerce_value(r#"[1,2,3]"#, "key", None);
+        assert_eq!(v, serde_json::json!([1, 2, 3]));
+    }
+
+    #[test]
+    fn test_coerce_value_false_auto() {
+        let v = coerce_value("false", "key", None);
+        assert_eq!(v, serde_json::json!(false));
+    }
+
+    #[test]
+    fn test_coerce_value_invalid_schema_json() {
+        // Invalid schema JSON should fall through to auto-detect
+        let v = coerce_value("42", "key", Some("not-valid-json"));
+        assert_eq!(v, serde_json::json!(42));
+    }
+
+    #[test]
+    fn test_coerce_value_schema_missing_properties() {
+        let schema = r#"{"type":"object"}"#;
+        // Schema has no properties key, should fall through
+        let v = coerce_value("hello", "key", Some(schema));
+        assert_eq!(v, serde_json::Value::String("hello".to_string()));
+    }
+
+    // ============== run_validate Tests (async) ==============
+
+    #[tokio::test]
+    async fn test_run_validate_empty_config() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        // Should succeed (no hosts is a warning, not error)
+        let result = run_validate(Arc::new(config)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_validate_with_invalid_host() {
+        let mut hosts = HashMap::new();
+        hosts.insert(
+            "bad-host".to_string(),
+            HostConfig {
+                hostname: "".to_string(), // empty hostname = error
+                port: 22,
+                user: "".to_string(), // empty user = error
+                auth: AuthConfig::Agent,
+                description: None,
+                host_key_verification: HostKeyVerification::Off,
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: OsType::Linux,
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
+
+        let config = Config {
+            hosts,
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_validate(Arc::new(config)).await;
+        assert!(result.is_err());
+    }
+
+    // ============== run_config_diff Tests (async) ==============
+
+    #[tokio::test]
+    async fn test_run_config_diff_default_config() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_config_diff(Arc::new(config)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_config_diff_custom_limits() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig {
+                command_timeout_seconds: 120,
+                max_output_chars: 100_000,
+                ..Default::default()
+            },
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_config_diff(Arc::new(config)).await;
+        assert!(result.is_ok());
+    }
+
+    // ============== run_list_tools Tests (async) ==============
+
+    #[tokio::test]
+    async fn test_run_list_tools_all() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_list_tools(Arc::new(config), None, false, false, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_list_tools_groups_only() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_list_tools(Arc::new(config), None, false, true, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_list_tools_groups_only_json() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_list_tools(Arc::new(config), None, true, true, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_list_tools_by_group() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_list_tools(Arc::new(config), Some("docker"), false, false, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_list_tools_search() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result =
+            run_list_tools(Arc::new(config), None, false, false, Some("kubernetes")).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_list_tools_json_output() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_list_tools(Arc::new(config), None, true, false, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_list_tools_nonexistent_group() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        // Should succeed but list 0 tools
+        let result =
+            run_list_tools(Arc::new(config), Some("nonexistent"), false, false, None).await;
+        assert!(result.is_ok());
+    }
+
+    // ============== run_describe_tool Tests (async) ==============
+
+    #[tokio::test]
+    async fn test_run_describe_tool_known_tool() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_describe_tool(Arc::new(config), "ssh_exec", false).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_describe_tool_json() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_describe_tool(Arc::new(config), "ssh_exec", true).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_describe_tool_unknown() {
+        let config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+        };
+
+        let result = run_describe_tool(Arc::new(config), "nonexistent_tool", false).await;
+        assert!(result.is_err());
+    }
 }

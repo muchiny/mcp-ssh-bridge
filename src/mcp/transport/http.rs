@@ -413,4 +413,106 @@ mod tests {
         let headers = HeaderMap::new();
         assert_eq!(get_session_id(&headers), None);
     }
+
+    #[test]
+    fn test_default_config_session_timeout() {
+        let config = HttpTransportConfig::default();
+        assert_eq!(config.session_timeout, Duration::from_secs(1800));
+    }
+
+    #[test]
+    fn test_default_config_oauth_disabled() {
+        let config = HttpTransportConfig::default();
+        assert!(!config.oauth.enabled);
+    }
+
+    #[test]
+    fn test_new_session_id_uniqueness() {
+        let id1 = new_session_id();
+        let id2 = new_session_id();
+        assert_ne!(id1, id2, "Session IDs must be unique");
+    }
+
+    #[test]
+    fn test_new_session_id_valid_uuid_v4() {
+        let id = new_session_id();
+        // UUID v4 has format: 8-4-4-4-12
+        let parts: Vec<&str> = id.split('-').collect();
+        assert_eq!(parts.len(), 5);
+        assert_eq!(parts[0].len(), 8);
+        assert_eq!(parts[1].len(), 4);
+        assert_eq!(parts[2].len(), 4);
+        assert_eq!(parts[3].len(), 4);
+        assert_eq!(parts[4].len(), 12);
+    }
+
+    #[test]
+    fn test_get_session_id_case_sensitive() {
+        let mut headers = HeaderMap::new();
+        headers.insert("mcp-session-id", "CaSe-SenSiTiVe-123".parse().unwrap());
+        assert_eq!(
+            get_session_id(&headers),
+            Some("CaSe-SenSiTiVe-123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_get_session_id_uuid_value() {
+        let uuid = new_session_id();
+        let mut headers = HeaderMap::new();
+        headers.insert("mcp-session-id", uuid.parse().unwrap());
+        assert_eq!(get_session_id(&headers), Some(uuid));
+    }
+
+    #[test]
+    fn test_session_is_expired_false() {
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        let session = HttpSession {
+            notification_tx: tx,
+            created_at: std::time::Instant::now(),
+        };
+        assert!(!session.is_expired(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn test_session_is_expired_true() {
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        let session = HttpSession {
+            notification_tx: tx,
+            created_at: std::time::Instant::now() - Duration::from_secs(120),
+        };
+        assert!(session.is_expired(Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn test_custom_config() {
+        let config = HttpTransportConfig {
+            bind: "127.0.0.1:8080".to_string(),
+            max_body_size: 2_097_152,
+            session_timeout: Duration::from_secs(600),
+            max_sessions: 50,
+            oauth: OAuthConfig::default(),
+        };
+        assert_eq!(config.bind, "127.0.0.1:8080");
+        assert_eq!(config.max_body_size, 2_097_152);
+        assert_eq!(config.session_timeout, Duration::from_secs(600));
+        assert_eq!(config.max_sessions, 50);
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config = HttpTransportConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.bind, cloned.bind);
+        assert_eq!(config.max_body_size, cloned.max_body_size);
+        assert_eq!(config.max_sessions, cloned.max_sessions);
+    }
+
+    #[test]
+    fn test_config_debug() {
+        let config = HttpTransportConfig::default();
+        let debug_str = format!("{config:?}");
+        assert!(debug_str.contains("HttpTransportConfig"));
+        assert!(debug_str.contains("3000"));
+    }
 }

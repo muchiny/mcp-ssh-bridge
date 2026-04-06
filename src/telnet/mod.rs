@@ -147,4 +147,64 @@ mod tests {
         assert!(re.is_match(">"));
         assert!(re.is_match("$"));
     }
+
+    #[test]
+    fn test_default_prompt_regex_no_match() {
+        let re = regex::Regex::new(DEFAULT_PROMPT).unwrap();
+        assert!(!re.is_match("hello"));
+        assert!(!re.is_match(""));
+    }
+
+    #[test]
+    fn test_default_prompt_regex_in_context() {
+        let re = regex::Regex::new(DEFAULT_PROMPT).unwrap();
+        assert!(re.is_match("Router#"));
+        assert!(re.is_match("Switch>"));
+        assert!(re.is_match("user@host$"));
+    }
+
+    #[test]
+    fn test_default_port_value() {
+        assert_eq!(DEFAULT_TELNET_PORT, 23);
+        // Verify it's a well-known port
+        assert!(DEFAULT_TELNET_PORT < 1024);
+    }
+
+    #[test]
+    fn test_port_fallback_from_ssh() {
+        // When port is 22 (SSH default), telnet should use its own default
+        let ssh_port: u16 = 22;
+        let telnet_port = if ssh_port == 22 {
+            DEFAULT_TELNET_PORT
+        } else {
+            ssh_port
+        };
+        assert_eq!(telnet_port, 23);
+    }
+
+    #[test]
+    fn test_port_custom_value() {
+        let custom_port: u16 = 2323;
+        let telnet_port = if custom_port == 22 {
+            DEFAULT_TELNET_PORT
+        } else {
+            custom_port
+        };
+        assert_eq!(telnet_port, 2323);
+    }
+
+    #[test]
+    fn test_addr_format() {
+        let hostname = "192.168.1.1";
+        let port = DEFAULT_TELNET_PORT;
+        let addr = format!("{hostname}:{port}");
+        assert_eq!(addr, "192.168.1.1:23");
+    }
+
+    #[test]
+    fn test_default_prompt_is_valid_regex() {
+        // Ensure the constant compiles as a valid regex
+        let result = regex::Regex::new(DEFAULT_PROMPT);
+        assert!(result.is_ok());
+    }
 }

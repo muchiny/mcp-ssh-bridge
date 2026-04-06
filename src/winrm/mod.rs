@@ -392,4 +392,129 @@ mod tests {
         assert!(envelope.contains("Envelope"));
         assert!(envelope.contains("wsman"));
     }
+
+    #[test]
+    fn test_mark_failed() {
+        let host = HostConfig {
+            hostname: "10.0.0.1".to_string(),
+            port: 5986,
+            user: "admin".to_string(),
+            auth: crate::config::AuthConfig::Password {
+                password: zeroize::Zeroizing::new("pass".to_string()),
+            },
+            description: None,
+            host_key_verification: crate::config::HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::Windows,
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        };
+        let limits = LimitsConfig::default();
+        let mut conn = WinRmConnection::new("test-host", &host, &limits).unwrap();
+        assert!(!conn.failed);
+        conn.mark_failed();
+        assert!(conn.failed);
+    }
+
+    #[test]
+    fn test_new_config_fields() {
+        let host = HostConfig {
+            hostname: "10.0.0.1".to_string(),
+            port: 5986,
+            user: "admin".to_string(),
+            auth: crate::config::AuthConfig::Password {
+                password: zeroize::Zeroizing::new("secret123".to_string()),
+            },
+            description: None,
+            host_key_verification: crate::config::HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::Windows,
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        };
+        let limits = LimitsConfig::default();
+        let conn = WinRmConnection::new("myhost", &host, &limits).unwrap();
+        assert_eq!(conn.host_name, "myhost");
+        assert_eq!(conn.user, "admin");
+        assert_eq!(conn.password, "secret123");
+        assert_eq!(conn.config.endpoint, "https://10.0.0.1:5986/wsman");
+        assert!(conn.config.use_ssl);
+        assert!(!conn.failed);
+    }
+
+    #[test]
+    fn test_new_requires_password_auth() {
+        let host = HostConfig {
+            hostname: "10.0.0.1".to_string(),
+            port: 5986,
+            user: "admin".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: crate::config::HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::Windows,
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        };
+        let limits = LimitsConfig::default();
+        let result = WinRmConnection::new("test-host", &host, &limits);
+        assert!(result.is_err());
+        match result {
+            Err(e) => assert!(e.to_string().contains("requires password authentication")),
+            Ok(_) => panic!("Expected error"),
+        }
+    }
+
+    #[test]
+    fn test_winrm_config_custom_port() {
+        let host = HostConfig {
+            hostname: "192.168.1.100".to_string(),
+            port: 8443,
+            user: "admin".to_string(),
+            auth: crate::config::AuthConfig::Password {
+                password: zeroize::Zeroizing::new("pass".to_string()),
+            },
+            description: None,
+            host_key_verification: crate::config::HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::Windows,
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        };
+        let config = WinRmConfig::from_host_config(&host);
+        assert_eq!(config.endpoint, "https://192.168.1.100:8443/wsman");
+        assert!(config.use_ssl); // any port != 5985 uses SSL
+    }
+
+    #[test]
+    fn test_extract_xml_value_with_attributes() {
+        let xml = r#"<Stream Name="stdout">data here</Stream>"#;
+        assert_eq!(
+            extract_xml_value(xml, r#"Stream Name="stdout""#),
+            Some("data here".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_soap_envelope_special_chars() {
+        let envelope =
+            build_winrm_command_envelope("https://host:5986/wsman", "echo hello & whoami");
+        assert!(envelope.contains("echo hello & whoami"));
+    }
 }

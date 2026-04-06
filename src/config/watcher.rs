@@ -1109,6 +1109,94 @@ mod tests {
         );
     }
 
+    // ============== with_notifications tests ==============
+
+    #[tokio::test]
+    async fn test_with_notifications_creation() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.yaml");
+
+        let config = create_test_config();
+        write_config_to_file(&config_path, &config);
+
+        let shared_config = Arc::new(RwLock::new(config.clone()));
+        let validator = Arc::new(CommandValidator::new(&config.security));
+        let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let called_clone = Arc::clone(&called);
+        let on_reload: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+            called_clone.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+
+        let watcher =
+            ConfigWatcher::with_notifications(&config_path, shared_config, Some(validator), on_reload);
+
+        assert!(watcher.is_ok());
+        assert_eq!(watcher.unwrap().path(), config_path);
+    }
+
+    #[tokio::test]
+    async fn test_with_notifications_nonexistent_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("missing.yaml");
+
+        let config = Arc::new(RwLock::new(create_test_config()));
+        let on_reload: Arc<dyn Fn() + Send + Sync> = Arc::new(|| {});
+
+        let result = ConfigWatcher::with_notifications(&config_path, config, None, on_reload);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    #[allow(clippy::significant_drop_tightening)]
+    async fn test_with_notifications_callback_invoked_on_change() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.yaml");
+
+        let initial = create_test_config();
+        write_config_to_file(&config_path, &initial);
+
+        let shared_config = Arc::new(RwLock::new(initial.clone()));
+        let called = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        let called_clone = Arc::clone(&called);
+        let on_reload: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+            called_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        });
+
+        let _watcher = ConfigWatcher::with_notifications(
+            &config_path,
+            Arc::clone(&shared_config),
+            None,
+            on_reload,
+        )
+        .unwrap();
+
+        // Modify config file
+        let mut updated = initial;
+        updated.limits.command_timeout_seconds = 999;
+        atomic_save(&config_path, &updated);
+
+        // Wait for watcher to detect the change
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+
+        assert!(
+            called.load(std::sync::atomic::Ordering::Relaxed) > 0,
+            "on_reload callback should have been invoked"
+        );
+
+        // Verify config was updated
+        let cfg = shared_config.read().await;
+        assert_eq!(cfg.limits.command_timeout_seconds, 999);
+    }
+
+    // ============== DEBOUNCE_DURATION constant test ==============
+
+    #[test]
+    fn test_debounce_duration_value() {
+        assert_eq!(DEBOUNCE_DURATION, Duration::from_millis(500));
+    }
+
     #[tokio::test]
     async fn test_reload_invalid_yaml_keeps_previous_validator_rules() {
         let temp_dir = tempfile::tempdir().unwrap();

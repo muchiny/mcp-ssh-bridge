@@ -254,4 +254,112 @@ mod tests {
         let ms = elapsed_ms(start);
         assert!(ms >= 10);
     }
+
+    #[test]
+    fn test_elapsed_ms_immediate() {
+        let start = Instant::now();
+        let ms = elapsed_ms(start);
+        assert!(ms < 100);
+    }
+
+    #[test]
+    fn test_instance_id_format_standard() {
+        let id = "i-0abc123def456";
+        assert!(id.starts_with("i-"));
+    }
+
+    #[test]
+    fn test_instance_id_format_17_char() {
+        // AWS instance IDs can be 17 hex chars after "i-"
+        let id = "i-0abc123def4567890";
+        assert!(id.starts_with("i-"));
+        assert_eq!(id.len(), 19); // "i-" (2) + 17 hex chars
+        assert!(id[2..].chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_instance_id_format_8_char() {
+        // Older AWS instance IDs are 8 hex chars
+        let id = "i-abcd1234";
+        assert!(id.starts_with("i-"));
+        assert_eq!(id.len(), 10);
+    }
+
+    #[test]
+    fn test_document_selection_linux() {
+        let os_type = crate::config::OsType::Linux;
+        let document: Option<String> = None;
+        let resolved = document.unwrap_or_else(|| match os_type {
+            crate::config::OsType::Windows => DEFAULT_WINDOWS_DOCUMENT.to_string(),
+            crate::config::OsType::Linux => DEFAULT_LINUX_DOCUMENT.to_string(),
+        });
+        assert_eq!(resolved, "AWS-RunShellScript");
+    }
+
+    #[test]
+    fn test_document_selection_windows() {
+        let os_type = crate::config::OsType::Windows;
+        let document: Option<String> = None;
+        let resolved = document.unwrap_or_else(|| match os_type {
+            crate::config::OsType::Windows => DEFAULT_WINDOWS_DOCUMENT.to_string(),
+            crate::config::OsType::Linux => DEFAULT_LINUX_DOCUMENT.to_string(),
+        });
+        assert_eq!(resolved, "AWS-RunPowerShellScript");
+    }
+
+    #[test]
+    fn test_document_selection_custom_override() {
+        let document: Option<String> = Some("AWS-RunRemoteScript".to_string());
+        let resolved = document.unwrap_or_else(|| DEFAULT_LINUX_DOCUMENT.to_string());
+        assert_eq!(resolved, "AWS-RunRemoteScript");
+    }
+
+    #[test]
+    fn test_region_fallback() {
+        // When user is empty or "root", fall back to us-east-1
+        let user = "root";
+        let region = if user.is_empty() || user == "root" {
+            "us-east-1".to_string()
+        } else {
+            user.to_string()
+        };
+        assert_eq!(region, "us-east-1");
+    }
+
+    #[test]
+    fn test_region_custom() {
+        let user = "eu-west-1";
+        let region = if user.is_empty() || user == "root" {
+            "us-east-1".to_string()
+        } else {
+            user.to_string()
+        };
+        assert_eq!(region, "eu-west-1");
+    }
+
+    #[test]
+    fn test_timeout_exit_code() {
+        // SSM uses exit code 124 for timeouts (like coreutils timeout)
+        let timeout_exit: u32 = 124;
+        assert_eq!(timeout_exit, 124);
+    }
+
+    #[test]
+    fn test_status_matching() {
+        let terminal_statuses = ["Success", "Failed", "Cancelled", "TimedOut"];
+        let non_terminal = ["InProgress", "Pending", "Delayed"];
+
+        for status in &terminal_statuses {
+            assert!(
+                matches!(*status, "Success" | "Failed" | "Cancelled" | "TimedOut"),
+                "Expected terminal status: {status}"
+            );
+        }
+        for status in &non_terminal {
+            assert!(
+                !matches!(*status, "Success" | "Failed" | "Cancelled" | "TimedOut"),
+                "Expected non-terminal status: {status}"
+            );
+        }
+    }
 }

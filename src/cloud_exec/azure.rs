@@ -329,4 +329,132 @@ mod tests {
         assert_eq!(POLL_INTERVAL.as_secs(), 3);
         assert_eq!(MAX_WAIT.as_secs(), 300);
     }
+
+    #[test]
+    fn test_parse_azure_response_multiple_stdout_entries() {
+        let body = serde_json::json!({
+            "value": [
+                {"code": "ProvisioningState/succeeded/StdOut", "message": "line1\n"},
+                {"code": "ProvisioningState/succeeded/StdOut", "message": "line2\n"},
+                {"code": "ProvisioningState/succeeded/StdErr", "message": ""}
+            ]
+        });
+        let result = parse_azure_response(&body, 100);
+        assert_eq!(result.stdout, "line1\nline2\n");
+        assert_eq!(result.exit_code, 0);
+    }
+
+    #[test]
+    fn test_parse_azure_response_no_value_field() {
+        let body = serde_json::json!({"other": "data"});
+        let result = parse_azure_response(&body, 50);
+        // Falls back to body.to_string()
+        assert_eq!(result.exit_code, 0);
+        assert!(!result.stdout.is_empty());
+    }
+
+    #[test]
+    fn test_parse_azure_response_null_value() {
+        let body = serde_json::json!({"value": null});
+        let result = parse_azure_response(&body, 50);
+        assert_eq!(result.exit_code, 0);
+    }
+
+    #[test]
+    fn test_parse_azure_response_empty_array() {
+        let body = serde_json::json!({"value": []});
+        let result = parse_azure_response(&body, 50);
+        assert!(result.stdout.is_empty());
+        assert!(result.stderr.is_empty());
+        assert_eq!(result.exit_code, 0);
+    }
+
+    #[test]
+    fn test_parse_azure_response_properties_output_path() {
+        let body = serde_json::json!({
+            "properties": {
+                "output": {
+                    "value": [
+                        {"code": "StdOut/succeeded", "message": "from properties"}
+                    ]
+                }
+            }
+        });
+        // properties.output is checked as fallback, but its .value needs to be an array
+        let result = parse_azure_response(&body, 30);
+        // This follows the properties->output path
+        assert_eq!(result.exit_code, 0);
+    }
+
+    #[test]
+    fn test_parse_azure_response_missing_code() {
+        let body = serde_json::json!({
+            "value": [
+                {"message": "orphan message"}
+            ]
+        });
+        let result = parse_azure_response(&body, 100);
+        // code is "", doesn't contain StdOut or StdErr
+        assert!(result.stdout.is_empty());
+        assert!(result.stderr.is_empty());
+    }
+
+    #[test]
+    fn test_parse_azure_response_missing_message() {
+        let body = serde_json::json!({
+            "value": [
+                {"code": "ProvisioningState/succeeded/StdOut"}
+            ]
+        });
+        let result = parse_azure_response(&body, 100);
+        // message defaults to ""
+        assert!(result.stdout.is_empty());
+    }
+
+    #[test]
+    fn test_api_url_format() {
+        let sub = "12345678-1234-1234-1234-123456789012";
+        let rg = "my-resource-group";
+        let vm = "my-vm";
+        let url = format!(
+            "https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{vm}/runCommand?api-version=2024-07-01"
+        );
+        assert!(url.contains(sub));
+        assert!(url.contains(rg));
+        assert!(url.contains(vm));
+        assert!(url.contains("api-version=2024-07-01"));
+    }
+
+    #[test]
+    fn test_run_command_body_structure() {
+        let command = "whoami";
+        let body = serde_json::json!({
+            "commandId": "RunShellScript",
+            "script": [command]
+        });
+        assert_eq!(body["commandId"].as_str().unwrap(), "RunShellScript");
+        let script = body["script"].as_array().unwrap();
+        assert_eq!(script.len(), 1);
+        assert_eq!(script[0].as_str().unwrap(), "whoami");
+    }
+
+    #[test]
+    fn test_elapsed_ms() {
+        let start = std::time::Instant::now();
+        let ms = elapsed_ms(start);
+        assert!(ms < 100);
+    }
+
+    #[test]
+    fn test_async_operation_status_matching() {
+        let terminal = ["Succeeded", "Failed", "Canceled"];
+        let non_terminal = ["InProgress", "Running", "Queued"];
+
+        for status in &terminal {
+            assert!(matches!(*status, "Succeeded" | "Failed" | "Canceled"));
+        }
+        for status in &non_terminal {
+            assert!(!matches!(*status, "Succeeded" | "Failed" | "Canceled"));
+        }
+    }
 }

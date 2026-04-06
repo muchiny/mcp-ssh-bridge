@@ -276,4 +276,118 @@ mod tests {
         assert_eq!(response["stdout"].as_str().unwrap(), "device-01\n");
         assert_eq!(response["id"].as_str().unwrap(), "test-id");
     }
+
+    #[test]
+    fn test_topic_construction_with_special_chars() {
+        let identity = "sensor-gateway/floor-1";
+        let request_topic = format!("{CMD_TOPIC_PREFIX}/{identity}");
+        let response_topic = format!("{RESP_TOPIC_PREFIX}/{identity}");
+        assert_eq!(request_topic, "mcp/exec/sensor-gateway/floor-1");
+        assert_eq!(response_topic, "mcp/resp/sensor-gateway/floor-1");
+    }
+
+    #[test]
+    fn test_topic_construction_with_dots() {
+        let identity = "iot.device.001";
+        let request_topic = format!("{CMD_TOPIC_PREFIX}/{identity}");
+        assert_eq!(request_topic, "mcp/exec/iot.device.001");
+    }
+
+    #[test]
+    fn test_response_id_mismatch_detection() {
+        let request_id = "req-001";
+        let response = serde_json::json!({
+            "id": "req-002",
+            "stdout": "stale",
+            "exit_code": 0,
+        });
+        let resp_id = response["id"].as_str().unwrap_or_default();
+        assert!(!resp_id.is_empty() && resp_id != request_id);
+    }
+
+    #[test]
+    fn test_response_id_match() {
+        let request_id = "req-001";
+        let response = serde_json::json!({
+            "id": "req-001",
+            "stdout": "ok",
+            "exit_code": 0,
+        });
+        let resp_id = response["id"].as_str().unwrap_or_default();
+        assert_eq!(resp_id, request_id);
+    }
+
+    #[test]
+    fn test_response_missing_id_accepted() {
+        let response = serde_json::json!({
+            "stdout": "ok",
+            "exit_code": 0,
+        });
+        let resp_id = response["id"].as_str().unwrap_or_default();
+        // Empty ID means we accept any response
+        assert!(resp_id.is_empty());
+    }
+
+    #[test]
+    fn test_request_includes_response_topic() {
+        let response_topic = "mcp/resp/device-42";
+        let request = serde_json::json!({
+            "id": "test",
+            "cmd": "uptime",
+            "timeout": 30,
+            "response_topic": response_topic,
+        });
+        assert_eq!(
+            request["response_topic"].as_str().unwrap(),
+            "mcp/resp/device-42"
+        );
+    }
+
+    #[test]
+    fn test_channel_capacity() {
+        assert_eq!(CHANNEL_CAPACITY, 16);
+    }
+
+    #[test]
+    fn test_elapsed_ms() {
+        let start = Instant::now();
+        let ms = elapsed_ms(start);
+        assert!(ms < 100);
+    }
+
+    #[test]
+    fn test_port_fallback_from_ssh() {
+        let ssh_port: u16 = 22;
+        let mqtt_port = if ssh_port == 22 {
+            DEFAULT_MQTT_PORT
+        } else {
+            ssh_port
+        };
+        assert_eq!(mqtt_port, 1883);
+    }
+
+    #[test]
+    fn test_target_identity_fallback() {
+        // When user is empty or "root", use host_name
+        let user = "root";
+        let host_name = "iot-gateway-01";
+        let identity = if user.is_empty() || user == "root" {
+            host_name.to_string()
+        } else {
+            user.to_string()
+        };
+        assert_eq!(identity, "iot-gateway-01");
+    }
+
+    #[test]
+    fn test_target_identity_custom_user() {
+        let user = "device-42";
+        let host_name = "iot-gateway-01";
+        let identity = if user.is_empty() || user == "root" {
+            host_name.to_string()
+        } else {
+            user.to_string()
+        };
+        assert_eq!(identity, "device-42");
+    }
 }

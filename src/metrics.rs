@@ -30,7 +30,6 @@ pub struct Metrics {
     pub start_time: u64,
 
     // ---- Token consumption analytics ----
-
     /// Total output characters across all tool calls
     pub output_chars_total: AtomicU64,
     /// Estimated total tokens (~3.5 chars/token)
@@ -173,11 +172,7 @@ impl Metrics {
             let _ = writeln!(out, "  Before reduction: {before} chars");
             let _ = writeln!(out, "  After reduction:  {after} chars");
             let saved = before.saturating_sub(after);
-            let pct = if before > 0 {
-                saved * 100 / before
-            } else {
-                0
-            };
+            let pct = if before > 0 { saved * 100 / before } else { 0 };
             let tokens_saved = saved * 10 / 35;
             let _ = writeln!(out, "  Savings: {pct}% (~{tokens_saved} tokens saved)");
             let _ = writeln!(out, "  Truncation events: {truncations}");

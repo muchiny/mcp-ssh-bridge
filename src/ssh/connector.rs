@@ -83,4 +83,30 @@ mod tests {
         let cloned = connector.clone();
         assert_eq!(std::mem::size_of_val(&cloned), 0); // ZST
     }
+
+    #[test]
+    fn test_real_ssh_connector_is_zero_sized() {
+        assert_eq!(std::mem::size_of::<RealSshConnector>(), 0);
+    }
+
+    #[test]
+    fn test_real_ssh_connector_default_is_same_as_new() {
+        let from_new = RealSshConnector::new();
+        let from_default = RealSshConnector::default();
+        // Both are ZSTs so they are identical
+        assert_eq!(
+            std::mem::size_of_val(&from_new),
+            std::mem::size_of_val(&from_default)
+        );
+    }
+
+    #[test]
+    fn test_real_ssh_connector_multiple_clones() {
+        let connector = RealSshConnector::new();
+        let c1 = connector.clone();
+        let c2 = c1.clone();
+        let c3 = c2.clone();
+        // All clones should be valid ZSTs
+        assert_eq!(std::mem::size_of_val(&c3), 0);
+    }
 }

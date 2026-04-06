@@ -50,7 +50,7 @@ impl OutputKind {
     /// Whether this kind supports `limit`.
     #[must_use]
     pub const fn supports_limit(&self) -> bool {
-        matches!(self, Self::Tabular | Self::Auto)
+        matches!(self, Self::Tabular | Self::Auto | Self::Json)
     }
 }
 
@@ -83,7 +83,7 @@ mod tests {
     fn test_supports_limit() {
         assert!(!OutputKind::RawText.supports_limit());
         assert!(OutputKind::Tabular.supports_limit());
-        assert!(!OutputKind::Json.supports_limit());
+        assert!(OutputKind::Json.supports_limit());
         assert!(OutputKind::Auto.supports_limit());
     }
 

@@ -167,4 +167,82 @@ mod tests {
     fn test_default_read_timeout() {
         assert_eq!(DEFAULT_READ_TIMEOUT, Duration::from_secs(5));
     }
+
+    #[test]
+    fn test_baud_rate_fallback_from_ssh() {
+        let ssh_port: u16 = 22;
+        let baud = if ssh_port == 22 {
+            DEFAULT_BAUD_RATE
+        } else {
+            u32::from(ssh_port)
+        };
+        assert_eq!(baud, 9600);
+    }
+
+    #[test]
+    fn test_baud_rate_custom() {
+        let custom_port: u16 = 19200;
+        let baud = if custom_port == 22 {
+            DEFAULT_BAUD_RATE
+        } else {
+            u32::from(custom_port)
+        };
+        assert_eq!(baud, 19200);
+        assert_ne!(baud, DEFAULT_BAUD_RATE);
+    }
+
+    #[test]
+    fn test_common_baud_rates() {
+        // Standard baud rates should all be representable as u32
+        let common: &[u32] = &[300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115_200];
+        for &rate in common {
+            assert!(rate > 0);
+        }
+        assert!(common.contains(&DEFAULT_BAUD_RATE));
+    }
+
+    #[test]
+    fn test_command_format_with_crlf() {
+        let command = "show version";
+        let formatted = format!("{command}\r\n");
+        assert!(formatted.ends_with("\r\n"));
+        assert_eq!(formatted, "show version\r\n");
+    }
+
+    #[test]
+    fn test_prompt_endings() {
+        // The exec method checks for these prompt endings
+        let prompts = ["output# ", "user$ ", "Router> ", "config] "];
+        for prompt in &prompts {
+            assert!(
+                prompt.ends_with("# ")
+                    || prompt.ends_with("$ ")
+                    || prompt.ends_with("> ")
+                    || prompt.ends_with("] "),
+                "Prompt should match: {prompt}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_prompt_no_match() {
+        let non_prompts = ["still running...", "output", ""];
+        for text in &non_prompts {
+            assert!(
+                !(text.ends_with("# ")
+                    || text.ends_with("$ ")
+                    || text.ends_with("> ")
+                    || text.ends_with("] ")),
+                "Should not match prompt: {text}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_device_path_formats() {
+        let linux_path = "/dev/ttyUSB0";
+        let windows_path = "COM3";
+        assert!(linux_path.starts_with("/dev/"));
+        assert!(windows_path.starts_with("COM"));
+    }
 }

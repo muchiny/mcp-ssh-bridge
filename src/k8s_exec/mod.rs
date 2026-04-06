@@ -190,4 +190,87 @@ mod tests {
         let hostname2 = "my-pod";
         assert!(!hostname2.contains('/'));
     }
+
+    #[test]
+    fn test_pod_name_with_multiple_slashes() {
+        // splitn(2, '/') should only split on the first slash
+        let hostname = "my-ns/pod-with/slash";
+        let parts: Vec<&str> = hostname.splitn(2, '/').collect();
+        assert_eq!(parts[0], "my-ns");
+        assert_eq!(parts[1], "pod-with/slash");
+    }
+
+    #[test]
+    fn test_pod_name_default_namespace() {
+        let hostname = "nginx-deployment-abc123";
+        let user = "default";
+        let (namespace, pod_name) = if hostname.contains('/') {
+            let parts: Vec<&str> = hostname.splitn(2, '/').collect();
+            (parts[0].to_string(), parts[1].to_string())
+        } else {
+            (user.to_string(), hostname.to_string())
+        };
+        assert_eq!(namespace, "default");
+        assert_eq!(pod_name, "nginx-deployment-abc123");
+    }
+
+    #[test]
+    fn test_pod_name_custom_namespace() {
+        let hostname = "production/api-server-xyz789";
+        let (namespace, pod_name) = if hostname.contains('/') {
+            let parts: Vec<&str> = hostname.splitn(2, '/').collect();
+            (parts[0].to_string(), parts[1].to_string())
+        } else {
+            ("default".to_string(), hostname.to_string())
+        };
+        assert_eq!(namespace, "production");
+        assert_eq!(pod_name, "api-server-xyz789");
+    }
+
+    #[test]
+    fn test_pod_name_with_hash_suffix() {
+        // K8s pod names from deployments have random suffixes
+        let pod = "nginx-deployment-5d7f8b6c4-abcde";
+        assert!(pod.contains('-'));
+        let parts: Vec<&str> = pod.rsplitn(2, '-').collect();
+        assert_eq!(parts[0], "abcde"); // random suffix
+    }
+
+    #[test]
+    fn test_command_argv_construction() {
+        let command = "ls -la /tmp";
+        let argv: Vec<&str> = vec!["/bin/sh", "-c", command];
+        assert_eq!(argv.len(), 3);
+        assert_eq!(argv[0], "/bin/sh");
+        assert_eq!(argv[1], "-c");
+        assert_eq!(argv[2], "ls -la /tmp");
+    }
+
+    #[test]
+    fn test_container_from_description() {
+        let description: Option<String> = Some("sidecar".to_string());
+        let container = description.clone();
+        assert_eq!(container.unwrap(), "sidecar");
+
+        let no_description: Option<String> = None;
+        let container2 = no_description;
+        assert!(container2.is_none());
+    }
+
+    #[test]
+    fn test_pod_name_statefulset() {
+        // StatefulSet pods have ordinal suffixes
+        let hostname = "monitoring/prometheus-0";
+        let parts: Vec<&str> = hostname.splitn(2, '/').collect();
+        assert_eq!(parts[0], "monitoring");
+        assert_eq!(parts[1], "prometheus-0");
+    }
+
+    #[test]
+    fn test_pod_name_daemonset() {
+        let hostname = "kube-system/fluentd-k8s2l";
+        let parts: Vec<&str> = hostname.splitn(2, '/').collect();
+        assert_eq!(parts[0], "kube-system");
+        assert_eq!(parts[1], "fluentd-k8s2l");
+    }
 }

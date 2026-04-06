@@ -1321,4 +1321,153 @@ mod tests {
             assert!(!output.contains(MARKER_PREFIX));
         }
     }
+
+    // ============== build_init_command Content Verification ==============
+
+    #[test]
+    fn test_build_init_command_posix_disables_all_prompts() {
+        let cmd = SessionManager::build_init_command(ShellType::Posix, "MARKER");
+        assert!(cmd.contains("PS1=''"));
+        assert!(cmd.contains("PS2=''"));
+        assert!(cmd.contains("PS3=''"));
+        assert!(cmd.contains("PS4=''"));
+        assert!(cmd.contains("unset PROMPT_COMMAND"));
+    }
+
+    #[test]
+    fn test_build_init_command_posix_ends_with_newline() {
+        let cmd = SessionManager::build_init_command(ShellType::Posix, "MARKER");
+        assert!(cmd.ends_with('\n'));
+    }
+
+    #[test]
+    fn test_build_init_command_cmd_uses_crlf() {
+        let cmd = SessionManager::build_init_command(ShellType::Cmd, "MARKER");
+        assert!(cmd.contains("\r\n"));
+    }
+
+    #[test]
+    fn test_build_init_command_powershell_disables_progress() {
+        let cmd = SessionManager::build_init_command(ShellType::PowerShell, "MARKER");
+        assert!(cmd.contains("$ProgressPreference='SilentlyContinue'"));
+    }
+
+    // ============== build_cwd_command Content Verification ==============
+
+    #[test]
+    fn test_build_cwd_command_posix_uses_echo() {
+        let cmd = SessionManager::build_cwd_command(ShellType::Posix, "MARKER");
+        assert!(cmd.contains("echo \"MARKER\""));
+    }
+
+    #[test]
+    fn test_build_cwd_command_powershell_uses_write_host() {
+        let cmd = SessionManager::build_cwd_command(ShellType::PowerShell, "MARKER");
+        assert!(cmd.contains("Write-Host 'MARKER'"));
+    }
+
+    // ============== build_exec_wrapper Content Verification ==============
+
+    #[test]
+    fn test_build_exec_wrapper_posix_captures_exit_code() {
+        let cmd = SessionManager::build_exec_wrapper(ShellType::Posix, "test_cmd", "B", "E");
+        // The wrapper should capture exit code before any other command
+        let rc_pos = cmd.find("__sshb_rc=$?").unwrap();
+        let begin_pos = cmd.find('B').unwrap();
+        assert!(rc_pos < begin_pos, "Exit code should be captured before begin marker");
+    }
+
+    #[test]
+    fn test_build_exec_wrapper_powershell_handles_null_lastexitcode() {
+        let cmd =
+            SessionManager::build_exec_wrapper(ShellType::PowerShell, "Write-Host hi", "B", "E");
+        // PowerShell should handle null $LASTEXITCODE (non-native commands)
+        assert!(cmd.contains("$null"));
+        assert!(cmd.contains("$__sshb_rc = 0"));
+    }
+
+    #[test]
+    fn test_build_exec_wrapper_cmd_captures_errorlevel() {
+        let cmd = SessionManager::build_exec_wrapper(ShellType::Cmd, "dir", "B", "E");
+        assert!(cmd.contains("echo %ERRORLEVEL%"));
+    }
+
+    #[test]
+    fn test_build_exec_wrapper_with_multiline_command() {
+        let cmd = SessionManager::build_exec_wrapper(
+            ShellType::Posix,
+            "echo line1\necho line2",
+            "BEGIN",
+            "END",
+        );
+        assert!(cmd.contains("echo line1\necho line2"));
+        assert!(cmd.contains("BEGIN"));
+        assert!(cmd.contains("END"));
+    }
+
+    #[test]
+    fn test_build_exec_wrapper_with_special_chars_in_command() {
+        let cmd = SessionManager::build_exec_wrapper(
+            ShellType::Posix,
+            "echo 'hello \"world\"' | grep -c hello",
+            "B",
+            "E",
+        );
+        assert!(cmd.contains("echo 'hello \"world\"' | grep -c hello"));
+    }
+
+    // ============== parse_exec_output with end_marker present ==============
+
+    #[test]
+    fn test_parse_exec_output_with_end_marker() {
+        let begin = "---SSHB_B_test---";
+        let end = "---SSHB_E_test---";
+        let raw = format!("output here\n{begin}\n0\n/home/user\n{end}\n");
+
+        let (output, exit_code, cwd) = SessionManager::parse_exec_output(&raw, begin);
+        assert_eq!(output, "output here");
+        assert_eq!(exit_code, 0);
+        assert_eq!(cwd, "/home/user");
+    }
+
+    #[test]
+    fn test_parse_exec_output_cwd_with_trailing_whitespace() {
+        let begin = "---SSHB_B_ws---";
+        let raw = format!("output\n{begin}\n0\n  /home/user  \n");
+
+        let (_, _, cwd) = SessionManager::parse_exec_output(&raw, begin);
+        assert_eq!(cwd, "/home/user");
+    }
+
+    // ============== SessionManager Config Interaction ==============
+
+    #[test]
+    fn test_session_config_idle_less_than_age() {
+        let config = SessionConfig {
+            max_sessions: 10,
+            idle_timeout_seconds: 300,
+            max_age_seconds: 3600,
+        };
+        // Sensible: idle timeout should be less than max age
+        assert!(config.idle_timeout_seconds < config.max_age_seconds);
+    }
+
+    #[tokio::test]
+    async fn test_manager_get_session_host_returns_none_for_empty_manager() {
+        let manager = SessionManager::new(SessionConfig::default());
+        let host = manager.get_session_host("any-id").await;
+        assert!(host.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_manager_exec_returns_session_not_found() {
+        let manager = SessionManager::new(SessionConfig::default());
+        let err = manager.exec("missing-id", "ls", 30).await.unwrap_err();
+        match err {
+            BridgeError::SessionNotFound { session_id } => {
+                assert_eq!(session_id, "missing-id");
+            }
+            other => panic!("Expected SessionNotFound, got: {other:?}"),
+        }
+    }
 }

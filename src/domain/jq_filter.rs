@@ -221,7 +221,10 @@ mod tests {
         let result = apply_jq_filter(input, "[.items[:2][] | {name}]").unwrap();
         assert!(result.contains(r#""a""#), "got: {result}");
         assert!(result.contains(r#""b""#), "got: {result}");
-        assert!(!result.contains(r#""c""#), "should not contain c, got: {result}");
+        assert!(
+            !result.contains(r#""c""#),
+            "should not contain c, got: {result}"
+        );
     }
 
     #[test]
@@ -229,7 +232,7 @@ mod tests {
         let input = r#"{"items":[{"metadata":{"name":"pod1","namespace":"ns1"},"status":{"phase":"Running"}}]}"#;
         let result = apply_jq_filter(
             input,
-            r#"[.items[] | {name: .metadata.name, ns: .metadata.namespace, phase: .status.phase}]"#,
+            r"[.items[] | {name: .metadata.name, ns: .metadata.namespace, phase: .status.phase}]",
         )
         .unwrap();
         assert!(result.contains("pod1"), "got: {result}");

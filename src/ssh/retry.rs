@@ -744,4 +744,162 @@ mod tests {
             );
         }
     }
+
+    // ============== RetryConfig Edge Cases ==============
+
+    #[test]
+    fn test_retry_config_backoff_multiplier_one() {
+        // With multiplier 1.0, delay should be constant (no exponential growth)
+        let config = RetryConfig {
+            initial_delay_ms: 200,
+            max_delay_ms: 5000,
+            backoff_multiplier: 1.0,
+            jitter: 0.0,
+            ..Default::default()
+        };
+
+        assert_eq!(config.delay_for_attempt(1), Duration::from_millis(200));
+        assert_eq!(config.delay_for_attempt(2), Duration::from_millis(200));
+        assert_eq!(config.delay_for_attempt(5), Duration::from_millis(200));
+    }
+
+    #[test]
+    fn test_retry_config_zero_initial_delay() {
+        let config = RetryConfig {
+            initial_delay_ms: 0,
+            max_delay_ms: 5000,
+            backoff_multiplier: 2.0,
+            jitter: 0.0,
+            ..Default::default()
+        };
+
+        // All delays should be zero since 0 * anything = 0
+        assert_eq!(config.delay_for_attempt(0), Duration::ZERO);
+        assert_eq!(config.delay_for_attempt(1), Duration::ZERO);
+        assert_eq!(config.delay_for_attempt(5), Duration::ZERO);
+    }
+
+    #[test]
+    fn test_retry_config_max_delay_less_than_initial() {
+        let config = RetryConfig {
+            initial_delay_ms: 1000,
+            max_delay_ms: 100, // Max is less than initial
+            backoff_multiplier: 2.0,
+            jitter: 0.0,
+            ..Default::default()
+        };
+
+        // Should be capped at max_delay_ms
+        assert_eq!(config.delay_for_attempt(1), Duration::from_millis(100));
+    }
+
+    #[test]
+    fn test_retry_config_fractional_multiplier() {
+        let config = RetryConfig {
+            initial_delay_ms: 1000,
+            max_delay_ms: 5000,
+            backoff_multiplier: 0.5, // Decreasing backoff
+            jitter: 0.0,
+            ..Default::default()
+        };
+
+        // With 0.5 multiplier, delays decrease: 1000, 500, 250, ...
+        assert_eq!(config.delay_for_attempt(1), Duration::from_millis(1000));
+        assert_eq!(config.delay_for_attempt(2), Duration::from_millis(500));
+        assert_eq!(config.delay_for_attempt(3), Duration::from_millis(250));
+    }
+
+    #[test]
+    fn test_retry_config_with_max_attempts_zero() {
+        let config = RetryConfig::with_max_attempts(0);
+        assert_eq!(config.max_attempts, 0);
+    }
+
+    #[test]
+    fn test_retry_config_with_max_attempts_one() {
+        let config = RetryConfig::with_max_attempts(1);
+        assert_eq!(config.max_attempts, 1);
+        // Should be equivalent to no_retry
+        assert_eq!(config.max_attempts, RetryConfig::no_retry().max_attempts);
+    }
+
+    #[test]
+    fn test_retry_config_default_jitter_value() {
+        let config = RetryConfig::default();
+        assert!((config.jitter - 0.1).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_retry_config_default_max_delay() {
+        let config = RetryConfig::default();
+        assert_eq!(config.max_delay_ms, 5000);
+    }
+
+    // ============== is_retryable_error Additional Tests ==============
+
+    #[test]
+    fn test_is_retryable_ssh_connection_empty_reason() {
+        assert!(is_retryable_error(&BridgeError::SshConnection {
+            host: "h".to_string(),
+            reason: String::new(),
+        }));
+    }
+
+    #[test]
+    fn test_is_retryable_ssh_timeout_zero() {
+        assert!(is_retryable_error(&BridgeError::SshTimeout { seconds: 0 }));
+    }
+
+    #[test]
+    fn test_is_retryable_ssh_exec_both_keywords() {
+        // Contains both "channel" and "connection"
+        assert!(is_retryable_error(&BridgeError::SshExec {
+            reason: "channel connection reset".to_string(),
+        }));
+    }
+
+    #[test]
+    fn test_not_retryable_config_error() {
+        assert!(!is_retryable_error(&BridgeError::Config(
+            "bad config".to_string(),
+        )));
+    }
+
+    #[tokio::test]
+    async fn test_with_retry_if_all_attempts_fail_matching_predicate() {
+        let config = RetryConfig {
+            max_attempts: 3,
+            initial_delay_ms: 1,
+            jitter: 0.0,
+            ..Default::default()
+        };
+        let mut call_count = 0;
+
+        let result: Result<i32, String> = with_retry_if(
+            &config,
+            "test",
+            || {
+                call_count += 1;
+                async { Err("retryable error".to_string()) }
+            },
+            |e| e.contains("retryable"),
+        )
+        .await;
+
+        assert!(result.is_err());
+        // Last attempt fails without retry check, so all 3 attempts are made
+        assert_eq!(call_count, 3);
+    }
+
+    // ============== rand_simple Tests ==============
+
+    #[test]
+    fn test_rand_simple_produces_values_in_range() {
+        // Call rand_simple multiple times and verify it produces values in [0, 1)
+        for _ in 0..100 {
+            let val = rand_simple();
+            assert!(val >= 0.0, "rand_simple produced negative value: {val}");
+            assert!(val < 1.0, "rand_simple produced value >= 1.0: {val}");
+        }
+    }
 }

@@ -333,4 +333,65 @@ mod tests {
         let mode = HostKeyVerification::Off;
         assert_eq!(mode, HostKeyVerification::Off);
     }
+
+    // ============== VerifyResult Exhaustive Pattern Tests ==============
+
+    #[test]
+    fn test_verify_result_all_variants_debug_unique() {
+        let variants = vec![
+            format!("{:?}", VerifyResult::Match),
+            format!("{:?}", VerifyResult::Unknown),
+            format!("{:?}", VerifyResult::Mismatch { line: 0 }),
+        ];
+        // All debug strings should be unique
+        for (i, a) in variants.iter().enumerate() {
+            for (j, b) in variants.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b, "Debug strings for variants {i} and {j} should differ");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_verify_result_mismatch_line_max() {
+        let result = VerifyResult::Mismatch { line: usize::MAX };
+        if let VerifyResult::Mismatch { line } = result {
+            assert_eq!(line, usize::MAX);
+        }
+    }
+
+    #[test]
+    fn test_verify_result_clone_independence() {
+        let original = VerifyResult::Mismatch { line: 42 };
+        let mut cloned = original.clone();
+        // Modify the clone via pattern matching
+        if let VerifyResult::Mismatch { ref mut line } = cloned {
+            *line = 99;
+        }
+        // Original should be unchanged
+        assert_eq!(original, VerifyResult::Mismatch { line: 42 });
+        assert_eq!(cloned, VerifyResult::Mismatch { line: 99 });
+    }
+
+    // ============== HostKeyVerification Security Properties ==============
+
+    #[test]
+    fn test_host_key_verification_clone() {
+        let mode = HostKeyVerification::Strict;
+        let cloned = mode;
+        assert_eq!(mode, cloned);
+    }
+
+    #[test]
+    fn test_host_key_verification_debug() {
+        let debug = format!("{:?}", HostKeyVerification::Strict);
+        assert!(debug.contains("Strict"));
+
+        let debug = format!("{:?}", HostKeyVerification::AcceptNew);
+        assert!(debug.contains("AcceptNew"));
+
+        let debug = format!("{:?}", HostKeyVerification::Off);
+        assert!(debug.contains("Off"));
+    }
 }

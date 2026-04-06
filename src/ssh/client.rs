@@ -1509,4 +1509,87 @@ mod tests {
 
         assert!(output.stdout.contains('\r'));
     }
+
+    // ============== sanitize_ssh_error Comprehensive Tests ==============
+
+    #[test]
+    fn test_sanitize_ssh_error_masks_gssapi() {
+        let error = "auth failed: gssapi-with-mic not supported";
+        let sanitized = sanitize_ssh_error(&error);
+        assert!(
+            !sanitized.contains("gssapi-with-mic"),
+            "gssapi-with-mic should be masked"
+        );
+        assert!(sanitized.contains("***"));
+    }
+
+    #[test]
+    fn test_sanitize_ssh_error_masks_all_methods_simultaneously() {
+        let error = "tried publickey, keyboard-interactive, gssapi-with-mic";
+        let sanitized = sanitize_ssh_error(&error);
+        assert!(!sanitized.contains("publickey"));
+        assert!(!sanitized.contains("keyboard-interactive"));
+        assert!(!sanitized.contains("gssapi-with-mic"));
+        // Should contain three masked markers
+        assert_eq!(sanitized.matches("***").count(), 3);
+    }
+
+    #[test]
+    fn test_sanitize_ssh_error_exact_500_boundary() {
+        // Exactly 500 chars should NOT be truncated
+        let error = "x".repeat(500);
+        let sanitized = sanitize_ssh_error(&error);
+        assert_eq!(sanitized.len(), 500);
+        assert!(!sanitized.contains("(truncated)"));
+    }
+
+    #[test]
+    fn test_sanitize_ssh_error_501_chars_truncated() {
+        let error = "x".repeat(501);
+        let sanitized = sanitize_ssh_error(&error);
+        assert!(sanitized.contains("(truncated)"));
+        // The truncated output should be: 500 chars + "... (truncated)"
+        assert!(sanitized.starts_with(&"x".repeat(500)));
+    }
+
+    #[test]
+    fn test_sanitize_ssh_error_empty_message() {
+        let error = "";
+        let sanitized = sanitize_ssh_error(&error);
+        assert_eq!(sanitized, "");
+    }
+
+    #[test]
+    fn test_sanitize_ssh_error_password_not_explicitly_masked() {
+        // "password" is not in the masking list (only auth method names)
+        let error = "password authentication failed";
+        let sanitized = sanitize_ssh_error(&error);
+        assert_eq!(sanitized, "password authentication failed");
+    }
+
+    #[test]
+    fn test_sanitize_ssh_error_preserves_non_sensitive_info() {
+        let error = "Connection refused by 192.168.1.1:22";
+        let sanitized = sanitize_ssh_error(&error);
+        assert_eq!(sanitized, "Connection refused by 192.168.1.1:22");
+    }
+
+    #[test]
+    fn test_sanitize_ssh_error_with_custom_display_type() {
+        // Test with a type that implements Display (not just &str)
+        let error = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused");
+        let sanitized = sanitize_ssh_error(&error);
+        assert!(sanitized.contains("refused"));
+    }
+
+    #[test]
+    fn test_sanitize_ssh_error_truncation_with_auth_methods() {
+        // Long message that also contains auth methods
+        let prefix = "publickey failed: ";
+        let padding = "y".repeat(600);
+        let error = format!("{prefix}{padding}");
+        let sanitized = sanitize_ssh_error(&error);
+        assert!(!sanitized.contains("publickey"));
+        assert!(sanitized.contains("(truncated)"));
+    }
 }

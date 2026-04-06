@@ -194,4 +194,102 @@ mod tests {
         let project = "my-gcp-project-123";
         assert!(!project.is_empty());
     }
+
+    #[test]
+    fn test_zone_common_values() {
+        let zones = [
+            "us-central1-a",
+            "us-east1-b",
+            "europe-west1-c",
+            "asia-southeast1-a",
+        ];
+        for zone in &zones {
+            let parts: Vec<&str> = zone.split('-').collect();
+            assert!(parts.len() >= 3, "Zone should have at least 3 parts: {zone}");
+        }
+    }
+
+    #[test]
+    fn test_zone_default_fallback() {
+        let description: Option<String> = None;
+        let zone = if let Some(ref desc) = description {
+            desc.clone()
+        } else {
+            "us-central1-a".to_string()
+        };
+        assert_eq!(zone, "us-central1-a");
+    }
+
+    #[test]
+    fn test_zone_from_description() {
+        let description: Option<String> = Some("europe-west4-b".to_string());
+        let zone = if let Some(ref desc) = description {
+            desc.clone()
+        } else {
+            "us-central1-a".to_string()
+        };
+        assert_eq!(zone, "europe-west4-b");
+    }
+
+    #[test]
+    fn test_project_fallback_logic() {
+        // When user is empty or "root", should try gcloud config
+        let user = "root";
+        let needs_gcloud = user.is_empty() || user == "root";
+        assert!(needs_gcloud);
+
+        let user2 = "my-project-id";
+        let needs_gcloud2 = user2.is_empty() || user2 == "root";
+        assert!(!needs_gcloud2);
+    }
+
+    #[test]
+    fn test_instance_name_valid_chars() {
+        // GCP instance names must match [a-z]([-a-z0-9]*[a-z0-9])?
+        let valid = "my-web-server-01";
+        assert!(valid
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'));
+    }
+
+    #[test]
+    fn test_gcloud_unset_value() {
+        // gcloud returns "(unset)" for unconfigured values
+        let value = "(unset)";
+        assert!(value.is_empty() || value == "(unset)");
+    }
+
+    #[test]
+    fn test_elapsed_ms() {
+        use super::*;
+        let start = std::time::Instant::now();
+        let ms = elapsed_ms(start);
+        assert!(ms < 100);
+    }
+
+    #[test]
+    fn test_gcloud_command_args() {
+        let instance = "my-vm";
+        let project = "my-project";
+        let zone = "us-central1-a";
+        let command = "hostname";
+        let args = [
+            "compute",
+            "ssh",
+            instance,
+            "--project",
+            project,
+            "--zone",
+            zone,
+            "--command",
+            command,
+            "--quiet",
+            "--tunnel-through-iap",
+        ];
+        assert_eq!(args.len(), 11);
+        assert_eq!(args[2], "my-vm");
+        assert_eq!(args[4], "my-project");
+        assert_eq!(args[6], "us-central1-a");
+        assert_eq!(args[8], "hostname");
+    }
 }

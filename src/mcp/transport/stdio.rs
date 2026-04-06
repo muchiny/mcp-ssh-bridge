@@ -88,3 +88,138 @@ impl Transport for StdioTransport {
         // Stdio doesn't need explicit shutdown
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stdio_transport_default() {
+        // Default trait implementation should work
+        let _transport = StdioTransport::default();
+    }
+
+    #[test]
+    fn test_stdio_transport_new() {
+        let _transport = StdioTransport::new();
+    }
+
+    #[test]
+    fn test_parse_incoming_single_request() {
+        let input = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
+        let result = McpServer::parse_incoming(input);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            IncomingMessage::Single(msg) => {
+                assert_eq!(msg.method.as_deref(), Some("initialize"));
+                assert_eq!(msg.id, Some(serde_json::json!(1)));
+            }
+            IncomingMessage::Batch(_) => panic!("Expected Single, got Batch"),
+        }
+    }
+
+    #[test]
+    fn test_parse_incoming_batch() {
+        let input = r#"[{"jsonrpc":"2.0","id":1,"method":"tools/list"},{"jsonrpc":"2.0","id":2,"method":"resources/list"}]"#;
+        let result = McpServer::parse_incoming(input);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            IncomingMessage::Batch(msgs) => {
+                assert_eq!(msgs.len(), 2);
+                assert_eq!(msgs[0].method.as_deref(), Some("tools/list"));
+                assert_eq!(msgs[1].method.as_deref(), Some("resources/list"));
+            }
+            IncomingMessage::Single(_) => panic!("Expected Batch, got Single"),
+        }
+    }
+
+    #[test]
+    fn test_parse_incoming_notification() {
+        let input = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
+        let result = McpServer::parse_incoming(input);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            IncomingMessage::Single(msg) => {
+                assert_eq!(msg.method.as_deref(), Some("notifications/initialized"));
+                assert!(msg.id.is_none());
+            }
+            IncomingMessage::Batch(_) => panic!("Expected Single, got Batch"),
+        }
+    }
+
+    #[test]
+    fn test_parse_incoming_invalid_json() {
+        let input = "not valid json{{{";
+        let result = McpServer::parse_incoming(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_incoming_empty_string() {
+        let input = "";
+        let result = McpServer::parse_incoming(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_incoming_empty_batch() {
+        let input = "[]";
+        let result = McpServer::parse_incoming(input);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            IncomingMessage::Batch(msgs) => assert!(msgs.is_empty()),
+            IncomingMessage::Single(_) => panic!("Expected Batch, got Single"),
+        }
+    }
+
+    #[test]
+    fn test_parse_incoming_with_leading_whitespace() {
+        let input = "   {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}";
+        let result = McpServer::parse_incoming(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_incoming_response_no_method() {
+        let input = r#"{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}"#;
+        let result = McpServer::parse_incoming(input);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            IncomingMessage::Single(msg) => {
+                assert!(msg.method.is_none());
+                assert_eq!(msg.id, Some(serde_json::json!(1)));
+            }
+            IncomingMessage::Batch(_) => panic!("Expected Single, got Batch"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_stdio_transport_shutdown() {
+        let transport = StdioTransport::new();
+        // Shutdown should be a no-op and not panic
+        transport.shutdown().await;
+    }
+
+    #[test]
+    fn test_writer_message_serialization() {
+        use crate::mcp::protocol::{JsonRpcResponse, WriterMessage};
+
+        let response = JsonRpcResponse {
+            jsonrpc: "2.0".to_string(),
+            id: Some(serde_json::json!(1)),
+            result: Some(serde_json::json!({"tools": []})),
+            error: None,
+        };
+        let msg = WriterMessage::Response(Box::new(response));
+
+        // Verify serialization works (used by send())
+        let json_str = match &msg {
+            WriterMessage::Response(r) => serde_json::to_string(r),
+            _ => unreachable!(),
+        };
+        assert!(json_str.is_ok());
+        let s = json_str.unwrap();
+        assert!(s.contains("\"jsonrpc\":\"2.0\""));
+        assert!(s.contains("\"id\":1"));
+    }
+}

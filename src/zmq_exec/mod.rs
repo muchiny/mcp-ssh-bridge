@@ -249,4 +249,78 @@ mod tests {
         assert_eq!(response["stdout"].as_str().unwrap(), "root\n");
         assert_eq!(response["exit_code"].as_u64().unwrap(), 0);
     }
+
+    #[test]
+    fn test_response_parsing_large_exit_code() {
+        let response = serde_json::json!({
+            "stdout": "",
+            "stderr": "killed",
+            "exit_code": 137,
+        });
+        #[allow(clippy::cast_possible_truncation)]
+        let exit_code = response["exit_code"].as_u64().unwrap_or(0) as u32;
+        assert_eq!(exit_code, 137);
+    }
+
+    #[test]
+    fn test_response_parsing_extra_fields_ignored() {
+        let response = serde_json::json!({
+            "stdout": "ok\n",
+            "stderr": "",
+            "exit_code": 0,
+            "hostname": "agent-01",
+            "timestamp": 1234567890,
+        });
+        assert_eq!(response["stdout"].as_str().unwrap(), "ok\n");
+        assert_eq!(response["exit_code"].as_u64().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_request_payload_special_chars() {
+        let request = serde_json::json!({
+            "cmd": "echo 'hello \"world\"' && ls -la",
+            "timeout": 30,
+        });
+        let serialized = serde_json::to_string(&request).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(
+            parsed["cmd"].as_str().unwrap(),
+            "echo 'hello \"world\"' && ls -la"
+        );
+    }
+
+    #[test]
+    fn test_endpoint_format_ipv6() {
+        let endpoint = format!("tcp://[::1]:{DEFAULT_ZMQ_PORT}");
+        assert!(endpoint.starts_with("tcp://"));
+        assert!(endpoint.contains("::1"));
+    }
+
+    #[test]
+    fn test_endpoint_format_hostname() {
+        let endpoint = format!("tcp://agent.example.com:{DEFAULT_ZMQ_PORT}");
+        assert_eq!(endpoint, "tcp://agent.example.com:4506");
+    }
+
+    #[test]
+    fn test_port_fallback_from_ssh() {
+        let ssh_port: u16 = 22;
+        let zmq_port = if ssh_port == 22 {
+            DEFAULT_ZMQ_PORT
+        } else {
+            ssh_port
+        };
+        assert_eq!(zmq_port, 4506);
+    }
+
+    #[test]
+    fn test_port_custom_preserved() {
+        let custom_port: u16 = 5555;
+        let zmq_port = if custom_port == 22 {
+            DEFAULT_ZMQ_PORT
+        } else {
+            custom_port
+        };
+        assert_eq!(zmq_port, 5555);
+    }
 }

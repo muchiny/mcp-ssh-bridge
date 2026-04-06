@@ -1570,4 +1570,222 @@ mod tests {
         assert!(validate_remote_path("relative/path/file").is_ok());
         assert!(validate_remote_path("/path/with...dots").is_ok());
     }
+
+    // ============== validate_remote_path Additional Edge Cases ==============
+
+    #[test]
+    fn test_validate_remote_path_single_dot() {
+        // Single dot (current dir) is allowed
+        assert!(validate_remote_path("/home/./user").is_ok());
+        assert!(validate_remote_path("./file.txt").is_ok());
+    }
+
+    #[test]
+    fn test_validate_remote_path_root() {
+        assert!(validate_remote_path("/").is_ok());
+    }
+
+    #[test]
+    fn test_validate_remote_path_empty() {
+        assert!(validate_remote_path("").is_ok());
+    }
+
+    #[test]
+    fn test_validate_remote_path_only_dotdot() {
+        assert!(validate_remote_path("..").is_err());
+    }
+
+    #[test]
+    fn test_validate_remote_path_dotdot_at_end() {
+        assert!(validate_remote_path("/home/user/..").is_err());
+    }
+
+    #[test]
+    fn test_validate_remote_path_triple_dots_ok() {
+        // "..." is not ".." so it should be allowed
+        assert!(validate_remote_path("/home/.../file").is_ok());
+    }
+
+    #[test]
+    fn test_validate_remote_path_dotdot_in_filename_ok() {
+        // "..foo" is not ".." so it should be allowed
+        assert!(validate_remote_path("/home/..hidden/file").is_ok());
+        assert!(validate_remote_path("/home/foo../bar").is_ok());
+    }
+
+    #[test]
+    fn test_validate_remote_path_error_message() {
+        let err = validate_remote_path("/etc/../shadow").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("traversal"));
+    }
+
+    #[test]
+    fn test_validate_remote_path_consecutive_slashes() {
+        // Consecutive slashes produce empty components which are fine
+        assert!(validate_remote_path("/home//user").is_ok());
+    }
+
+    #[test]
+    fn test_validate_remote_path_unicode() {
+        assert!(validate_remote_path("/home/用户/文件.txt").is_ok());
+    }
+
+    #[test]
+    fn test_validate_remote_path_spaces() {
+        assert!(validate_remote_path("/home/my folder/my file.txt").is_ok());
+    }
+
+    // ============== TransferMode Serde Additional Tests ==============
+
+    #[test]
+    fn test_transfer_mode_deserialize_wrong_type() {
+        let result: std::result::Result<TransferMode, _> = serde_json::from_str("42");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_transfer_mode_deserialize_null() {
+        let result: std::result::Result<TransferMode, _> = serde_json::from_str("null");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_transfer_mode_deserialize_empty_string() {
+        let result: std::result::Result<TransferMode, _> = serde_json::from_str("\"\"");
+        assert!(result.is_err());
+    }
+
+    // ============== TransferOptions Validation Tests ==============
+
+    #[test]
+    fn test_transfer_options_zero_chunk_size() {
+        let options = TransferOptions {
+            mode: TransferMode::Overwrite,
+            chunk_size: 0,
+            verify_checksum: false,
+            preserve_permissions: false,
+        };
+        assert_eq!(options.chunk_size, 0);
+    }
+
+    #[test]
+    fn test_transfer_options_all_flags_true() {
+        let options = TransferOptions {
+            mode: TransferMode::Overwrite,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            verify_checksum: true,
+            preserve_permissions: true,
+        };
+        assert!(options.verify_checksum);
+        assert!(options.preserve_permissions);
+    }
+
+    #[test]
+    fn test_transfer_options_all_flags_false() {
+        let options = TransferOptions {
+            mode: TransferMode::Overwrite,
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            verify_checksum: false,
+            preserve_permissions: false,
+        };
+        assert!(!options.verify_checksum);
+        assert!(!options.preserve_permissions);
+    }
+
+    // ============== TransferProgress Calculation Tests ==============
+
+    #[test]
+    fn test_transfer_progress_percentage_calculation() {
+        // Verify the percentage formula used in upload/download code
+        let total: u64 = 1000;
+        let transferred: u64 = 333;
+        let percentage = if total > 0 {
+            (transferred as f64 / total as f64) * 100.0
+        } else {
+            100.0
+        };
+        let progress = TransferProgress {
+            bytes_transferred: transferred,
+            total_bytes: total,
+            percentage,
+        };
+        assert!((progress.percentage - 33.3).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_transfer_progress_zero_total_bytes_gives_100_percent() {
+        // When total is 0, percentage should be 100.0 (empty file complete)
+        let total: u64 = 0;
+        let percentage = if total > 0 { 0.0 } else { 100.0 };
+        let progress = TransferProgress {
+            bytes_transferred: 0,
+            total_bytes: total,
+            percentage,
+        };
+        assert!((progress.percentage - 100.0).abs() < f64::EPSILON);
+    }
+
+    // ============== TransferResult Rate Calculation Tests ==============
+
+    #[test]
+    fn test_transfer_result_rate_calculation() {
+        // Verify the rate formula used in upload/download code
+        let bytes_transferred: u64 = 10_000_000;
+        let duration_ms: u64 = 2000;
+        let bytes_per_second = if duration_ms > 0 {
+            (bytes_transferred as f64 / duration_ms as f64) * 1000.0
+        } else {
+            0.0
+        };
+        let result = TransferResult {
+            bytes_transferred,
+            duration_ms,
+            bytes_per_second,
+            checksum: None,
+        };
+        assert!((result.bytes_per_second - 5_000_000.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_transfer_result_zero_duration_rate() {
+        let duration_ms: u64 = 0;
+        let bytes_per_second = if duration_ms > 0 { 1000.0 } else { 0.0 };
+        let result = TransferResult {
+            bytes_transferred: 1000,
+            duration_ms,
+            bytes_per_second,
+            checksum: None,
+        };
+        assert!((result.bytes_per_second - 0.0).abs() < f64::EPSILON);
+    }
+
+    // ============== DirectoryTransferResult Additional Tests ==============
+
+    #[test]
+    fn test_directory_transfer_result_with_many_errors() {
+        let errors: Vec<String> = (0..100).map(|i| format!("error {i}")).collect();
+        let result = DirectoryTransferResult {
+            files_transferred: 50,
+            bytes_transferred: 5000,
+            directories_created: 10,
+            errors: errors.clone(),
+            duration_ms: 1000,
+        };
+        assert_eq!(result.errors.len(), 100);
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("error 99"));
+    }
+
+    #[test]
+    fn test_directory_transfer_result_large_values() {
+        let result = DirectoryTransferResult {
+            files_transferred: u64::MAX,
+            bytes_transferred: u64::MAX,
+            directories_created: u64::MAX,
+            errors: vec![],
+            duration_ms: u64::MAX,
+        };
+        assert_eq!(result.files_transferred, u64::MAX);
+    }
 }

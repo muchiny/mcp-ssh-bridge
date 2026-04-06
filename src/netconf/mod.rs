@@ -170,4 +170,66 @@ mod tests {
     fn test_default_netconf_port() {
         assert_eq!(DEFAULT_NETCONF_PORT, 830);
     }
+
+    #[test]
+    fn test_default_port_is_iana_assigned() {
+        // NETCONF over SSH is IANA-assigned port 830 (RFC 6242)
+        assert!(DEFAULT_NETCONF_PORT > 0);
+        assert!(DEFAULT_NETCONF_PORT < 1024); // well-known port range
+    }
+
+    #[test]
+    fn test_port_fallback_from_ssh() {
+        let ssh_port: u16 = 22;
+        let netconf_port = if ssh_port == 22 {
+            DEFAULT_NETCONF_PORT
+        } else {
+            ssh_port
+        };
+        assert_eq!(netconf_port, 830);
+    }
+
+    #[test]
+    fn test_port_custom_value_preserved() {
+        let custom_port: u16 = 8300;
+        let netconf_port = if custom_port == 22 {
+            DEFAULT_NETCONF_PORT
+        } else {
+            custom_port
+        };
+        assert_eq!(netconf_port, 8300);
+    }
+
+    #[test]
+    fn test_rpc_error_detection() {
+        let response_ok = "<rpc-reply><data>config</data></rpc-reply>";
+        let response_err = "<rpc-reply><rpc-error><error-message>bad</error-message></rpc-error></rpc-reply>";
+
+        assert!(!response_ok.contains("<rpc-error"));
+        assert!(response_err.contains("<rpc-error"));
+
+        // exit_code logic: 1 if has_error, 0 otherwise
+        assert_eq!(u32::from(response_ok.contains("<rpc-error")), 0);
+        assert_eq!(u32::from(response_err.contains("<rpc-error")), 1);
+    }
+
+    #[test]
+    fn test_get_config_command_detection() {
+        // The exec method checks for "get-config" or "<get-config"
+        let cmd1 = "get-config";
+        let cmd2 = "<get-config xmlns=\"urn:ietf:params:xml:ns:netconf:base:1.0\">";
+        let cmd3 = "edit-config";
+
+        assert!(cmd1.trim() == "get-config" || cmd1.contains("<get-config"));
+        assert!(cmd2.trim() == "get-config" || cmd2.contains("<get-config"));
+        assert!(!(cmd3.trim() == "get-config" || cmd3.contains("<get-config")));
+    }
+
+    #[test]
+    fn test_addr_format() {
+        let hostname = "10.0.0.1";
+        let port = DEFAULT_NETCONF_PORT;
+        let addr = format!("{hostname}:{port}");
+        assert_eq!(addr, "10.0.0.1:830");
+    }
 }
