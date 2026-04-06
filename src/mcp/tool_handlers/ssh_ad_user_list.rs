@@ -63,7 +63,8 @@ impl StandardTool for AdUserListTool {
     }"#;
 
     const OS_GUARD: Option<OsType> = Some(OsType::Windows);
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind = crate::domain::output_kind::OutputKind::Auto;
+    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+        crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshAdUserListArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(ActiveDirectoryCommandBuilder::build_user_list_command(
@@ -216,5 +217,89 @@ mod tests {
             BridgeError::McpInvalidRequest(_) => {}
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
+    }
+
+    fn test_host_config() -> crate::config::HostConfig {
+        crate::config::HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: crate::config::HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::Windows,
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshAdUserListArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let host = test_host_config();
+        let cmd = AdUserListTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+    }
+
+    #[test]
+    fn test_post_process_with_output() {
+        let result = crate::ports::protocol::ToolCallResult::text("raw");
+        let args: SshAdUserListArgs = serde_json::from_value(json!({"host": "s"})).unwrap();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let output = "Col1\tCol2\nval1\tval2\n";
+        let result = AdUserListTool::post_process(result, &args, output, &dr);
+        assert!(!result.content.is_empty());
+    }
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn win_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert(
+            "winhost".to_string(),
+            HostConfig {
+                hostname: "10.0.0.1".to_string(),
+                port: 22,
+                user: "admin".to_string(),
+                auth: AuthConfig::Agent,
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: OsType::Windows,
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
+        hosts
+    }
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshAdUserListHandler::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            win_hosts(),
+            mock_output("mock-output-ok"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "winhost"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
     }
 }

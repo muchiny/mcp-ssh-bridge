@@ -161,4 +161,79 @@ mod tests {
         let result = serde_json::from_value::<SshIisStopArgs>(json);
         assert!(result.is_err());
     }
+
+    fn test_host_config() -> crate::config::HostConfig {
+        crate::config::HostConfig {
+            hostname: "test".to_string(),
+            port: 22,
+            user: "test".to_string(),
+            auth: crate::config::AuthConfig::Agent,
+            description: None,
+            host_key_verification: crate::config::HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: crate::config::OsType::Windows,
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+        }
+    }
+
+    #[test]
+    fn test_build_command_defaults() {
+        let args: SshIisStopArgs =
+            serde_json::from_value(json!({"host": "s", "name": "Default Web Site"})).unwrap();
+        let host = test_host_config();
+        let cmd = IisStopTool::build_command(&args, &host).unwrap();
+        assert!(!cmd.is_empty());
+    }
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn win_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert(
+            "winhost".to_string(),
+            HostConfig {
+                hostname: "10.0.0.1".to_string(),
+                port: 22,
+                user: "admin".to_string(),
+                auth: AuthConfig::Agent,
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: OsType::Windows,
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
+        hosts
+    }
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = SshIisStopHandler::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            win_hosts(),
+            mock_output("mock-output-ok"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "winhost", "name": "Default Web Site"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+    }
 }
