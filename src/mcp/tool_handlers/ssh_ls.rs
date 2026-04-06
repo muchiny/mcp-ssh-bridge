@@ -337,4 +337,8 @@ mod tests {
         assert!(properties.contains_key("include_hidden"));
         assert!(properties.contains_key("sort_by"));
     }
+
+    // Note: ssh_ls uses SFTP directly (not SSH exec), so it cannot be tested
+    // with the mock executor infrastructure. The mock executor only stubs
+    // command execution, not SFTP sessions.
 }
