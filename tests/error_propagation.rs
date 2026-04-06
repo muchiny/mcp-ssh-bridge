@@ -55,6 +55,7 @@ fn create_config_with_host() -> Config {
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
         rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
+        awx: None,
     }
 }
 
@@ -333,6 +334,7 @@ async fn test_ssh_status_with_no_hosts_returns_content() {
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
         rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
+        awx: None,
     };
     let registry = create_filtered_registry(&config.tool_groups);
     let ctx = create_tool_context(&config);

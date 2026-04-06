@@ -292,6 +292,7 @@ fn test_every_tool_maps_to_a_known_group() {
         "apache",
         "letsencrypt",
         "mongodb",
+        "awx",
     ];
 
     for tool in &tools {

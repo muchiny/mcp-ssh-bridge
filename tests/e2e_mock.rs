@@ -131,6 +131,7 @@ fn build_ctx_with_mode(
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
         rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
+        awx: None,
     };
 
     let validator = Arc::new(CommandValidator::new(&config.security));

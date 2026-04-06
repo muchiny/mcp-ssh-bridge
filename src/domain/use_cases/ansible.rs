@@ -24,6 +24,11 @@ fn write_verbose_flags(cmd: &mut String, level: u8) {
     }
 }
 
+/// Allowed Ansible stdout callback plugins (whitelist for injection prevention).
+const ALLOWED_CALLBACKS: &[&str] = &[
+    "json", "yaml", "dense", "minimal", "tree", "default", "oneline", "debug", "null",
+];
+
 /// Builds Ansible CLI commands for remote execution.
 pub struct AnsibleCommandBuilder;
 
@@ -31,7 +36,8 @@ impl AnsibleCommandBuilder {
     /// Build an `ansible-playbook` command.
     ///
     /// Constructs a shell command string like:
-    /// `[cd {working_dir} && ] ansible-playbook {playbook} [-i {inventory}]
+    /// `[ANSIBLE_STDOUT_CALLBACK={callback} ][cd {working_dir} && ]
+    /// ansible-playbook {playbook} [-i {inventory}]
     /// [--limit {limit}] [--tags {tags}] [--skip-tags {skip}]
     /// [-e key=value ...] [--check] [--diff] [-v..vvvv] [-f {forks}]
     /// [-b] [--become-user {user}]`
@@ -51,8 +57,13 @@ impl AnsibleCommandBuilder {
         use_become: bool,
         become_user: Option<&str>,
         working_dir: Option<&str>,
+        callback: Option<&str>,
     ) -> String {
         let mut cmd = String::new();
+
+        if let Some(cb) = callback {
+            let _ = write!(cmd, "ANSIBLE_STDOUT_CALLBACK={} ", shell_escape(cb));
+        }
 
         if let Some(dir) = working_dir {
             let _ = write!(cmd, "cd {} && ", shell_escape(dir));
@@ -233,6 +244,86 @@ impl AnsibleCommandBuilder {
         cmd
     }
 
+    /// Build an `ansible -m setup` command to gather facts.
+    ///
+    /// Constructs: `ansible {pattern} -m setup [-a "filter={filter}"]
+    /// [-i {inventory}] [-b] [--become-user {user}]`
+    #[must_use]
+    pub fn build_facts_command(
+        pattern: &str,
+        filter: Option<&str>,
+        inventory: Option<&str>,
+        use_become: bool,
+        become_user: Option<&str>,
+    ) -> String {
+        let mut cmd = String::new();
+
+        let _ = write!(cmd, "ansible {} -m setup", shell_escape(pattern));
+
+        if let Some(f) = filter {
+            let _ = write!(cmd, " -a 'filter={}'", shell_escape(f));
+        }
+
+        if let Some(inv) = inventory {
+            let _ = write!(cmd, " -i {}", shell_escape(inv));
+        }
+
+        if use_become {
+            cmd.push_str(" -b");
+        }
+
+        if let Some(user) = become_user {
+            let _ = write!(cmd, " --become-user {}", shell_escape(user));
+        }
+
+        cmd
+    }
+
+    /// Build an `ansible-lint` command.
+    ///
+    /// Constructs: `ansible-lint {target} [--format {format}] [-p]`
+    #[must_use]
+    pub fn build_lint_command(
+        target: &str,
+        format: Option<&str>,
+        parseable: bool,
+    ) -> String {
+        let mut cmd = String::new();
+
+        let _ = write!(cmd, "ansible-lint {}", shell_escape(target));
+
+        if let Some(fmt) = format {
+            let _ = write!(cmd, " --format {}", shell_escape(fmt));
+        }
+
+        if parseable {
+            cmd.push_str(" -p");
+        }
+
+        cmd
+    }
+
+    /// Build an `ansible-config dump` command.
+    ///
+    /// Constructs: `ansible-config dump [--only-changed] [--format {format}]`
+    #[must_use]
+    pub fn build_config_command(
+        only_changed: bool,
+        format: Option<&str>,
+    ) -> String {
+        let mut cmd = String::from("ansible-config dump");
+
+        if only_changed {
+            cmd.push_str(" --only-changed");
+        }
+
+        if let Some(fmt) = format {
+            let _ = write!(cmd, " --format {}", shell_escape(fmt));
+        }
+
+        cmd
+    }
+
     /// Validate a playbook path.
     ///
     /// Rejects paths with `..` (directory traversal).
@@ -244,6 +335,43 @@ impl AnsibleCommandBuilder {
         if playbook.contains("..") {
             return Err(BridgeError::CommandDenied {
                 reason: "Path traversal not allowed in playbook path".to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Validate an Ansible stdout callback name.
+    ///
+    /// Only allows known callback names to prevent command injection.
+    ///
+    /// # Errors
+    ///
+    /// Returns `BridgeError::CommandDenied` if the callback is not in the
+    /// allow list.
+    pub fn validate_callback(callback: &str) -> Result<()> {
+        if !ALLOWED_CALLBACKS.contains(&callback) {
+            return Err(BridgeError::CommandDenied {
+                reason: format!(
+                    "Unknown callback '{}'. Allowed: {}",
+                    callback,
+                    ALLOWED_CALLBACKS.join(", ")
+                ),
+            });
+        }
+        Ok(())
+    }
+
+    /// Validate a lint target path.
+    ///
+    /// Rejects paths with `..` (directory traversal).
+    ///
+    /// # Errors
+    ///
+    /// Returns `BridgeError::CommandDenied` if the path contains `..`.
+    pub fn validate_lint_target(target: &str) -> Result<()> {
+        if target.contains("..") {
+            return Err(BridgeError::CommandDenied {
+                reason: "Path traversal not allowed in lint target".to_string(),
             });
         }
         Ok(())
@@ -292,7 +420,7 @@ mod tests {
     #[test]
     fn test_build_playbook_minimal() {
         let cmd = AnsibleCommandBuilder::build_playbook_command(
-            "site.yml", None, None, None, None, None, false, false, None, None, false, None, None,
+            "site.yml", None, None, None, None, None, false, false, None, None, false, None, None, None,
         );
         assert_eq!(cmd, "ansible-playbook 'site.yml'");
     }
@@ -315,6 +443,7 @@ mod tests {
             true,
             Some("deploy_user"),
             Some("/opt/ansible"),
+            None,
         );
         assert!(cmd.starts_with("cd '/opt/ansible' && "));
         assert!(cmd.contains("ansible-playbook 'deploy.yml'"));
@@ -350,6 +479,7 @@ mod tests {
             false,
             None,
             None,
+            None,
         );
         // Keys are sorted, so env comes before version
         assert!(cmd.contains("-e 'env'='staging'"));
@@ -372,6 +502,7 @@ mod tests {
             false,
             None,
             Some("/home/deploy/playbooks"),
+            None,
         );
         assert!(cmd.starts_with("cd '/home/deploy/playbooks' && "));
         assert!(cmd.contains("ansible-playbook 'site.yml'"));
@@ -392,6 +523,7 @@ mod tests {
                 Some(level),
                 None,
                 false,
+                None,
                 None,
                 None,
             );
@@ -424,6 +556,7 @@ mod tests {
             false,
             None,
             None,
+            None,
         );
         // Should be capped at -vvvv (4)
         assert!(cmd.contains("-vvvv"));
@@ -444,6 +577,7 @@ mod tests {
             None,
             None,
             false,
+            None,
             None,
             None,
         );
@@ -743,6 +877,7 @@ mod tests {
             false,
             None,
             None,
+            None,
         );
         // Key should be escaped, not interpreted
         assert!(cmd.contains("-e '$(whoami)'='bar'"));
@@ -762,5 +897,112 @@ mod tests {
         );
         assert!(cmd.contains("ansible-inventory"));
         assert!(cmd.contains("--vars"));
+    }
+
+    // ============== Callback Tests ==============
+
+    #[test]
+    fn test_build_playbook_with_callback() {
+        let cmd = AnsibleCommandBuilder::build_playbook_command(
+            "site.yml", None, None, None, None, None, false, false, None, None, false, None, None,
+            Some("json"),
+        );
+        assert!(cmd.starts_with("ANSIBLE_STDOUT_CALLBACK='json' "));
+        assert!(cmd.contains("ansible-playbook 'site.yml'"));
+    }
+
+    #[test]
+    fn test_build_playbook_callback_with_working_dir() {
+        let cmd = AnsibleCommandBuilder::build_playbook_command(
+            "site.yml", None, None, None, None, None, false, false, None, None, false, None,
+            Some("/opt/ansible"),
+            Some("dense"),
+        );
+        assert!(cmd.starts_with("ANSIBLE_STDOUT_CALLBACK='dense' cd '/opt/ansible' && "));
+    }
+
+    #[test]
+    fn test_validate_callback_allowed() {
+        assert!(AnsibleCommandBuilder::validate_callback("json").is_ok());
+        assert!(AnsibleCommandBuilder::validate_callback("yaml").is_ok());
+        assert!(AnsibleCommandBuilder::validate_callback("dense").is_ok());
+        assert!(AnsibleCommandBuilder::validate_callback("minimal").is_ok());
+        assert!(AnsibleCommandBuilder::validate_callback("default").is_ok());
+    }
+
+    #[test]
+    fn test_validate_callback_rejected() {
+        let result = AnsibleCommandBuilder::validate_callback("$(whoami)");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::CommandDenied { reason } => {
+                assert!(reason.contains("Unknown callback"));
+            }
+            e => panic!("Expected CommandDenied, got: {e:?}"),
+        }
+    }
+
+    // ============== Facts Command Tests ==============
+
+    #[test]
+    fn test_build_facts_minimal() {
+        let cmd = AnsibleCommandBuilder::build_facts_command(
+            "all", None, None, false, None,
+        );
+        assert_eq!(cmd, "ansible 'all' -m setup");
+    }
+
+    #[test]
+    fn test_build_facts_with_filter() {
+        let cmd = AnsibleCommandBuilder::build_facts_command(
+            "webservers", Some("ansible_distribution*"), Some("hosts.ini"), true, Some("root"),
+        );
+        assert!(cmd.contains("ansible 'webservers' -m setup"));
+        assert!(cmd.contains("-a 'filter='ansible_distribution*''"));
+        assert!(cmd.contains("-i 'hosts.ini'"));
+        assert!(cmd.contains(" -b"));
+        assert!(cmd.contains("--become-user 'root'"));
+    }
+
+    // ============== Lint Command Tests ==============
+
+    #[test]
+    fn test_build_lint_minimal() {
+        let cmd = AnsibleCommandBuilder::build_lint_command("site.yml", None, false);
+        assert_eq!(cmd, "ansible-lint 'site.yml'");
+    }
+
+    #[test]
+    fn test_build_lint_with_format() {
+        let cmd = AnsibleCommandBuilder::build_lint_command("roles/", Some("json"), true);
+        assert!(cmd.contains("ansible-lint 'roles/'"));
+        assert!(cmd.contains("--format 'json'"));
+        assert!(cmd.contains("-p"));
+    }
+
+    #[test]
+    fn test_validate_lint_target_ok() {
+        assert!(AnsibleCommandBuilder::validate_lint_target("site.yml").is_ok());
+        assert!(AnsibleCommandBuilder::validate_lint_target("roles/webserver").is_ok());
+    }
+
+    #[test]
+    fn test_validate_lint_target_traversal() {
+        assert!(AnsibleCommandBuilder::validate_lint_target("../../etc/passwd").is_err());
+    }
+
+    // ============== Config Command Tests ==============
+
+    #[test]
+    fn test_build_config_minimal() {
+        let cmd = AnsibleCommandBuilder::build_config_command(false, None);
+        assert_eq!(cmd, "ansible-config dump");
+    }
+
+    #[test]
+    fn test_build_config_only_changed_json() {
+        let cmd = AnsibleCommandBuilder::build_config_command(true, Some("json"));
+        assert!(cmd.contains("--only-changed"));
+        assert!(cmd.contains("--format 'json'"));
     }
 }

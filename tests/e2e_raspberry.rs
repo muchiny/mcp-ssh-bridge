@@ -151,6 +151,7 @@ fn build_ctx(host_config: HostConfig) -> ToolContext {
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
         rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
+        awx: None,
     };
 
     let validator = Arc::new(CommandValidator::new(&config.security));
@@ -999,6 +1000,7 @@ async fn test_security_command_denied() {
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
         rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
+        awx: None,
     };
 
     let validator = Arc::new(CommandValidator::new(&security));

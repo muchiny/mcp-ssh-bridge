@@ -1496,6 +1496,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
         let (server, _audit_task) = McpServer::new(config);
         server
@@ -2170,6 +2171,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let (server, audit_task) = McpServer::new(config);

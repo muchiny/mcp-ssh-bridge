@@ -33,6 +33,45 @@ pub struct Config {
     /// Role-based access control configuration
     #[serde(default)]
     pub rbac: crate::security::rbac::RbacConfig,
+
+    /// AWX REST API configuration for air-gapped relay via SSH.
+    #[serde(default)]
+    pub awx: Option<AwxConfig>,
+}
+
+/// AWX REST API configuration.
+///
+/// AWX API calls are relayed through SSH: the MCP server connects to
+/// `ssh_host` via SSH and runs `curl` commands against the AWX URL.
+/// This enables air-gapped environments where AWX is not directly
+/// reachable from the MCP server host.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AwxConfig {
+    /// SSH host alias (from `hosts` section) used to relay API calls.
+    pub ssh_host: String,
+
+    /// Base URL of the AWX instance (e.g., `https://awx.internal`).
+    pub url: String,
+
+    /// `OAuth2` Bearer token for AWX API authentication.
+    pub token: String,
+
+    /// Request timeout in seconds (default: 30).
+    #[serde(default = "default_awx_timeout")]
+    pub api_timeout: u32,
+
+    /// Whether to verify SSL certificates (default: true).
+    /// Set to false for self-signed certs in air-gapped environments.
+    #[serde(default = "default_true")]
+    pub verify_ssl: bool,
+}
+
+fn default_awx_timeout() -> u32 {
+    30
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// HTTP transport configuration for the YAML config.
@@ -1051,7 +1090,14 @@ fn default_ssh_config_path() -> String {
 /// - `nginx`: `ssh_nginx_status`, `ssh_nginx_test`, `ssh_nginx_reload`, `ssh_nginx_list_sites`
 /// - `apache`: `ssh_apache_status`, `ssh_apache_vhosts`
 /// - `letsencrypt`: `ssh_letsencrypt_status`
-/// - `ansible`: `ssh_ansible_playbook`, `ssh_ansible_inventory`, `ssh_ansible_adhoc`
+/// - `ansible`: `ssh_ansible_playbook`, `ssh_ansible_inventory`, `ssh_ansible_adhoc`,
+///   `ssh_ansible_config`, `ssh_ansible_facts`, `ssh_ansible_lint`, `ssh_ansible_recap`,
+///   `ssh_ansible_events`, `ssh_ansible_run_background`
+/// - `awx`: `ssh_awx_status`, `ssh_awx_templates`, `ssh_awx_template_detail`,
+///   `ssh_awx_job_launch`, `ssh_awx_job_status`, `ssh_awx_job_events`,
+///   `ssh_awx_job_summary`, `ssh_awx_job_stdout`, `ssh_awx_job_cancel`,
+///   `ssh_awx_inventories`, `ssh_awx_inventory_hosts`, `ssh_awx_project_sync`,
+///   `ssh_awx_job_follow`
 /// - `terraform`: `ssh_terraform_init`, `ssh_terraform_plan`, `ssh_terraform_apply`,
 ///   `ssh_terraform_state`, `ssh_terraform_output`
 /// - `vault`: `ssh_vault_status`, `ssh_vault_read`, `ssh_vault_list`, `ssh_vault_write`

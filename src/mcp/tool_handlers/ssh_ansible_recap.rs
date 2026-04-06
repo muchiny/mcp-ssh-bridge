@@ -1,7 +1,8 @@
-//! SSH Ansible Playbook Tool Handler
+//! SSH Ansible Recap Tool Handler
 //!
-//! Runs an Ansible playbook on a remote host via SSH.
-//! Supports inventory, tags, extra variables, check mode, and verbosity control.
+//! Runs an Ansible playbook with the `dense` callback and filters output to
+//! show only the PLAY RECAP, FAILED, and CHANGED lines. Produces ultra-compact
+//! output (~100-200 tokens vs ~5000+ for full stdout).
 
 use std::collections::HashMap;
 
@@ -13,7 +14,7 @@ use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 
 #[derive(Debug, Deserialize)]
-pub struct SshAnsiblePlaybookArgs {
+pub struct SshAnsibleRecapArgs {
     host: String,
     playbook: String,
     #[serde(default)]
@@ -31,8 +32,6 @@ pub struct SshAnsiblePlaybookArgs {
     #[serde(default)]
     diff: Option<bool>,
     #[serde(default)]
-    verbose: Option<u8>,
-    #[serde(default)]
     forks: Option<u32>,
     #[serde(default, rename = "become")]
     use_become: Option<bool>,
@@ -41,8 +40,6 @@ pub struct SshAnsiblePlaybookArgs {
     #[serde(default)]
     working_dir: Option<String>,
     #[serde(default)]
-    callback: Option<String>,
-    #[serde(default)]
     timeout_seconds: Option<u64>,
     #[serde(default)]
     max_output: Option<u64>,
@@ -50,22 +47,19 @@ pub struct SshAnsiblePlaybookArgs {
     save_output: Option<String>,
 }
 
-impl_common_args!(SshAnsiblePlaybookArgs);
+impl_common_args!(SshAnsibleRecapArgs);
 
-pub struct AnsiblePlaybookTool;
+pub struct AnsibleRecapTool;
 
-impl StandardTool for AnsiblePlaybookTool {
-    type Args = SshAnsiblePlaybookArgs;
+impl StandardTool for AnsibleRecapTool {
+    type Args = SshAnsibleRecapArgs;
 
-    const NAME: &'static str = "ssh_ansible_playbook";
+    const NAME: &'static str = "ssh_ansible_recap";
 
-    const DESCRIPTION: &'static str = "Run an Ansible playbook on a remote host via SSH. The playbook file must exist on the \
-        remote host. Use check=true for dry-run mode to preview changes without applying. Use \
-        ssh_ansible_inventory first to discover available hosts and groups. For quick \
-        single-module tasks, prefer ssh_ansible_adhoc instead. Set callback='json' for \
-        structured JSON output (works with jq_filter for token-efficient extraction). \
-        Set callback='dense' for ultra-compact 1-line-per-task output. Returns \
-        ansible-playbook output in the selected format.";
+    const DESCRIPTION: &'static str = "Run an Ansible playbook and return only the compact \
+        summary (PLAY RECAP + failures + changes). Uses the 'dense' callback for 1-line-per-task \
+        output filtered to key events. Produces ~100-200 tokens vs ~5000+ for full stdout. \
+        Ideal for quick status checks. For full output, use ssh_ansible_playbook instead.";
 
     const SCHEMA: &'static str = r#"{
         "type": "object",
@@ -106,12 +100,6 @@ impl StandardTool for AnsiblePlaybookTool {
                 "type": "boolean",
                 "description": "Show file change diffs"
             },
-            "verbose": {
-                "type": "integer",
-                "description": "Verbosity level 0-4",
-                "minimum": 0,
-                "maximum": 4
-            },
             "forks": {
                 "type": "integer",
                 "description": "Number of parallel processes",
@@ -128,11 +116,6 @@ impl StandardTool for AnsiblePlaybookTool {
             "working_dir": {
                 "type": "string",
                 "description": "Directory to cd into before running"
-            },
-            "callback": {
-                "type": "string",
-                "description": "Ansible stdout callback plugin. Use 'json' for structured JSON output (enables jq_filter), 'dense' for compact 1-line-per-task, 'yaml' for YAML format, 'minimal' for minimal output. Default: Ansible default.",
-                "enum": ["json", "yaml", "dense", "minimal", "tree", "default", "oneline", "debug", "null"]
             },
             "timeout_seconds": {
                 "type": "integer",
@@ -153,11 +136,9 @@ impl StandardTool for AnsiblePlaybookTool {
         "required": ["host", "playbook"]
     }"#;
 
-    const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
-        crate::domain::output_kind::OutputKind::Auto;
-
-    fn build_command(args: &SshAnsiblePlaybookArgs, _host_config: &HostConfig) -> Result<String> {
-        Ok(AnsibleCommandBuilder::build_playbook_command(
+    fn build_command(args: &SshAnsibleRecapArgs, _host_config: &HostConfig) -> Result<String> {
+        // Use dense callback + grep to extract only key lines
+        let playbook_cmd = AnsibleCommandBuilder::build_playbook_command(
             &args.playbook,
             args.inventory.as_deref(),
             args.limit.as_deref(),
@@ -166,26 +147,28 @@ impl StandardTool for AnsiblePlaybookTool {
             args.extra_vars.as_ref(),
             args.check.unwrap_or(false),
             args.diff.unwrap_or(false),
-            args.verbose,
+            None, // no extra verbose for recap
             args.forks,
             args.use_become.unwrap_or(false),
             args.become_user.as_deref(),
             args.working_dir.as_deref(),
-            args.callback.as_deref(),
+            Some("dense"),
+        );
+        // Pipe through grep to keep only FAILED, CHANGED, PLAY RECAP, and fatal lines.
+        // Use `; true` to ignore grep's non-zero exit when no matches (all OK run).
+        Ok(format!(
+            "{playbook_cmd} 2>&1 | grep -E '(FAILED|CHANGED|PLAY RECAP|fatal|unreachable)'; true"
         ))
     }
 
-    fn validate(args: &SshAnsiblePlaybookArgs, _host_config: &HostConfig) -> Result<()> {
+    fn validate(args: &SshAnsibleRecapArgs, _host_config: &HostConfig) -> Result<()> {
         AnsibleCommandBuilder::validate_playbook_path(&args.playbook)?;
-        if let Some(ref cb) = args.callback {
-            AnsibleCommandBuilder::validate_callback(cb)?;
-        }
         Ok(())
     }
 }
 
-/// Handler for the `ssh_ansible_playbook` tool.
-pub type SshAnsiblePlaybookHandler = StandardToolHandler<AnsiblePlaybookTool>;
+/// Handler for the `ssh_ansible_recap` tool.
+pub type SshAnsibleRecapHandler = StandardToolHandler<AnsibleRecapTool>;
 
 #[cfg(test)]
 mod tests {
@@ -197,7 +180,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_arguments() {
-        let handler = SshAnsiblePlaybookHandler::new();
+        let handler = SshAnsibleRecapHandler::new();
         let ctx = create_test_context();
 
         let result = handler.execute(None, &ctx).await;
@@ -213,7 +196,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_unknown_host() {
-        let handler = SshAnsiblePlaybookHandler::new();
+        let handler = SshAnsibleRecapHandler::new();
         let ctx = create_test_context();
 
         let result = handler
@@ -237,12 +220,12 @@ mod tests {
 
     #[test]
     fn test_schema() {
-        let handler = SshAnsiblePlaybookHandler::new();
-        assert_eq!(handler.name(), "ssh_ansible_playbook");
+        let handler = SshAnsibleRecapHandler::new();
+        assert_eq!(handler.name(), "ssh_ansible_recap");
         assert!(!handler.description().is_empty());
 
         let schema = handler.schema();
-        assert_eq!(schema.name, "ssh_ansible_playbook");
+        assert_eq!(schema.name, "ssh_ansible_recap");
 
         let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         let required = schema_json["required"].as_array().unwrap();
@@ -258,40 +241,17 @@ mod tests {
             "inventory": "hosts.ini",
             "limit": "webservers",
             "tags": "deploy",
-            "skip_tags": "debug",
-            "extra_vars": {"env": "production", "version": "1.2.3"},
             "check": true,
-            "diff": true,
-            "verbose": 2,
-            "forks": 10,
             "become": true,
-            "become_user": "root",
-            "working_dir": "/opt/ansible",
-            "callback": "json",
-            "timeout_seconds": 600,
-            "max_output": 15000
+            "become_user": "root"
         });
 
-        let args: SshAnsiblePlaybookArgs = serde_json::from_value(json).unwrap();
+        let args: SshAnsibleRecapArgs = serde_json::from_value(json).unwrap();
         assert_eq!(args.host, "server1");
         assert_eq!(args.playbook, "site.yml");
         assert_eq!(args.inventory, Some("hosts.ini".to_string()));
         assert_eq!(args.limit, Some("webservers".to_string()));
-        assert_eq!(args.tags, Some("deploy".to_string()));
-        assert_eq!(args.skip_tags, Some("debug".to_string()));
-        let extra_vars = args.extra_vars.unwrap();
-        assert_eq!(extra_vars.get("env"), Some(&"production".to_string()));
-        assert_eq!(extra_vars.get("version"), Some(&"1.2.3".to_string()));
-        assert_eq!(args.check, Some(true));
-        assert_eq!(args.diff, Some(true));
-        assert_eq!(args.verbose, Some(2));
-        assert_eq!(args.forks, Some(10));
         assert_eq!(args.use_become, Some(true));
-        assert_eq!(args.become_user, Some("root".to_string()));
-        assert_eq!(args.working_dir, Some("/opt/ansible".to_string()));
-        assert_eq!(args.callback, Some("json".to_string()));
-        assert_eq!(args.timeout_seconds, Some(600));
-        assert_eq!(args.max_output, Some(15000));
     }
 
     #[test]
@@ -301,49 +261,58 @@ mod tests {
             "playbook": "site.yml"
         });
 
-        let args: SshAnsiblePlaybookArgs = serde_json::from_value(json).unwrap();
+        let args: SshAnsibleRecapArgs = serde_json::from_value(json).unwrap();
         assert_eq!(args.host, "server1");
         assert_eq!(args.playbook, "site.yml");
         assert!(args.inventory.is_none());
         assert!(args.limit.is_none());
         assert!(args.tags.is_none());
-        assert!(args.skip_tags.is_none());
-        assert!(args.extra_vars.is_none());
         assert!(args.check.is_none());
-        assert!(args.diff.is_none());
-        assert!(args.verbose.is_none());
-        assert!(args.forks.is_none());
-        assert!(args.use_become.is_none());
-        assert!(args.become_user.is_none());
-        assert!(args.working_dir.is_none());
-        assert!(args.callback.is_none());
+    }
+
+    #[test]
+    fn test_schema_optional_fields() {
+        let handler = SshAnsibleRecapHandler::new();
+        let schema = handler.schema();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
+        let properties = schema_json["properties"].as_object().unwrap();
+        assert!(properties.contains_key("inventory"));
+        assert!(properties.contains_key("limit"));
+        assert!(properties.contains_key("tags"));
+        assert!(properties.contains_key("check"));
+        assert!(properties.contains_key("become"));
+        assert!(properties.contains_key("timeout_seconds"));
+        assert!(properties.contains_key("max_output"));
+    }
+
+    #[test]
+    fn test_args_debug() {
+        let json = json!({
+            "host": "server1",
+            "playbook": "site.yml"
+        });
+        let args: SshAnsibleRecapArgs = serde_json::from_value(json).unwrap();
+        let debug_str = format!("{args:?}");
+        assert!(debug_str.contains("SshAnsibleRecapArgs"));
     }
 
     #[tokio::test]
-    async fn test_missing_required_field() {
-        let handler = SshAnsiblePlaybookHandler::new();
+    async fn test_invalid_json_type() {
+        let handler = SshAnsibleRecapHandler::new();
         let ctx = create_test_context();
-
-        // Missing playbook field
         let result = handler
-            .execute(
-                Some(json!({
-                    "host": "server1"
-                })),
-                &ctx,
-            )
+            .execute(Some(json!({"host": 123, "playbook": "site.yml"})), &ctx)
             .await;
-
         assert!(result.is_err());
         match result.unwrap_err() {
             BridgeError::McpInvalidRequest(_) => {}
-            e => panic!("Expected McpInvalidRequest error, got: {e:?}"),
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
 
     #[tokio::test]
     async fn test_playbook_path_traversal_rejected() {
-        let handler = SshAnsiblePlaybookHandler::new();
+        let handler = SshAnsibleRecapHandler::new();
         let ctx = create_test_context_with_host();
 
         let result = handler
@@ -362,55 +331,6 @@ mod tests {
                 assert!(reason.contains("Path traversal"));
             }
             e => panic!("Expected CommandDenied, got: {e:?}"),
-        }
-    }
-
-    #[test]
-    fn test_schema_optional_fields() {
-        let handler = SshAnsiblePlaybookHandler::new();
-        let schema = handler.schema();
-        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
-        let properties = schema_json["properties"].as_object().unwrap();
-        // Check ALL optional fields exist in schema
-        assert!(properties.contains_key("inventory"));
-        assert!(properties.contains_key("limit"));
-        assert!(properties.contains_key("tags"));
-        assert!(properties.contains_key("skip_tags"));
-        assert!(properties.contains_key("extra_vars"));
-        assert!(properties.contains_key("check"));
-        assert!(properties.contains_key("diff"));
-        assert!(properties.contains_key("verbose"));
-        assert!(properties.contains_key("forks"));
-        assert!(properties.contains_key("become"));
-        assert!(properties.contains_key("become_user"));
-        assert!(properties.contains_key("working_dir"));
-        assert!(properties.contains_key("callback"));
-        assert!(properties.contains_key("timeout_seconds"));
-        assert!(properties.contains_key("max_output"));
-    }
-
-    #[test]
-    fn test_args_debug() {
-        let json = json!({
-            "host": "server1",
-            "playbook": "site.yml"
-        });
-        let args: SshAnsiblePlaybookArgs = serde_json::from_value(json).unwrap();
-        let debug_str = format!("{args:?}");
-        assert!(debug_str.contains("SshAnsiblePlaybookArgs"));
-    }
-
-    #[tokio::test]
-    async fn test_invalid_json_type() {
-        let handler = SshAnsiblePlaybookHandler::new();
-        let ctx = create_test_context();
-        let result = handler
-            .execute(Some(json!({"host": 123, "playbook": "site.yml"})), &ctx)
-            .await;
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            BridgeError::McpInvalidRequest(_) => {}
-            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
 
@@ -438,8 +358,8 @@ mod tests {
     }
 
     #[test]
-    fn test_build_command_defaults() {
-        let args = SshAnsiblePlaybookArgs {
+    fn test_build_command_uses_dense_callback() {
+        let args = SshAnsibleRecapArgs {
             host: "server1".to_string(),
             playbook: "site.yml".to_string(),
             inventory: None,
@@ -449,117 +369,51 @@ mod tests {
             extra_vars: None,
             check: None,
             diff: None,
-            verbose: None,
             forks: None,
             use_become: None,
             become_user: None,
             working_dir: None,
-            callback: None,
             timeout_seconds: None,
             max_output: None,
             save_output: None,
         };
 
-        let cmd = AnsiblePlaybookTool::build_command(&args, &test_host_config()).unwrap();
-        assert!(cmd.contains("ansible-playbook"));
-        assert!(cmd.contains("'site.yml'"));
+        let cmd = AnsibleRecapTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("ANSIBLE_STDOUT_CALLBACK='dense'"));
+        assert!(cmd.contains("ansible-playbook 'site.yml'"));
+        assert!(cmd.contains("grep -E"));
+        assert!(cmd.contains("PLAY RECAP"));
+        assert!(cmd.contains("FAILED"));
+        assert!(cmd.contains("CHANGED"));
     }
 
     #[test]
-    fn test_build_command_with_inventory_limit() {
-        let args = SshAnsiblePlaybookArgs {
-            host: "server1".to_string(),
-            playbook: "site.yml".to_string(),
-            inventory: Some("hosts.ini".to_string()),
-            limit: Some("webservers".to_string()),
-            tags: None,
-            skip_tags: None,
-            extra_vars: None,
-            check: None,
-            diff: None,
-            verbose: None,
-            forks: None,
-            use_become: None,
-            become_user: None,
-            working_dir: None,
-            callback: None,
-            timeout_seconds: None,
-            max_output: None,
-            save_output: None,
-        };
-
-        let cmd = AnsiblePlaybookTool::build_command(&args, &test_host_config()).unwrap();
-        assert!(cmd.contains("-i 'hosts.ini'"));
-        assert!(cmd.contains("--limit 'webservers'"));
-    }
-
-    #[test]
-    fn test_build_command_with_extra_vars() {
-        let mut extra_vars = HashMap::new();
-        extra_vars.insert("env".to_string(), "production".to_string());
-
-        let args = SshAnsiblePlaybookArgs {
-            host: "server1".to_string(),
-            playbook: "site.yml".to_string(),
-            inventory: None,
-            limit: None,
-            tags: None,
-            skip_tags: None,
-            extra_vars: Some(extra_vars),
-            check: Some(true),
-            diff: None,
-            verbose: None,
-            forks: None,
-            use_become: None,
-            become_user: None,
-            working_dir: None,
-            callback: None,
-            timeout_seconds: None,
-            max_output: None,
-            save_output: None,
-        };
-
-        let cmd = AnsiblePlaybookTool::build_command(&args, &test_host_config()).unwrap();
-        assert!(cmd.contains("-e 'env'='production'"));
-        assert!(cmd.contains("--check"));
-    }
-
-    #[test]
-    fn test_build_command_all_opts() {
-        let mut extra_vars = HashMap::new();
-        extra_vars.insert("version".to_string(), "1.2.3".to_string());
-
-        let args = SshAnsiblePlaybookArgs {
+    fn test_build_command_with_options() {
+        let args = SshAnsibleRecapArgs {
             host: "server1".to_string(),
             playbook: "deploy.yml".to_string(),
             inventory: Some("hosts.ini".to_string()),
             limit: Some("webservers".to_string()),
-            tags: Some("deploy".to_string()),
-            skip_tags: Some("debug".to_string()),
-            extra_vars: Some(extra_vars),
+            tags: None,
+            skip_tags: None,
+            extra_vars: None,
             check: Some(true),
-            diff: Some(true),
-            verbose: Some(2),
+            diff: None,
             forks: Some(10),
             use_become: Some(true),
-            become_user: Some("root".to_string()),
-            working_dir: Some("/opt/ansible".to_string()),
-            callback: None,
+            become_user: None,
+            working_dir: None,
             timeout_seconds: None,
             max_output: None,
             save_output: None,
         };
 
-        let cmd = AnsiblePlaybookTool::build_command(&args, &test_host_config()).unwrap();
-        assert!(cmd.contains("cd '/opt/ansible' &&"));
-        assert!(cmd.contains("ansible-playbook"));
+        let cmd = AnsibleRecapTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("ANSIBLE_STDOUT_CALLBACK='dense'"));
         assert!(cmd.contains("-i 'hosts.ini'"));
         assert!(cmd.contains("--limit 'webservers'"));
-        assert!(cmd.contains("--tags 'deploy'"));
-        assert!(cmd.contains("--skip-tags 'debug'"));
         assert!(cmd.contains("--check"));
-        assert!(cmd.contains("--diff"));
-        assert!(cmd.contains("-b"));
-        assert!(cmd.contains("--become-user 'root'"));
+        assert!(cmd.contains("-f 10"));
+        assert!(cmd.contains(" -b"));
     }
 }

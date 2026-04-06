@@ -241,6 +241,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let validator = Arc::new(CommandValidator::new(&security));

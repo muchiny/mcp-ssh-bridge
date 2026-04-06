@@ -6,6 +6,7 @@
 pub mod active_directory;
 pub mod alerting;
 pub mod ansible;
+pub mod awx;
 pub mod backup_advanced;
 pub mod capacity;
 pub mod certificate;

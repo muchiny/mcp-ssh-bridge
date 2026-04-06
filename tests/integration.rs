@@ -86,6 +86,7 @@ fn create_test_config() -> Config {
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
         rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
+        awx: None,
     }
 }
 
@@ -507,6 +508,7 @@ fn test_proxy_jump_config() {
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
         rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
+        awx: None,
     };
 
     // Verify bastion has no proxy_jump
@@ -573,6 +575,7 @@ fn test_proxy_jump_resolution() {
         ssh_config: SshConfigDiscovery::default(),
         http: HttpTransportConfig::default(),
         rbac: mcp_ssh_bridge::security::rbac::RbacConfig::default(),
+        awx: None,
     };
 
     // Simulate resolving jump host

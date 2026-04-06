@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-04-07
+
+### Summary
+
+**338 → 357 tools** | **74 → 75 groups** | 19 new tools, 1 new group (`awx`)
+
+### Added
+
+- **AWX REST API integration** (`awx` group, 13 tools): Full AWX lifecycle management via SSH-relayed curl commands for air-gapped environments. Includes `awx_status`, `awx_templates`, `awx_template_detail`, `awx_job_launch`, `awx_job_status`, `awx_job_events`, `awx_job_summary`, `awx_job_stdout`, `awx_job_cancel`, `awx_inventories`, `awx_inventory_hosts`, `awx_project_sync`, `awx_job_follow`
+- **AWX config** (`AwxConfig` in config.yaml): `ssh_host`, `url`, `token`, `api_timeout`, `verify_ssl` for air-gapped AWX relay
+- **Ansible enhanced tools** (6 new tools in `ansible` group): `ansible_recap` (compact PLAY RECAP extraction), `ansible_facts` (targeted fact gathering with filter), `ansible_lint` (playbook validation), `ansible_config` (active config dump), `ansible_run_background` (nohup + JSON callback), `ansible_events` (background run event parser)
+- **Ansible playbook callback support**: New `callback` parameter on `ssh_ansible_playbook` to force `json`, `yaml`, `dense`, or `minimal` stdout callback plugins
+- **Ansible OutputKind::Auto**: `ssh_ansible_playbook` now supports `jq_filter`, `columns`, and `limit` data reduction parameters for token-efficient output
+- **AWX job follow**: `ssh_awx_job_follow` launches a job and polls until completion, returning a structured per-host summary (~500 tokens vs ~5000+ for raw stdout)
+- **Background Ansible runs**: `ssh_ansible_run_background` + `ssh_ansible_events` for non-blocking playbook execution with incremental event monitoring
+- **All AWX tools support jq_filter**: `OutputKind::Json` enables server-side jq filtering on all AWX API responses
+
 ## [1.6.1] - 2026-03-24
 
 ### Fixed

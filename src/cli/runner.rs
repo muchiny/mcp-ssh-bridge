@@ -1216,6 +1216,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1257,6 +1258,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1282,6 +1284,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1307,6 +1310,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1403,6 +1407,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1429,6 +1434,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1453,6 +1459,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1497,6 +1504,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1557,6 +1565,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let ctx = create_context(Arc::new(config));
@@ -1579,6 +1588,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_status(Arc::new(config)).await;
@@ -1621,6 +1631,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_status(Arc::new(config)).await;
@@ -1644,6 +1655,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_status(Arc::new(config)).await;
@@ -1667,6 +1679,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_status(Arc::new(config)).await;
@@ -1687,6 +1700,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_history(Arc::new(config), 10, None).await;
@@ -1705,6 +1719,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_history(Arc::new(config), 10, Some("nonexistent-host")).await;
@@ -1723,6 +1738,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_history(Arc::new(config), 0, None).await;
@@ -1741,6 +1757,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_history(Arc::new(config), 1000, None).await;
@@ -1761,6 +1778,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_exec(Arc::new(config), "unknown-host", "ls", 30, None).await;
@@ -1812,6 +1830,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         // Try to execute a command not in whitelist
@@ -1838,6 +1857,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_upload(
@@ -1895,6 +1915,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_upload(
@@ -1952,6 +1973,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_upload(
@@ -1990,6 +2012,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_download(
@@ -2047,6 +2070,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_download(
@@ -2345,6 +2369,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         // Should succeed (no hosts is a warning, not error)
@@ -2385,6 +2410,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_validate(Arc::new(config)).await;
@@ -2405,6 +2431,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_config_diff(Arc::new(config)).await;
@@ -2427,6 +2454,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_config_diff(Arc::new(config)).await;
@@ -2447,6 +2475,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_list_tools(Arc::new(config), None, false, false, None).await;
@@ -2465,6 +2494,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_list_tools(Arc::new(config), None, false, true, None).await;
@@ -2483,6 +2513,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_list_tools(Arc::new(config), None, true, true, None).await;
@@ -2501,6 +2532,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_list_tools(Arc::new(config), Some("docker"), false, false, None).await;
@@ -2519,6 +2551,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result =
@@ -2538,6 +2571,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_list_tools(Arc::new(config), None, true, false, None).await;
@@ -2556,6 +2590,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         // Should succeed but list 0 tools
@@ -2578,6 +2613,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_describe_tool(Arc::new(config), "ssh_exec", false).await;
@@ -2596,6 +2632,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_describe_tool(Arc::new(config), "ssh_exec", true).await;
@@ -2614,6 +2651,7 @@ mod tests {
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
         };
 
         let result = run_describe_tool(Arc::new(config), "nonexistent_tool", false).await;
