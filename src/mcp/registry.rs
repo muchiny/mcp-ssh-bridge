@@ -99,6 +99,7 @@ impl ToolRegistry {
                         task_support: "optional".to_string(),
                     }),
                     output_schema: None,
+                    meta: tool_meta(schema.name),
                 }
             })
             .collect()
@@ -124,10 +125,7 @@ impl ToolRegistry {
 /// - `Tabular` → `columns`
 /// - `Auto` → both
 /// - `RawText` → nothing
-fn inject_reduction_schema(
-    schema: &mut Value,
-    kind: crate::domain::output_kind::OutputKind,
-) {
+fn inject_reduction_schema(schema: &mut Value, kind: crate::domain::output_kind::OutputKind) {
     use crate::domain::output_kind::OutputKind;
 
     let Some(props) = schema.get_mut("properties").and_then(Value::as_object_mut) else {
@@ -169,9 +167,11 @@ fn inject_reduction_schema(
             json!({
                 "type": "integer",
                 "minimum": 1,
-                "description": "RECOMMENDED: Maximum number of data rows to return \
-                    (header always kept). Use this to reduce token consumption when you \
-                    only need the top N results. Example: limit=10 returns only 10 rows."
+                "description": "RECOMMENDED: Maximum number of items to return. \
+                    For tabular output: caps data rows (header always kept). \
+                    For JSON output: caps top-level array elements. \
+                    Use this to reduce token consumption when you only need the top N results. \
+                    Example: limit=10 returns only 10 rows/items."
             }),
         );
     }
@@ -1056,6 +1056,49 @@ pub fn tool_annotations(tool_name: &str) -> ToolAnnotations {
 
         // Fallback for unknown/future tools
         _ => ToolAnnotations::default(),
+    }
+}
+
+/// Returns `_meta` hints for tools known to produce large output.
+///
+/// Claude Code uses `anthropic/maxResultSizeChars` to raise its
+/// default 25K-token persist threshold (up to 500K chars).
+#[must_use]
+pub fn tool_meta(tool_name: &str) -> Option<Value> {
+    const LARGE: usize = 200_000;
+    match tool_name {
+        // Core (arbitrary commands), file ops, containers, Kubernetes,
+        // journald/logs, databases, Windows events, pagination
+        "ssh_exec"
+        | "ssh_exec_multi"
+        | "ssh_pty_exec"
+        | "ssh_file_read"
+        | "ssh_tail"
+        | "ssh_docker_logs"
+        | "ssh_podman_logs"
+        | "ssh_container_log_search"
+        | "ssh_container_log_stats"
+        | "ssh_k8s_get"
+        | "ssh_k8s_describe"
+        | "ssh_k8s_logs"
+        | "ssh_helm_status"
+        | "ssh_helm_history"
+        | "ssh_journal_query"
+        | "ssh_journal_follow"
+        | "ssh_service_logs"
+        | "ssh_log_search_multi"
+        | "ssh_log_tail_multi"
+        | "ssh_log_aggregate"
+        | "ssh_db_dump"
+        | "ssh_mysql_query"
+        | "ssh_postgresql_query"
+        | "ssh_win_event_query"
+        | "ssh_win_event_tail"
+        | "ssh_win_event_export"
+        | "ssh_output_fetch" => Some(json!({
+            "anthropic/maxResultSizeChars": LARGE
+        })),
+        _ => None,
     }
 }
 
@@ -4052,5 +4095,26 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_tool_meta_large_output_tools() {
+        // Tools known to produce large output should have _meta
+        assert!(tool_meta("ssh_exec").is_some());
+        assert!(tool_meta("ssh_file_read").is_some());
+        assert!(tool_meta("ssh_docker_logs").is_some());
+        assert!(tool_meta("ssh_k8s_logs").is_some());
+        assert!(tool_meta("ssh_output_fetch").is_some());
+
+        // Small-output tools should not have _meta
+        assert!(tool_meta("ssh_status").is_none());
+        assert!(tool_meta("ssh_health").is_none());
+        assert!(tool_meta("ssh_disk_usage").is_none());
+    }
+
+    #[test]
+    fn test_tool_meta_value_format() {
+        let meta = tool_meta("ssh_exec").unwrap();
+        assert_eq!(meta["anthropic/maxResultSizeChars"], 200_000);
     }
 }

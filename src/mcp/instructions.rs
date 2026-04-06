@@ -7,6 +7,7 @@ use crate::config::{Config, OsType, SecurityMode};
 /// Includes configured hosts, security mode, enabled/disabled tool groups,
 /// key limits, and static usage guidance so that the AI client fully
 /// understands the server's configuration.
+#[allow(clippy::too_many_lines)]
 pub fn build_instructions(config: &Config, tool_count: usize) -> String {
     let mut out = String::with_capacity(2048);
 
@@ -116,7 +117,13 @@ pub fn build_instructions(config: &Config, tool_count: usize) -> String {
          \n\
          TOKEN SAVINGS: Tools exposing jq_filter (JSON output) or columns (tabular output) \
          support server-side data reduction. ALWAYS use these parameters to extract only \
-         the fields you need \u{2014} this reduces token consumption by 30-60%."
+         the fields you need \u{2014} this reduces token consumption by 30-60%.\n\
+         \n\
+         OVERRIDES: All tools accept timeout_seconds (override default timeout) and \
+         max_output (override default output char limit) as optional parameters.\n\
+         \n\
+         SAVE OUTPUT: Pass save_output=\"/path/to/file\" to any tool to persist full \
+         untruncated output to a file on the remote host \u{2014} useful for large results."
     );
 
     out
@@ -267,5 +274,10 @@ mod tests {
         assert!(out.contains("APPS:"));
         assert!(out.contains("ROOTS:"));
         assert!(out.contains("TOKEN SAVINGS:"));
+        assert!(out.contains("OVERRIDES:"));
+        assert!(out.contains("timeout_seconds"));
+        assert!(out.contains("max_output"));
+        assert!(out.contains("SAVE OUTPUT:"));
+        assert!(out.contains("save_output="));
     }
 }

@@ -290,4 +290,80 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    #[tokio::test]
+    async fn test_read_health_scheme_works() {
+        let registry = create_default_resource_registry();
+        let ctx = create_test_context();
+
+        let result = registry.read("health://server", &ctx).await;
+        assert!(result.is_ok());
+        let contents = result.unwrap();
+        assert!(!contents.is_empty());
+        // Health resource should return JSON content
+        assert_eq!(contents[0].mime_type, Some("application/json".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_read_invalid_uri_no_separator() {
+        let registry = create_default_resource_registry();
+        let ctx = create_test_context();
+
+        // URI with no :// separator still extracts the part before ://
+        // "just-a-string" has no "://", so split returns the whole string
+        let result = registry.read("just-a-string", &ctx).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(msg) => {
+                assert!(msg.contains("Unsupported resource scheme"));
+            }
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_returns_resources_with_valid_uris() {
+        let registry = create_default_resource_registry();
+        let ctx = create_test_context();
+
+        let resources = registry.list(&ctx).await.unwrap();
+        for resource in &resources {
+            assert!(
+                resource.uri.contains("://"),
+                "Resource URI {} should contain ://",
+                resource.uri
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_read_routes_to_correct_handler() {
+        let registry = create_default_resource_registry();
+        let ctx = create_test_context();
+
+        // history scheme should be handled by HistoryResourceHandler
+        let history_result = registry.read("history://recent", &ctx).await;
+        assert!(history_result.is_ok());
+
+        // health scheme should be handled by HealthResourceHandler
+        let health_result = registry.read("health://server", &ctx).await;
+        assert!(health_result.is_ok());
+
+        // metrics scheme with no host configured will fail at the handler level,
+        // but it should be routed (not "unsupported scheme")
+        let metrics_result = registry.read("metrics://nonexistent/cpu", &ctx).await;
+        // This should fail because no host "nonexistent" exists, but the error
+        // should NOT be "Unsupported resource scheme"
+        if let Err(e) = metrics_result {
+            match &e {
+                BridgeError::McpInvalidRequest(msg) => {
+                    assert!(
+                        !msg.contains("Unsupported resource scheme"),
+                        "metrics:// should be routed to handler, not rejected as unsupported"
+                    );
+                }
+                _ => {} // Other errors are fine (host not found, etc.)
+            }
+        }
+    }
 }

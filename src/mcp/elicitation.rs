@@ -192,4 +192,134 @@ mod tests {
         service.set_supported(true);
         assert!(service.is_supported());
     }
+
+    #[tokio::test]
+    async fn test_elicit_url_not_supported() {
+        let (service, _rx) = create_test_service();
+        // Default: not supported
+        let result = service.elicit_url("test", "https://example.com").await;
+        assert!(matches!(result, Err(ClientRequestError::NotSupported)));
+    }
+
+    #[tokio::test]
+    async fn test_elicit_url_rejects_ftp() {
+        let (service, _rx) = create_test_service();
+        service.set_supported(true);
+        let result = service.elicit_url("test", "ftp://evil.com/file").await;
+        assert!(matches!(
+            result,
+            Err(ClientRequestError::RemoteError { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_elicit_url_rejects_data_uri() {
+        let (service, _rx) = create_test_service();
+        service.set_supported(true);
+        let result = service
+            .elicit_url("test", "data:text/html,<h1>hi</h1>")
+            .await;
+        assert!(matches!(
+            result,
+            Err(ClientRequestError::RemoteError { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_elicit_with_schema() {
+        let (service, _rx) = create_test_service();
+        // Not supported -> NotSupported error even with schema
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "confirm": { "type": "boolean" }
+            }
+        });
+        let result = service.elicit("Confirm?", Some(schema)).await;
+        assert!(matches!(result, Err(ClientRequestError::NotSupported)));
+    }
+
+    #[tokio::test]
+    async fn test_elicit_sends_request_when_supported() {
+        let (service, mut rx) = create_test_service();
+        service.set_supported(true);
+
+        // Spawn the elicit call — it will block waiting for a response
+        let handle = tokio::spawn(async move { service.elicit("Please confirm", None).await });
+
+        // The service should have sent a writer message
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("Should receive message within timeout")
+            .expect("Channel should not be closed");
+
+        // Verify it's a JSON-RPC request for elicitation/create
+        match msg {
+            super::super::protocol::WriterMessage::Request(req) => {
+                assert_eq!(req.method, "elicitation/create");
+                let params = req.params.expect("params should be present");
+                assert_eq!(params["message"], "Please confirm");
+            }
+            _ => panic!("Expected Request variant"),
+        }
+
+        // The handle will time out since we don't resolve the pending request,
+        // but we've verified the message was sent correctly.
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_elicit_url_sends_request_with_url() {
+        let (service, mut rx) = create_test_service();
+        service.set_supported(true);
+
+        let handle = tokio::spawn(async move {
+            service
+                .elicit_url("Open this", "https://example.com/auth")
+                .await
+        });
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("Should receive message within timeout")
+            .expect("Channel should not be closed");
+
+        match msg {
+            super::super::protocol::WriterMessage::Request(req) => {
+                assert_eq!(req.method, "elicitation/create");
+                let params = req.params.expect("params should be present");
+                assert_eq!(params["message"], "Open this");
+                assert_eq!(params["url"], "https://example.com/auth");
+            }
+            _ => panic!("Expected Request variant"),
+        }
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_elicit_channel_closed() {
+        let (tx, rx) = mpsc::channel(10);
+        let pending = Arc::new(PendingRequests::new());
+        let requester = Arc::new(ClientRequester::new(tx, pending, Duration::from_secs(1)));
+        let service = ElicitationService::new(requester);
+        service.set_supported(true);
+
+        // Drop the receiver so the channel is closed
+        drop(rx);
+
+        let result = service.elicit("test", None).await;
+        assert!(matches!(result, Err(ClientRequestError::ChannelClosed)));
+    }
+
+    #[test]
+    fn test_set_supported_toggle() {
+        let (service, _rx) = create_test_service();
+        service.set_supported(true);
+        assert!(service.is_supported());
+        service.set_supported(false);
+        assert!(!service.is_supported());
+        service.set_supported(true);
+        assert!(service.is_supported());
+    }
 }

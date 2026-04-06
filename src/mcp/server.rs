@@ -308,6 +308,16 @@ impl McpServer {
             }
         });
 
+        // Spawn output cache cleanup task (runs every 60 seconds)
+        let cleanup_oc = Arc::clone(&self.output_cache);
+        let output_cache_cleanup_handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                cleanup_oc.cleanup().await;
+            }
+        });
+
         // Spawn writer task (single writer to stdout).
         // Handles both JSON-RPC responses and unsolicited notifications.
         let writer_handle = tokio::spawn(async move {
@@ -469,6 +479,7 @@ impl McpServer {
         // Shutdown: stop cleanup tasks, close all tunnels and sessions
         cleanup_handle.abort();
         task_cleanup_handle.abort();
+        output_cache_cleanup_handle.abort();
         self.tunnel_manager.close_all().await;
         self.session_manager.close_all().await;
 
@@ -913,8 +924,7 @@ impl McpServer {
                 });
 
                 // Record metrics
-                self.metrics
-                    .record_tool_call(&tool_name, &host_for_metrics);
+                self.metrics.record_tool_call(&tool_name, &host_for_metrics);
                 self.metrics
                     .record_tool_output(&tool_name, output_chars as u64);
 
@@ -2646,5 +2656,502 @@ mod tests {
         // Should be dispatched (not method_not_found)
         assert!(response.error.is_some());
         assert_ne!(response.error.unwrap().code, -32601);
+    }
+
+    // ============== Resources List/Read Tests ==============
+
+    #[tokio::test]
+    async fn test_resources_list_contains_expected_resources() {
+        let server = create_test_server();
+        let response = server.handle_resources_list(Some(json!(1))).await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        let resources = result["resources"].as_array().unwrap();
+
+        // With no hosts configured, history://recent and health://server are present
+        let uris: Vec<&str> = resources.iter().map(|r| r["uri"].as_str().unwrap()).collect();
+        assert!(uris.contains(&"history://recent"));
+        assert!(uris.contains(&"health://server"));
+    }
+
+    #[tokio::test]
+    async fn test_resources_list_resources_have_required_fields() {
+        let server = create_test_server();
+        let response = server.handle_resources_list(Some(json!(1))).await;
+
+        let result = response.result.unwrap();
+        let resources = result["resources"].as_array().unwrap();
+
+        for resource in resources {
+            assert!(resource["uri"].is_string(), "Resource missing uri");
+            assert!(resource["name"].is_string(), "Resource missing name");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_resources_list_with_null_id() {
+        let server = create_test_server();
+        let response = server.handle_resources_list(None).await;
+
+        assert!(response.error.is_none());
+        assert!(response.id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_resources_read_valid_history_uri() {
+        let server = create_test_server();
+        let params = json!({ "uri": "history://recent" });
+
+        let response = server
+            .handle_resources_read(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["contents"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_resources_read_valid_health_uri() {
+        let server = create_test_server();
+        let params = json!({ "uri": "health://server" });
+
+        let response = server
+            .handle_resources_read(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["contents"].is_array());
+        let contents = result["contents"].as_array().unwrap();
+        assert!(!contents.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_resources_read_unsupported_scheme() {
+        let server = create_test_server();
+        let params = json!({ "uri": "ftp://server/file" });
+
+        let response = server
+            .handle_resources_read(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_some());
+        let error = response.error.unwrap();
+        assert!(error.message.contains("ftp"));
+    }
+
+    #[tokio::test]
+    async fn test_resources_read_invalid_params_structure() {
+        let server = create_test_server();
+        let params = json!([1, 2, 3]); // Array instead of object
+
+        let response = server
+            .handle_resources_read(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_some());
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602);
+    }
+
+    // ============== Resource Templates Tests ==============
+
+    #[test]
+    fn test_resource_templates_list_empty_hosts() {
+        let server = create_test_server();
+        let response = server.handle_resource_templates_list(Some(json!(1)));
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        let templates = result["resourceTemplates"].as_array().unwrap();
+        // No hosts configured, so no templates
+        assert!(templates.is_empty());
+    }
+
+    #[test]
+    fn test_resource_templates_list_with_null_id() {
+        let server = create_test_server();
+        let response = server.handle_resource_templates_list(None);
+
+        assert!(response.error.is_none());
+        assert!(response.id.is_none());
+    }
+
+    // ============== Resource Subscribe/Unsubscribe Tests ==============
+
+    #[tokio::test]
+    async fn test_resource_subscribe_valid() {
+        let server = create_test_server();
+        let params = json!({ "uri": "health://server" });
+
+        let response = server
+            .handle_resource_subscribe(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["subscriptionId"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_resource_subscribe_missing_uri() {
+        let server = create_test_server();
+        let params = json!({});
+
+        let response = server
+            .handle_resource_subscribe(Some(json!(1)), Some(params))
+            .await;
+
+        assert!(response.error.is_some());
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602);
+    }
+
+    #[tokio::test]
+    async fn test_resource_unsubscribe() {
+        let server = create_test_server();
+        // First subscribe
+        let sub_params = json!({ "uri": "health://server" });
+        server
+            .handle_resource_subscribe(Some(json!(1)), Some(sub_params))
+            .await;
+
+        // Then unsubscribe
+        let unsub_params = json!({ "uri": "health://server" });
+        let response = server
+            .handle_resource_unsubscribe(Some(json!(2)), Some(unsub_params))
+            .await;
+
+        assert!(response.error.is_none());
+    }
+
+    // ============== Completions Tests ==============
+
+    #[test]
+    fn test_completions_complete_missing_params() {
+        let server = create_test_server();
+        let response = server.handle_completions_complete(Some(json!(1)), None);
+
+        assert!(response.error.is_some());
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602);
+    }
+
+    #[test]
+    fn test_completions_complete_invalid_params() {
+        let server = create_test_server();
+        let params = json!({ "invalid": "structure" });
+        let response = server.handle_completions_complete(Some(json!(1)), Some(params));
+
+        assert!(response.error.is_some());
+        let error = response.error.unwrap();
+        assert_eq!(error.code, -32602);
+    }
+
+    #[test]
+    fn test_completions_complete_prompt_ref() {
+        let server = create_test_server();
+        let params = json!({
+            "ref": {
+                "type": "ref/prompt",
+                "name": "system-health"
+            },
+            "argument": {
+                "name": "host",
+                "value": ""
+            }
+        });
+
+        let response = server.handle_completions_complete(Some(json!(1)), Some(params));
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["completion"].is_object());
+        assert!(result["completion"]["values"].is_array());
+        assert!(result["completion"]["total"].is_number());
+    }
+
+    #[test]
+    fn test_completions_complete_resource_ref() {
+        let server = create_test_server();
+        let params = json!({
+            "ref": {
+                "type": "ref/resource",
+                "uri": "ssh://server/{path}"
+            },
+            "argument": {
+                "name": "path",
+                "value": "/etc"
+            }
+        });
+
+        let response = server.handle_completions_complete(Some(json!(1)), Some(params));
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["completion"]["values"].is_array());
+    }
+
+    // ============== Logging Tests ==============
+
+    #[test]
+    fn test_logging_set_level_missing_params() {
+        let server = create_test_server();
+        let response = server.handle_logging_set_level(Some(json!(1)), None);
+
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
+
+    #[test]
+    fn test_logging_set_level_invalid_params() {
+        let server = create_test_server();
+        let params = json!({ "level": "nonexistent" });
+        let response = server.handle_logging_set_level(Some(json!(1)), Some(params));
+
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
+
+    #[test]
+    fn test_logging_set_level_debug() {
+        let server = create_test_server();
+        let params = json!({ "level": "debug" });
+        let response = server.handle_logging_set_level(Some(json!(1)), Some(params));
+
+        assert!(response.error.is_none());
+        assert_eq!(server.log_level.load(Ordering::Relaxed), 0); // debug = 0
+    }
+
+    #[test]
+    fn test_logging_set_level_error() {
+        let server = create_test_server();
+        let params = json!({ "level": "error" });
+        let response = server.handle_logging_set_level(Some(json!(1)), Some(params));
+
+        assert!(response.error.is_none());
+        assert_eq!(server.log_level.load(Ordering::Relaxed), 4); // error = 4
+    }
+
+    // ============== Tools List Pagination Tests ==============
+
+    #[test]
+    fn test_tools_list_with_cursor_paginates() {
+        let server = create_test_server();
+
+        // First page with cursor "0"
+        let params = json!({ "cursor": "0" });
+        let response = server.handle_tools_list(Some(json!(1)), Some(&params));
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 50); // page_size = 50
+        assert!(result["nextCursor"].is_string()); // more pages available
+    }
+
+    #[test]
+    fn test_tools_list_cursor_past_end_returns_empty() {
+        let server = create_test_server();
+
+        // Cursor way past the end
+        let params = json!({ "cursor": "999999" });
+        let response = server.handle_tools_list(Some(json!(1)), Some(&params));
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+        assert!(tools.is_empty());
+    }
+
+    #[test]
+    fn test_tools_list_no_cursor_returns_all() {
+        let server = create_test_server();
+
+        let response = server.handle_tools_list(Some(json!(1)), None);
+        let result = response.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+
+        // Without cursor, all tools are returned (>50)
+        assert!(tools.len() > 50);
+        // And no nextCursor
+        assert!(result.get("nextCursor").is_none() || result["nextCursor"].is_null());
+    }
+
+    #[test]
+    fn test_tools_list_filter_by_group() {
+        let server = create_test_server();
+
+        let params = json!({ "group": "docker" });
+        let response = server.handle_tools_list(Some(json!(1)), Some(&params));
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+        assert!(!tools.is_empty());
+        for tool in tools {
+            let name = tool["name"].as_str().unwrap();
+            assert!(
+                name.starts_with("ssh_docker"),
+                "Expected docker tool, got {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tools_list_filter_read_only() {
+        let server = create_test_server();
+
+        let params = json!({ "readOnlyHint": true });
+        let response = server.handle_tools_list(Some(json!(1)), Some(&params));
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+        assert!(!tools.is_empty());
+        for tool in tools {
+            let read_only = tool["annotations"]["readOnlyHint"].as_bool().unwrap_or(false);
+            assert!(read_only, "Tool {} not read-only", tool["name"]);
+        }
+    }
+
+    #[test]
+    fn test_tools_list_filter_destructive() {
+        let server = create_test_server();
+
+        let params = json!({ "destructiveHint": true });
+        let response = server.handle_tools_list(Some(json!(1)), Some(&params));
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+        for tool in tools {
+            let destructive = tool["annotations"]["destructiveHint"]
+                .as_bool()
+                .unwrap_or(false);
+            assert!(destructive, "Tool {} not destructive", tool["name"]);
+        }
+    }
+
+    // ============== Request Routing Coverage ==============
+
+    #[tokio::test]
+    async fn test_handle_request_completions_complete_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "completions/complete".to_string(),
+            params: None,
+        };
+
+        let response = server.handle_request(request).await;
+
+        // Missing params -> invalid_params, not method_not_found
+        assert!(response.error.is_some());
+        assert_eq!(response.error.unwrap().code, -32602);
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_logging_set_level_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "logging/setLevel".to_string(),
+            params: Some(json!({ "level": "info" })),
+        };
+
+        let response = server.handle_request(request).await;
+
+        assert!(response.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_resources_templates_list_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "resources/templates/list".to_string(),
+            params: None,
+        };
+
+        let response = server.handle_request(request).await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["resourceTemplates"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_resources_subscribe_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "resources/subscribe".to_string(),
+            params: Some(json!({ "uri": "health://server" })),
+        };
+
+        let response = server.handle_request(request).await;
+
+        assert!(response.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_resources_unsubscribe_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "resources/unsubscribe".to_string(),
+            params: Some(json!({ "uri": "health://server" })),
+        };
+
+        let response = server.handle_request(request).await;
+
+        assert!(response.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handle_request_resources_read_dispatch() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
+            method: "resources/read".to_string(),
+            params: Some(json!({ "uri": "history://recent" })),
+        };
+
+        let response = server.handle_request(request).await;
+
+        assert!(response.error.is_none());
+    }
+
+    // ============== Build Server Extensions Tests ==============
+
+    #[tokio::test]
+    async fn test_build_server_extensions_includes_tasks() {
+        let server = create_test_server();
+        let exts = server.build_server_extensions().await.unwrap();
+        assert!(exts.contains_key("io.modelcontextprotocol/tasks"));
+    }
+
+    #[tokio::test]
+    async fn test_build_server_extensions_includes_output_pagination() {
+        let server = create_test_server();
+        let exts = server.build_server_extensions().await.unwrap();
+        assert!(exts.contains_key("com.mcp-ssh-bridge/output-pagination"));
+    }
+
+    #[tokio::test]
+    async fn test_build_server_extensions_no_multi_host_with_zero_hosts() {
+        let server = create_test_server();
+        let exts = server.build_server_extensions().await.unwrap();
+        // Zero hosts -> no multi-host extension
+        assert!(!exts.contains_key("com.mcp-ssh-bridge/multi-host"));
     }
 }

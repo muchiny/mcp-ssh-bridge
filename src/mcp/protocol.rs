@@ -249,6 +249,9 @@ pub struct Tool {
     /// Structured output schema for the tool's return value (MCP 2025-06-18+).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<Value>,
+    /// Client-specific metadata hints (e.g., `anthropic/maxResultSizeChars`).
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<Value>,
 }
 
 /// Tool execution hints (MCP 2025-11-25+).
@@ -1044,6 +1047,7 @@ mod tests {
             annotations: None,
             execution: None,
             output_schema: None,
+            meta: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
         assert!(json.contains("inputSchema"));
@@ -1051,6 +1055,8 @@ mod tests {
         assert!(!json.contains("annotations"));
         // execution: None should be omitted
         assert!(!json.contains("execution"));
+        // meta: None should be omitted
+        assert!(!json.contains("_meta"));
     }
 
     #[test]
@@ -1146,6 +1152,7 @@ mod tests {
             annotations: Some(ToolAnnotations::read_only("List Docker Containers")),
             execution: None,
             output_schema: None,
+            meta: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
         assert!(json.contains("\"annotations\""));
@@ -1163,6 +1170,7 @@ mod tests {
             annotations: None,
             execution: None,
             output_schema: None,
+            meta: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
         assert!(!json.contains("annotations"));
@@ -1519,9 +1527,40 @@ mod tests {
                 task_support: "optional".to_string(),
             }),
             output_schema: None,
+            meta: None,
         };
         let json = serde_json::to_value(&tool).unwrap();
         assert_eq!(json["execution"]["taskSupport"], "optional");
+    }
+
+    #[test]
+    fn test_tool_meta_serializes_correctly() {
+        let tool = Tool {
+            name: "ssh_exec".to_string(),
+            description: "Execute".to_string(),
+            input_schema: json!({"type": "object"}),
+            annotations: None,
+            execution: None,
+            output_schema: None,
+            meta: Some(json!({"anthropic/maxResultSizeChars": 200_000})),
+        };
+        let json = serde_json::to_value(&tool).unwrap();
+        assert_eq!(json["_meta"]["anthropic/maxResultSizeChars"], 200_000);
+    }
+
+    #[test]
+    fn test_tool_meta_none_omitted() {
+        let tool = Tool {
+            name: "ssh_status".to_string(),
+            description: "Status".to_string(),
+            input_schema: json!({"type": "object"}),
+            annotations: None,
+            execution: None,
+            output_schema: None,
+            meta: None,
+        };
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(!json.contains("_meta"));
     }
 
     #[test]
