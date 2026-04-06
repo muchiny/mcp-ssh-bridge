@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-04-07
+
+### Fixed
+
+- **Docker workflow Trivy scan** — fix `MANIFEST_UNKNOWN` error by scanning the local image tag instead of trying to pull from `ghcr.io` before the push step
+- **Pre-existing CI lint failures** — resolve all `cargo fmt`, `cargo clippy --all-features`, `typos`, and `markdownlint` errors that were failing CI before this release
+
 ## [1.9.0] - 2026-04-07
 
 ### Summary
