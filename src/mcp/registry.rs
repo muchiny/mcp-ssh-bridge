@@ -228,16 +228,29 @@ pub fn tool_group(tool_name: &str) -> &'static str {
         | "ssh_helm_install" | "ssh_helm_rollback" | "ssh_helm_history" | "ssh_helm_uninstall" => {
             "kubernetes"
         }
-        "ssh_ansible_playbook" | "ssh_ansible_inventory" | "ssh_ansible_adhoc"
-        | "ssh_ansible_config" | "ssh_ansible_facts" | "ssh_ansible_lint"
-        | "ssh_ansible_recap" | "ssh_ansible_events"
+        "ssh_ansible_playbook"
+        | "ssh_ansible_inventory"
+        | "ssh_ansible_adhoc"
+        | "ssh_ansible_config"
+        | "ssh_ansible_facts"
+        | "ssh_ansible_lint"
+        | "ssh_ansible_recap"
+        | "ssh_ansible_events"
         | "ssh_ansible_run_background" => "ansible",
         // AWX
-        "ssh_awx_status" | "ssh_awx_templates" | "ssh_awx_template_detail"
-        | "ssh_awx_job_launch" | "ssh_awx_job_status" | "ssh_awx_job_events"
-        | "ssh_awx_job_summary" | "ssh_awx_job_stdout" | "ssh_awx_job_cancel"
-        | "ssh_awx_inventories" | "ssh_awx_inventory_hosts"
-        | "ssh_awx_project_sync" | "ssh_awx_job_follow" => "awx",
+        "ssh_awx_status"
+        | "ssh_awx_templates"
+        | "ssh_awx_template_detail"
+        | "ssh_awx_job_launch"
+        | "ssh_awx_job_status"
+        | "ssh_awx_job_events"
+        | "ssh_awx_job_summary"
+        | "ssh_awx_job_stdout"
+        | "ssh_awx_job_cancel"
+        | "ssh_awx_inventories"
+        | "ssh_awx_inventory_hosts"
+        | "ssh_awx_project_sync"
+        | "ssh_awx_job_follow" => "awx",
         // New groups
         "ssh_service_status"
         | "ssh_service_start"
@@ -1168,6 +1181,7 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshApparmorProfilesHandler,
         SshApparmorStatusHandler,
         SshAtJobsHandler,
+        SshAwsCliHandler,
         SshAwxInventoriesHandler,
         SshAwxInventoryHostsHandler,
         SshAwxJobCancelHandler,
@@ -1181,7 +1195,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshAwxStatusHandler,
         SshAwxTemplateDetailHandler,
         SshAwxTemplatesHandler,
-        SshAwsCliHandler,
         SshBackupCreateHandler,
         SshBackupListHandler,
         SshBackupRestoreHandler,

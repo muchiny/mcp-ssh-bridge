@@ -92,8 +92,7 @@ impl ToolHandler for SshAwxInventoriesHandler {
                 param: "arguments".to_string(),
             })
             .and_then(|v| {
-                serde_json::from_value(v)
-                    .map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
+                serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
             })?;
 
         let awx = ctx.config.awx.as_ref().ok_or_else(|| {
@@ -124,9 +123,7 @@ impl ToolHandler for SshAwxInventoriesHandler {
             .config
             .hosts
             .get(host)
-            .ok_or_else(|| BridgeError::UnknownHost {
-                host: host.clone(),
-            })?;
+            .ok_or_else(|| BridgeError::UnknownHost { host: host.clone() })?;
 
         let limits = ctx.config.limits.clone();
         let mut conn = ctx
@@ -147,8 +144,8 @@ impl ToolHandler for SshAwxInventoriesHandler {
 mod tests {
     use super::*;
     use crate::error::BridgeError;
-    use crate::ports::mock::create_test_context;
     use crate::ports::ToolHandler;
+    use crate::ports::mock::create_test_context;
     use serde_json::json;
 
     #[tokio::test]
@@ -176,8 +173,7 @@ mod tests {
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_awx_inventories");
 
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         assert_eq!(schema_json["type"], "object");
     }
 

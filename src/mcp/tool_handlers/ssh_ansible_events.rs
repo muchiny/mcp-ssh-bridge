@@ -107,12 +107,18 @@ impl StandardTool for AnsibleEventsTool {
         if args.check_status.unwrap_or(false)
             && let Some(pid) = args.pid
         {
-            let _ = write!(cmd, r#"if kill -0 {pid} 2>/dev/null; then echo '{{"running":true,"pid":{pid}}}'; else echo '{{"running":false,"pid":{pid}}}'; fi && "#);
+            let _ = write!(
+                cmd,
+                r#"if kill -0 {pid} 2>/dev/null; then echo '{{"running":true,"pid":{pid}}}'; else echo '{{"running":false,"pid":{pid}}}'; fi && "#
+            );
         }
 
         // Extract matching events from the JSON output file using grep + python
         // The JSON callback writes one JSON object per line
-        let _ = write!(cmd, r#"if [ -f '{output_file}' ]; then grep -E '"event"\s*:\s*"({event_filter})"' '{output_file}' || echo '{{"no_matching_events":true}}'; else echo '{{"error":"Output file not found","file":"{output_file}"}}'; fi"#);
+        let _ = write!(
+            cmd,
+            r#"if [ -f '{output_file}' ]; then grep -E '"event"\s*:\s*"({event_filter})"' '{output_file}' || echo '{{"no_matching_events":true}}'; else echo '{{"error":"Output file not found","file":"{output_file}"}}'; fi"#
+        );
 
         Ok(cmd)
     }
@@ -156,7 +162,10 @@ mod tests {
         let handler = SshAnsibleEventsHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(Some(json!({"host": "nonexistent", "run_id": "abc123"})), &ctx)
+            .execute(
+                Some(json!({"host": "nonexistent", "run_id": "abc123"})),
+                &ctx,
+            )
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -224,7 +233,9 @@ mod tests {
     async fn test_invalid_json_type() {
         let handler = SshAnsibleEventsHandler::new();
         let ctx = create_test_context();
-        let result = handler.execute(Some(json!({"host": 123, "run_id": "abc"})), &ctx).await;
+        let result = handler
+            .execute(Some(json!({"host": 123, "run_id": "abc"})), &ctx)
+            .await;
         assert!(result.is_err());
     }
 
@@ -233,7 +244,10 @@ mod tests {
         let handler = SshAnsibleEventsHandler::new();
         let ctx = create_test_context_with_host();
         let result = handler
-            .execute(Some(json!({"host": "server1", "run_id": "../../etc/shadow"})), &ctx)
+            .execute(
+                Some(json!({"host": "server1", "run_id": "../../etc/shadow"})),
+                &ctx,
+            )
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {

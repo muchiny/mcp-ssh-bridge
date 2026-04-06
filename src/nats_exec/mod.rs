@@ -224,10 +224,7 @@ mod tests {
             "stderr": "permission denied\n",
             "exit_code": 1,
         });
-        assert_eq!(
-            response["stderr"].as_str().unwrap(),
-            "permission denied\n"
-        );
+        assert_eq!(response["stderr"].as_str().unwrap(), "permission denied\n");
         assert_eq!(response["exit_code"].as_u64().unwrap(), 1);
     }
 

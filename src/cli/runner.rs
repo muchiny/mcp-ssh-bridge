@@ -2257,7 +2257,9 @@ mod tests {
     fn test_coerce_value_number_float_from_schema() {
         let schema = r#"{"type":"object","properties":{"rate":{"type":"number"}}}"#;
         let v = coerce_value("3.14", "rate", Some(schema));
-        assert_eq!(v, serde_json::json!(3.14));
+        #[allow(clippy::approx_constant)]
+        let expected = serde_json::json!(3.14);
+        assert_eq!(v, expected);
     }
 
     #[test]
@@ -2330,7 +2332,7 @@ mod tests {
 
     #[test]
     fn test_coerce_value_json_array_auto() {
-        let v = coerce_value(r#"[1,2,3]"#, "key", None);
+        let v = coerce_value(r"[1,2,3]", "key", None);
         assert_eq!(v, serde_json::json!([1, 2, 3]));
     }
 
@@ -2383,9 +2385,9 @@ mod tests {
         hosts.insert(
             "bad-host".to_string(),
             HostConfig {
-                hostname: "".to_string(), // empty hostname = error
+                hostname: String::new(), // empty hostname = error
                 port: 22,
-                user: "".to_string(), // empty user = error
+                user: String::new(), // empty user = error
                 auth: AuthConfig::Agent,
                 description: None,
                 host_key_verification: HostKeyVerification::Off,
@@ -2554,8 +2556,7 @@ mod tests {
             awx: None,
         };
 
-        let result =
-            run_list_tools(Arc::new(config), None, false, false, Some("kubernetes")).await;
+        let result = run_list_tools(Arc::new(config), None, false, false, Some("kubernetes")).await;
         assert!(result.is_ok());
     }
 

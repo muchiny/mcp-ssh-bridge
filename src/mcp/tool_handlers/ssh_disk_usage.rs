@@ -350,22 +350,25 @@ mod tests {
     fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
         use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
         let mut hosts = std::collections::HashMap::new();
-        hosts.insert("server1".to_string(), HostConfig {
-            hostname: "192.168.1.100".to_string(),
-            port: 22,
-            user: "test".to_string(),
-            auth: AuthConfig::Agent,
-            description: None,
-            host_key_verification: HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: OsType::default(),
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        });
+        hosts.insert(
+            "server1".to_string(),
+            HostConfig {
+                hostname: "192.168.1.100".to_string(),
+                port: 22,
+                user: "test".to_string(),
+                auth: AuthConfig::Agent,
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: OsType::default(),
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
         hosts
     }
 
@@ -374,7 +377,9 @@ mod tests {
         let handler = SshDiskUsageHandler;
         let ctx = crate::ports::mock::create_test_context_with_mock_executor(
             server1_hosts(),
-            mock_output("Filesystem     1K-blocks    Used Available Use% Mounted on\n/dev/sda1       41284928 6173696  33000440  16% /\n"),
+            mock_output(
+                "Filesystem     1K-blocks    Used Available Use% Mounted on\n/dev/sda1       41284928 6173696  33000440  16% /\n",
+            ),
         );
         let result = handler
             .execute(Some(json!({"host": "server1"})), &ctx)

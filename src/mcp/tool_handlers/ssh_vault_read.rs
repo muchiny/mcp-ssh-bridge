@@ -256,21 +256,19 @@ mod tests {
         hosts
     }
 
-    fn permissive_ctx(
-        mock_out: crate::ssh::CommandOutput,
-    ) -> crate::ports::ToolContext {
-        use std::sync::Arc;
-        use crate::config::{Config, LimitsConfig, SecurityConfig, SecurityMode};
-        use crate::domain::history::HistoryConfig;
+    fn permissive_ctx(mock_out: crate::ssh::CommandOutput) -> crate::ports::ToolContext {
         use crate::config::SessionConfig;
-        use crate::security::{CommandValidator, Sanitizer};
-        use crate::security::AuditLogger;
+        use crate::config::{Config, LimitsConfig, SecurityConfig, SecurityMode};
         use crate::domain::CommandHistory;
         use crate::domain::ExecuteCommandUseCase;
-        use crate::ports::ExecutorRouter;
-        use crate::security::RateLimiter;
-        use crate::ssh::SessionManager;
         use crate::domain::TunnelManager;
+        use crate::domain::history::HistoryConfig;
+        use crate::ports::ExecutorRouter;
+        use crate::security::AuditLogger;
+        use crate::security::RateLimiter;
+        use crate::security::{CommandValidator, Sanitizer};
+        use crate::ssh::SessionManager;
+        use std::sync::Arc;
         let sec = SecurityConfig {
             mode: SecurityMode::Permissive,
             blacklist: Vec::new(),
@@ -316,7 +314,10 @@ mod tests {
         let handler = SshVaultReadHandler::new();
         let ctx = permissive_ctx(mock_output("mock output"));
         let result = handler
-            .execute(Some(json!({"host": "server1", "path": "secret/data/myapp"})), &ctx)
+            .execute(
+                Some(json!({"host": "server1", "path": "secret/data/myapp"})),
+                &ctx,
+            )
             .await
             .unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));

@@ -1696,6 +1696,7 @@ mod tests {
     // ============== TransferProgress Calculation Tests ==============
 
     #[test]
+    #[allow(clippy::cast_precision_loss)]
     fn test_transfer_progress_percentage_calculation() {
         // Verify the percentage formula used in upload/download code
         let total: u64 = 1000;
@@ -1729,6 +1730,7 @@ mod tests {
     // ============== TransferResult Rate Calculation Tests ==============
 
     #[test]
+    #[allow(clippy::cast_precision_loss)]
     fn test_transfer_result_rate_calculation() {
         // Verify the rate formula used in upload/download code
         let bytes_transferred: u64 = 10_000_000;

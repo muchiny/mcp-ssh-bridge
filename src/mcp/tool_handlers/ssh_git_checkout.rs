@@ -233,10 +233,9 @@ mod tests {
 
     #[test]
     fn test_build_command_defaults() {
-        let args: SshGitCheckoutArgs = serde_json::from_value(
-            json!({"host": "s", "path": "/opt/repo", "target": "main"}),
-        )
-        .unwrap();
+        let args: SshGitCheckoutArgs =
+            serde_json::from_value(json!({"host": "s", "path": "/opt/repo", "target": "main"}))
+                .unwrap();
         let host = test_host_config();
         let cmd = GitCheckoutTool::build_command(&args, &host).unwrap();
         assert!(!cmd.is_empty());
@@ -278,21 +277,19 @@ mod tests {
         hosts
     }
 
-    fn permissive_ctx(
-        mock_out: crate::ssh::CommandOutput,
-    ) -> crate::ports::ToolContext {
-        use std::sync::Arc;
-        use crate::config::{Config, LimitsConfig, SecurityConfig, SecurityMode};
-        use crate::domain::history::HistoryConfig;
+    fn permissive_ctx(mock_out: crate::ssh::CommandOutput) -> crate::ports::ToolContext {
         use crate::config::SessionConfig;
-        use crate::security::{CommandValidator, Sanitizer};
-        use crate::security::AuditLogger;
+        use crate::config::{Config, LimitsConfig, SecurityConfig, SecurityMode};
         use crate::domain::CommandHistory;
         use crate::domain::ExecuteCommandUseCase;
-        use crate::ports::ExecutorRouter;
-        use crate::security::RateLimiter;
-        use crate::ssh::SessionManager;
         use crate::domain::TunnelManager;
+        use crate::domain::history::HistoryConfig;
+        use crate::ports::ExecutorRouter;
+        use crate::security::AuditLogger;
+        use crate::security::RateLimiter;
+        use crate::security::{CommandValidator, Sanitizer};
+        use crate::ssh::SessionManager;
+        use std::sync::Arc;
         let sec = SecurityConfig {
             mode: SecurityMode::Permissive,
             blacklist: Vec::new(),
@@ -338,7 +335,10 @@ mod tests {
         let handler = SshGitCheckoutHandler::new();
         let ctx = permissive_ctx(mock_output("mock output"));
         let result = handler
-            .execute(Some(json!({"host": "server1", "path": "/opt/repo", "target": "main"})), &ctx)
+            .execute(
+                Some(json!({"host": "server1", "path": "/opt/repo", "target": "main"})),
+                &ctx,
+            )
             .await
             .unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));

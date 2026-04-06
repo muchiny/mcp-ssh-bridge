@@ -174,8 +174,8 @@ mod tests {
     #[test]
     fn test_default_port_is_iana_assigned() {
         // NETCONF over SSH is IANA-assigned port 830 (RFC 6242)
-        assert!(DEFAULT_NETCONF_PORT > 0);
-        assert!(DEFAULT_NETCONF_PORT < 1024); // well-known port range
+        const { assert!(DEFAULT_NETCONF_PORT > 0) };
+        const { assert!(DEFAULT_NETCONF_PORT < 1024) }; // well-known port range
     }
 
     #[test]
@@ -203,7 +203,8 @@ mod tests {
     #[test]
     fn test_rpc_error_detection() {
         let response_ok = "<rpc-reply><data>config</data></rpc-reply>";
-        let response_err = "<rpc-reply><rpc-error><error-message>bad</error-message></rpc-error></rpc-reply>";
+        let response_err =
+            "<rpc-reply><rpc-error><error-message>bad</error-message></rpc-error></rpc-reply>";
 
         assert!(!response_ok.contains("<rpc-error"));
         assert!(response_err.contains("<rpc-error"));

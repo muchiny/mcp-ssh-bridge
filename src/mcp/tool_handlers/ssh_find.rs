@@ -376,18 +376,22 @@ mod tests {
         hosts: std::collections::HashMap<String, crate::config::HostConfig>,
         output: crate::ssh::CommandOutput,
     ) -> crate::ports::ToolContext {
-        use std::sync::Arc;
         use crate::config::{Config, SecurityConfig, SecurityMode};
         use crate::domain::{CommandHistory, ExecuteCommandUseCase, HistoryConfig, TunnelManager};
         use crate::ports::ExecutorRouter;
         use crate::security::{AuditLogger, CommandValidator, RateLimiter, Sanitizer};
+        use std::sync::Arc;
 
         let security = SecurityConfig {
             mode: SecurityMode::Permissive,
             blacklist: vec![],
             ..SecurityConfig::default()
         };
-        let config = Config { hosts, security: security.clone(), ..Config::default() };
+        let config = Config {
+            hosts,
+            security: security.clone(),
+            ..Config::default()
+        };
         let validator = Arc::new(CommandValidator::new(&security));
         let sanitizer = Arc::new(Sanitizer::with_defaults());
         let audit_logger = Arc::new(AuditLogger::disabled());
@@ -422,22 +426,25 @@ mod tests {
     fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
         use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
         let mut hosts = std::collections::HashMap::new();
-        hosts.insert("server1".to_string(), HostConfig {
-            hostname: "192.168.1.100".to_string(),
-            port: 22,
-            user: "test".to_string(),
-            auth: AuthConfig::Agent,
-            description: None,
-            host_key_verification: HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: OsType::default(),
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        });
+        hosts.insert(
+            "server1".to_string(),
+            HostConfig {
+                hostname: "192.168.1.100".to_string(),
+                port: 22,
+                user: "test".to_string(),
+                auth: AuthConfig::Agent,
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: OsType::default(),
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
         hosts
     }
 

@@ -283,11 +283,7 @@ impl AnsibleCommandBuilder {
     ///
     /// Constructs: `ansible-lint {target} [--format {format}] [-p]`
     #[must_use]
-    pub fn build_lint_command(
-        target: &str,
-        format: Option<&str>,
-        parseable: bool,
-    ) -> String {
+    pub fn build_lint_command(target: &str, format: Option<&str>, parseable: bool) -> String {
         let mut cmd = String::new();
 
         let _ = write!(cmd, "ansible-lint {}", shell_escape(target));
@@ -307,10 +303,7 @@ impl AnsibleCommandBuilder {
     ///
     /// Constructs: `ansible-config dump [--only-changed] [--format {format}]`
     #[must_use]
-    pub fn build_config_command(
-        only_changed: bool,
-        format: Option<&str>,
-    ) -> String {
+    pub fn build_config_command(only_changed: bool, format: Option<&str>) -> String {
         let mut cmd = String::from("ansible-config dump");
 
         if only_changed {
@@ -420,7 +413,8 @@ mod tests {
     #[test]
     fn test_build_playbook_minimal() {
         let cmd = AnsibleCommandBuilder::build_playbook_command(
-            "site.yml", None, None, None, None, None, false, false, None, None, false, None, None, None,
+            "site.yml", None, None, None, None, None, false, false, None, None, false, None, None,
+            None,
         );
         assert_eq!(cmd, "ansible-playbook 'site.yml'");
     }
@@ -904,7 +898,19 @@ mod tests {
     #[test]
     fn test_build_playbook_with_callback() {
         let cmd = AnsibleCommandBuilder::build_playbook_command(
-            "site.yml", None, None, None, None, None, false, false, None, None, false, None, None,
+            "site.yml",
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+            false,
+            None,
+            None,
+            false,
+            None,
+            None,
             Some("json"),
         );
         assert!(cmd.starts_with("ANSIBLE_STDOUT_CALLBACK='json' "));
@@ -914,7 +920,18 @@ mod tests {
     #[test]
     fn test_build_playbook_callback_with_working_dir() {
         let cmd = AnsibleCommandBuilder::build_playbook_command(
-            "site.yml", None, None, None, None, None, false, false, None, None, false, None,
+            "site.yml",
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+            false,
+            None,
+            None,
+            false,
+            None,
             Some("/opt/ansible"),
             Some("dense"),
         );
@@ -946,16 +963,18 @@ mod tests {
 
     #[test]
     fn test_build_facts_minimal() {
-        let cmd = AnsibleCommandBuilder::build_facts_command(
-            "all", None, None, false, None,
-        );
+        let cmd = AnsibleCommandBuilder::build_facts_command("all", None, None, false, None);
         assert_eq!(cmd, "ansible 'all' -m setup");
     }
 
     #[test]
     fn test_build_facts_with_filter() {
         let cmd = AnsibleCommandBuilder::build_facts_command(
-            "webservers", Some("ansible_distribution*"), Some("hosts.ini"), true, Some("root"),
+            "webservers",
+            Some("ansible_distribution*"),
+            Some("hosts.ini"),
+            true,
+            Some("root"),
         );
         assert!(cmd.contains("ansible 'webservers' -m setup"));
         assert!(cmd.contains("-a 'filter='ansible_distribution*''"));

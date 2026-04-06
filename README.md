@@ -1,5 +1,6 @@
 # MCP SSH Bridge
 
+<!-- markdownlint-disable MD033 -->
 <div align="center">
 
 <img src="dxt/icon.svg" alt="MCP SSH Bridge" width="96" height="96">

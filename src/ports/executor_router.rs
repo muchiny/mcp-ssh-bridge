@@ -355,6 +355,7 @@ impl MockConnection {
     }
 
     /// Execute returns the pre-configured output.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn exec(&self, _command: &str, _limits: &LimitsConfig) -> Result<CommandOutput> {
         Ok(self.output.clone())
     }

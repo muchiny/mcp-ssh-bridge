@@ -236,7 +236,10 @@ mod tests {
             mock_output("mock-output-ok"),
         );
         let result = handler
-            .execute(Some(json!({"host": "winhost", "name": "example.com"})), &ctx)
+            .execute(
+                Some(json!({"host": "winhost", "name": "example.com"})),
+                &ctx,
+            )
             .await
             .unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));

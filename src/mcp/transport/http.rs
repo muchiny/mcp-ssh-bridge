@@ -479,7 +479,9 @@ mod tests {
         let (tx, _rx) = tokio::sync::mpsc::channel(1);
         let session = HttpSession {
             notification_tx: tx,
-            created_at: std::time::Instant::now() - Duration::from_secs(120),
+            created_at: std::time::Instant::now()
+                .checked_sub(Duration::from_secs(120))
+                .unwrap(),
         };
         assert!(session.is_expired(Duration::from_secs(60)));
     }

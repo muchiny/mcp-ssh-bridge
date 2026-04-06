@@ -94,8 +94,7 @@ impl ToolHandler for SshAwxInventoryHostsHandler {
                 param: "arguments".to_string(),
             })
             .and_then(|v| {
-                serde_json::from_value(v)
-                    .map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
+                serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
             })?;
 
         AwxCommandBuilder::validate_id(args.inventory_id)?;
@@ -107,11 +106,7 @@ impl ToolHandler for SshAwxInventoryHostsHandler {
         })?;
 
         let mut endpoint = String::new();
-        let _ = write!(
-            endpoint,
-            "/api/v2/inventories/{}/hosts/",
-            args.inventory_id
-        );
+        let _ = write!(endpoint, "/api/v2/inventories/{}/hosts/", args.inventory_id);
 
         let page_size_str = args.page_size.unwrap_or(50).to_string();
         let query_params: Vec<(&str, &str)> = vec![("page_size", &page_size_str)];
@@ -132,9 +127,7 @@ impl ToolHandler for SshAwxInventoryHostsHandler {
             .config
             .hosts
             .get(host)
-            .ok_or_else(|| BridgeError::UnknownHost {
-                host: host.clone(),
-            })?;
+            .ok_or_else(|| BridgeError::UnknownHost { host: host.clone() })?;
 
         let limits = ctx.config.limits.clone();
         let mut conn = ctx
@@ -155,8 +148,8 @@ impl ToolHandler for SshAwxInventoryHostsHandler {
 mod tests {
     use super::*;
     use crate::error::BridgeError;
-    use crate::ports::mock::create_test_context;
     use crate::ports::ToolHandler;
+    use crate::ports::mock::create_test_context;
     use serde_json::json;
 
     #[tokio::test]
@@ -184,8 +177,7 @@ mod tests {
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_awx_inventory_hosts");
 
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         assert_eq!(schema_json["type"], "object");
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("inventory_id")));
@@ -230,10 +222,7 @@ mod tests {
         let handler = SshAwxInventoryHostsHandler;
         let ctx = create_test_context();
         let result = handler
-            .execute(
-                Some(json!({"inventory_id": "not_a_number"})),
-                &ctx,
-            )
+            .execute(Some(json!({"inventory_id": "not_a_number"})), &ctx)
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {

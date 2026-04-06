@@ -85,7 +85,6 @@ impl SshAwxJobLaunchHandler {
     pub const fn new() -> Self {
         Self
     }
-
 }
 
 #[async_trait]
@@ -117,8 +116,7 @@ impl ToolHandler for SshAwxJobLaunchHandler {
                 param: "arguments".to_string(),
             })
             .and_then(|v| {
-                serde_json::from_value(v)
-                    .map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
+                serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
             })?;
 
         AwxCommandBuilder::validate_id(args.template_id)?;
@@ -181,13 +179,11 @@ impl ToolHandler for SshAwxJobLaunchHandler {
         );
 
         let host = &awx.ssh_host;
-        let host_config =
-            ctx.config
-                .hosts
-                .get(host)
-                .ok_or_else(|| BridgeError::UnknownHost {
-                    host: host.clone(),
-                })?;
+        let host_config = ctx
+            .config
+            .hosts
+            .get(host)
+            .ok_or_else(|| BridgeError::UnknownHost { host: host.clone() })?;
 
         let limits = ctx.config.limits.clone();
         let mut conn = ctx

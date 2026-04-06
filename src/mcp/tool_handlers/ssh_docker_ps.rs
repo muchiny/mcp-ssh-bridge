@@ -421,22 +421,25 @@ mod tests {
     fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
         use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
         let mut hosts = std::collections::HashMap::new();
-        hosts.insert("server1".to_string(), HostConfig {
-            hostname: "192.168.1.100".to_string(),
-            port: 22,
-            user: "test".to_string(),
-            auth: AuthConfig::Agent,
-            description: None,
-            host_key_verification: HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: OsType::default(),
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        });
+        hosts.insert(
+            "server1".to_string(),
+            HostConfig {
+                hostname: "192.168.1.100".to_string(),
+                port: 22,
+                user: "test".to_string(),
+                auth: AuthConfig::Agent,
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: OsType::default(),
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
         hosts
     }
 
@@ -445,11 +448,16 @@ mod tests {
         let handler = SshDockerPsHandler::new();
         let ctx = crate::ports::mock::create_test_context_with_mock_executor(
             server1_hosts(),
-            mock_output("CONTAINER ID   IMAGE    COMMAND   CREATED   STATUS    PORTS   NAMES\nabc123   nginx   \"nginx -g...\"   2h ago   Up 2h   80/tcp   web\n"),
+            mock_output(
+                "CONTAINER ID   IMAGE    COMMAND   CREATED   STATUS    PORTS   NAMES\nabc123   nginx   \"nginx -g...\"   2h ago   Up 2h   80/tcp   web\n",
+            ),
         );
         // Use explicit docker_bin to avoid auto-detect &>/dev/null blacklist
         let result = handler
-            .execute(Some(json!({"host": "server1", "docker_bin": "docker"})), &ctx)
+            .execute(
+                Some(json!({"host": "server1", "docker_bin": "docker"})),
+                &ctx,
+            )
             .await
             .unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));

@@ -167,7 +167,7 @@ mod tests {
     fn test_default_port_value() {
         assert_eq!(DEFAULT_TELNET_PORT, 23);
         // Verify it's a well-known port
-        assert!(DEFAULT_TELNET_PORT < 1024);
+        const { assert!(DEFAULT_TELNET_PORT < 1024) };
     }
 
     #[test]

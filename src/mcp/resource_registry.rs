@@ -355,16 +355,11 @@ mod tests {
         let metrics_result = registry.read("metrics://nonexistent/cpu", &ctx).await;
         // This should fail because no host "nonexistent" exists, but the error
         // should NOT be "Unsupported resource scheme"
-        if let Err(e) = metrics_result {
-            match &e {
-                BridgeError::McpInvalidRequest(msg) => {
-                    assert!(
-                        !msg.contains("Unsupported resource scheme"),
-                        "metrics:// should be routed to handler, not rejected as unsupported"
-                    );
-                }
-                _ => {} // Other errors are fine (host not found, etc.)
-            }
+        if let Err(BridgeError::McpInvalidRequest(msg)) = metrics_result {
+            assert!(
+                !msg.contains("Unsupported resource scheme"),
+                "metrics:// should be routed to handler, not rejected as unsupported"
+            );
         }
     }
 }

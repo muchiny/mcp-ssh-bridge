@@ -238,22 +238,25 @@ mod tests {
     fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
         use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType as Os};
         let mut hosts = std::collections::HashMap::new();
-        hosts.insert("server1".to_string(), HostConfig {
-            hostname: "192.168.1.100".to_string(),
-            port: 22,
-            user: "test".to_string(),
-            auth: AuthConfig::Agent,
-            description: None,
-            host_key_verification: HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: Os::default(),
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        });
+        hosts.insert(
+            "server1".to_string(),
+            HostConfig {
+                hostname: "192.168.1.100".to_string(),
+                port: 22,
+                user: "test".to_string(),
+                auth: AuthConfig::Agent,
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: Os::default(),
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
         hosts
     }
 

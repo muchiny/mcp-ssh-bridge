@@ -211,7 +211,10 @@ mod tests {
         let handler = SshAnsibleRunBackgroundHandler::new();
         let ctx = create_test_context();
         let result = handler
-            .execute(Some(json!({"host": "nonexistent", "playbook": "site.yml"})), &ctx)
+            .execute(
+                Some(json!({"host": "nonexistent", "playbook": "site.yml"})),
+                &ctx,
+            )
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -277,7 +280,9 @@ mod tests {
     async fn test_invalid_json_type() {
         let handler = SshAnsibleRunBackgroundHandler::new();
         let ctx = create_test_context();
-        let result = handler.execute(Some(json!({"host": 123, "playbook": "s"})), &ctx).await;
+        let result = handler
+            .execute(Some(json!({"host": 123, "playbook": "s"})), &ctx)
+            .await;
         assert!(result.is_err());
     }
 
@@ -286,7 +291,10 @@ mod tests {
         let handler = SshAnsibleRunBackgroundHandler::new();
         let ctx = create_test_context_with_host();
         let result = handler
-            .execute(Some(json!({"host": "server1", "playbook": "../../etc/shadow"})), &ctx)
+            .execute(
+                Some(json!({"host": "server1", "playbook": "../../etc/shadow"})),
+                &ctx,
+            )
             .await;
         assert!(result.is_err());
     }

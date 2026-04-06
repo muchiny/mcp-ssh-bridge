@@ -118,8 +118,7 @@ impl ToolHandler for SshAwxJobFollowHandler {
                 param: "arguments".to_string(),
             })
             .and_then(|v| {
-                serde_json::from_value(v)
-                    .map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
+                serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
             })?;
 
         AwxCommandBuilder::validate_id(args.template_id)?;
@@ -217,7 +216,10 @@ echo '{{"job_id":'$JOB_ID',"status":"timeout","elapsed":'$ELAPSED',"message":"Jo
             ),
         );
 
-        let cmd = format!("bash -c {}", crate::domain::use_cases::shell::escape(&script, crate::config::ShellType::Posix));
+        let cmd = format!(
+            "bash -c {}",
+            crate::domain::use_cases::shell::escape(&script, crate::config::ShellType::Posix)
+        );
 
         // Execute with extended timeout
         let mut exec_limits = limits.clone();
@@ -309,7 +311,9 @@ mod tests {
     async fn test_invalid_json_type() {
         let handler = SshAwxJobFollowHandler::new();
         let ctx = create_test_context();
-        let result = handler.execute(Some(json!({"template_id": "abc"})), &ctx).await;
+        let result = handler
+            .execute(Some(json!({"template_id": "abc"})), &ctx)
+            .await;
         assert!(result.is_err());
     }
 

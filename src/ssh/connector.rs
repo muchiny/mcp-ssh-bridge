@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn test_real_ssh_connector_default_is_same_as_new() {
         let from_new = RealSshConnector::new();
-        let from_default = RealSshConnector::default();
+        let from_default = RealSshConnector;
         // Both are ZSTs so they are identical
         assert_eq!(
             std::mem::size_of_val(&from_new),

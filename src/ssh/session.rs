@@ -1374,7 +1374,10 @@ mod tests {
         // The wrapper should capture exit code before any other command
         let rc_pos = cmd.find("__sshb_rc=$?").unwrap();
         let begin_pos = cmd.find('B').unwrap();
-        assert!(rc_pos < begin_pos, "Exit code should be captured before begin marker");
+        assert!(
+            rc_pos < begin_pos,
+            "Exit code should be captured before begin marker"
+        );
     }
 
     #[test]

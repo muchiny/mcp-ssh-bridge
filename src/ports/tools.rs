@@ -290,6 +290,7 @@ pub mod mock {
     /// without real SSH connections. The mock executor returns the given output
     /// for any `exec()` call.
     #[must_use]
+    #[allow(clippy::implicit_hasher)]
     pub fn create_test_context_with_mock_executor(
         hosts: HashMap<String, HostConfig>,
         mock_output: crate::ssh::CommandOutput,

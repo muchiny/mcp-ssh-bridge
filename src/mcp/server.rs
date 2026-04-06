@@ -2672,7 +2672,10 @@ mod tests {
         let resources = result["resources"].as_array().unwrap();
 
         // With no hosts configured, history://recent and health://server are present
-        let uris: Vec<&str> = resources.iter().map(|r| r["uri"].as_str().unwrap()).collect();
+        let uris: Vec<&str> = resources
+            .iter()
+            .map(|r| r["uri"].as_str().unwrap())
+            .collect();
         assert!(uris.contains(&"history://recent"));
         assert!(uris.contains(&"health://server"));
     }
@@ -3014,7 +3017,9 @@ mod tests {
         let tools = result["tools"].as_array().unwrap();
         assert!(!tools.is_empty());
         for tool in tools {
-            let read_only = tool["annotations"]["readOnlyHint"].as_bool().unwrap_or(false);
+            let read_only = tool["annotations"]["readOnlyHint"]
+                .as_bool()
+                .unwrap_or(false);
             assert!(read_only, "Tool {} not read-only", tool["name"]);
         }
     }

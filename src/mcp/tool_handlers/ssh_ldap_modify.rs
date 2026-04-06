@@ -149,10 +149,9 @@ mod tests {
 
     #[test]
     fn test_build_command_defaults() {
-        let args: SshLdapModifyArgs = serde_json::from_value(
-            json!({"host": "s", "ldif": "dn: cn=test\nchangetype: modify"}),
-        )
-        .unwrap();
+        let args: SshLdapModifyArgs =
+            serde_json::from_value(json!({"host": "s", "ldif": "dn: cn=test\nchangetype: modify"}))
+                .unwrap();
         let host = test_host_config();
         let cmd = LdapModifyTool::build_command(&args, &host).unwrap();
         assert!(!cmd.is_empty());

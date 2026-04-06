@@ -269,7 +269,7 @@ mod tests {
             "stderr": "",
             "exit_code": 0,
             "hostname": "agent-01",
-            "timestamp": 1234567890,
+            "timestamp": 1_234_567_890,
         });
         assert_eq!(response["stdout"].as_str().unwrap(), "ok\n");
         assert_eq!(response["exit_code"].as_u64().unwrap(), 0);

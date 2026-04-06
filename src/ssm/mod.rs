@@ -288,30 +288,27 @@ mod tests {
     #[test]
     fn test_document_selection_linux() {
         let os_type = crate::config::OsType::Linux;
-        let document: Option<String> = None;
-        let resolved = document.unwrap_or_else(|| match os_type {
+        let resolved = match os_type {
             crate::config::OsType::Windows => DEFAULT_WINDOWS_DOCUMENT.to_string(),
             crate::config::OsType::Linux => DEFAULT_LINUX_DOCUMENT.to_string(),
-        });
+        };
         assert_eq!(resolved, "AWS-RunShellScript");
     }
 
     #[test]
     fn test_document_selection_windows() {
         let os_type = crate::config::OsType::Windows;
-        let document: Option<String> = None;
-        let resolved = document.unwrap_or_else(|| match os_type {
+        let resolved = match os_type {
             crate::config::OsType::Windows => DEFAULT_WINDOWS_DOCUMENT.to_string(),
             crate::config::OsType::Linux => DEFAULT_LINUX_DOCUMENT.to_string(),
-        });
+        };
         assert_eq!(resolved, "AWS-RunPowerShellScript");
     }
 
     #[test]
     fn test_document_selection_custom_override() {
-        let document: Option<String> = Some("AWS-RunRemoteScript".to_string());
-        let resolved = document.unwrap_or_else(|| DEFAULT_LINUX_DOCUMENT.to_string());
-        assert_eq!(resolved, "AWS-RunRemoteScript");
+        let document = "AWS-RunRemoteScript".to_string();
+        assert_eq!(document, "AWS-RunRemoteScript");
     }
 
     #[test]

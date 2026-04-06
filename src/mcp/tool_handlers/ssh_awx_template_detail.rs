@@ -88,8 +88,7 @@ impl ToolHandler for SshAwxTemplateDetailHandler {
                 param: "arguments".to_string(),
             })
             .and_then(|v| {
-                serde_json::from_value(v)
-                    .map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
+                serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
             })?;
 
         AwxCommandBuilder::validate_id(args.template_id)?;
@@ -119,9 +118,7 @@ impl ToolHandler for SshAwxTemplateDetailHandler {
             .config
             .hosts
             .get(host)
-            .ok_or_else(|| BridgeError::UnknownHost {
-                host: host.clone(),
-            })?;
+            .ok_or_else(|| BridgeError::UnknownHost { host: host.clone() })?;
 
         let limits = ctx.config.limits.clone();
         let mut conn = ctx
@@ -142,8 +139,8 @@ impl ToolHandler for SshAwxTemplateDetailHandler {
 mod tests {
     use super::*;
     use crate::error::BridgeError;
-    use crate::ports::mock::create_test_context;
     use crate::ports::ToolHandler;
+    use crate::ports::mock::create_test_context;
     use serde_json::json;
 
     #[tokio::test]
@@ -171,8 +168,7 @@ mod tests {
         let schema = handler.schema();
         assert_eq!(schema.name, "ssh_awx_template_detail");
 
-        let schema_json: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap();
+        let schema_json: serde_json::Value = serde_json::from_str(schema.input_schema).unwrap();
         assert_eq!(schema_json["type"], "object");
         let required = schema_json["required"].as_array().unwrap();
         assert!(required.contains(&json!("template_id")));
@@ -228,9 +224,7 @@ mod tests {
         let handler = SshAwxTemplateDetailHandler;
         let ctx = create_test_context();
 
-        let result = handler
-            .execute(Some(json!({"template_id": 1})), &ctx)
-            .await;
+        let result = handler.execute(Some(json!({"template_id": 1})), &ctx).await;
         assert!(result.is_err());
         match result.unwrap_err() {
             BridgeError::McpInvalidRequest(msg) => {

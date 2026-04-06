@@ -282,7 +282,10 @@ mod tests {
             mock_output("mock-output-ok"),
         );
         let result = handler
-            .execute(Some(json!({"host": "winhost", "vm_name": "TestVM", "snapshot_name": "snap1"})), &ctx)
+            .execute(
+                Some(json!({"host": "winhost", "vm_name": "TestVM", "snapshot_name": "snap1"})),
+                &ctx,
+            )
             .await
             .unwrap();
         assert!(result.is_error.is_none() || result.is_error == Some(false));

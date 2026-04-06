@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_verify_result_all_variants_debug_unique() {
-        let variants = vec![
+        let variants = [
             format!("{:?}", VerifyResult::Match),
             format!("{:?}", VerifyResult::Unknown),
             format!("{:?}", VerifyResult::Mismatch { line: 0 }),

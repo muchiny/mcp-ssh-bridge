@@ -741,21 +741,17 @@ mod tests {
             .execute(Some(json!({"host": "server1"})), &ctx)
             .await;
         // Should NOT be an OS guard error — it should be a connection error
-        match &result {
-            Ok(r) => {
-                // If it somehow succeeds, it should not be an OS guard error
-                if let Some(true) = r.is_error {
-                    let crate::ports::protocol::ToolContent::Text { text } = &r.content[0] else {
-                        panic!("Expected text content")
-                    };
-                    assert!(!text.contains("not available on Windows"));
-                    assert!(!text.contains("only available on Windows"));
-                }
-            }
-            Err(_) => {
-                // Connection error is expected — OS guard passed
+        if let Ok(r) = &result {
+            // If it somehow succeeds, it should not be an OS guard error
+            if let Some(true) = r.is_error {
+                let crate::ports::protocol::ToolContent::Text { text } = &r.content[0] else {
+                    panic!("Expected text content")
+                };
+                assert!(!text.contains("not available on Windows"));
+                assert!(!text.contains("only available on Windows"));
             }
         }
+        // Err case: Connection error is expected — OS guard passed
     }
 
     #[tokio::test]
@@ -776,12 +772,10 @@ mod tests {
             .await;
         // Should fail at SSH connection, not at arg parsing
         assert!(result.is_err());
-        match result.unwrap_err() {
-            BridgeError::McpInvalidRequest(_) => {
-                panic!("columns/limit should have been stripped before parsing")
-            }
-            _ => {} // Connection error or similar is expected
+        if let BridgeError::McpInvalidRequest(_) = result.unwrap_err() {
+            panic!("columns/limit should have been stripped before parsing");
         }
+        // Other errors (connection error or similar) are expected
     }
 
     // ============== apply_typed_reduction tests ==============
@@ -873,7 +867,7 @@ mod tests {
     // ============== try_apply_tabular_reduction tests ==============
 
     #[test]
-    fn test_tabular_reduction_unparseable_noop() {
+    fn test_tabular_reduction_unparsable_noop() {
         // Non-columnar output should be left unchanged
         let mut stdout = "this is just a random string without columns".to_string();
         let mut v = json!({"columns": ["NAME"]});
@@ -1100,10 +1094,7 @@ mod tests {
             mock_output("timeout test"),
         );
         let result = handler
-            .execute(
-                Some(json!({"host": "server1", "timeout_seconds": 5})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": "server1", "timeout_seconds": 5})), &ctx)
             .await
             .unwrap();
         let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
@@ -1122,10 +1113,7 @@ mod tests {
         );
         // Set max_output to 100 chars
         let result = handler
-            .execute(
-                Some(json!({"host": "server1", "max_output": 100})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": "server1", "max_output": 100})), &ctx)
             .await
             .unwrap();
         let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
@@ -1171,7 +1159,8 @@ mod tests {
             type Args = MockArgs;
             const NAME: &'static str = "mock_tabular_tool";
             const DESCRIPTION: &'static str = "Mock tabular tool";
-            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const SCHEMA: &'static str =
+                r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
             const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
                 crate::domain::output_kind::OutputKind::Tabular;
 
@@ -1208,7 +1197,8 @@ mod tests {
             type Args = MockArgs;
             const NAME: &'static str = "mock_json_tool";
             const DESCRIPTION: &'static str = "Mock JSON tool";
-            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const SCHEMA: &'static str =
+                r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
             const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
                 crate::domain::output_kind::OutputKind::Json;
 
@@ -1224,10 +1214,7 @@ mod tests {
             mock_output(json_output),
         );
         let result = handler
-            .execute(
-                Some(json!({"host": "server1", "jq_filter": ".name"})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": "server1", "jq_filter": ".name"})), &ctx)
             .await
             .unwrap();
         let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
@@ -1246,7 +1233,8 @@ mod tests {
             type Args = MockArgs;
             const NAME: &'static str = "mock_pp_tool";
             const DESCRIPTION: &'static str = "Mock with post_process";
-            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const SCHEMA: &'static str =
+                r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
 
             fn build_command(_args: &MockArgs, _host_config: &HostConfig) -> Result<String> {
                 Ok("echo pp".to_string())
@@ -1286,11 +1274,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_full_pipeline_security_denied() {
-        let _handler = StandardToolHandler::<MockTool>::new();
-        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
-            server1_hosts(),
-            mock_output("should not reach"),
-        );
         // MockTool builds "echo hello" which is safe. Test with a validating tool
         // that always validates but uses a command the security policy rejects.
         struct MockDangerousTool;
@@ -1298,13 +1281,20 @@ mod tests {
             type Args = MockArgs;
             const NAME: &'static str = "mock_dangerous";
             const DESCRIPTION: &'static str = "Mock dangerous tool";
-            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const SCHEMA: &'static str =
+                r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
 
             fn build_command(_args: &MockArgs, _host_config: &HostConfig) -> Result<String> {
                 // This command should be blocked by the validator
                 Ok("rm -rf /".to_string())
             }
         }
+
+        let _handler = StandardToolHandler::<MockTool>::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("should not reach"),
+        );
         let handler_dangerous = StandardToolHandler::<MockDangerousTool>::new();
         let result = handler_dangerous
             .execute(Some(json!({"host": "server1"})), &ctx)
@@ -1334,7 +1324,8 @@ mod tests {
             type Args = MockArgs;
             const NAME: &'static str = "mock_tab2";
             const DESCRIPTION: &'static str = "Mock tabular 2";
-            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const SCHEMA: &'static str =
+                r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
             const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
                 crate::domain::output_kind::OutputKind::Tabular;
             fn build_command(_a: &MockArgs, _h: &HostConfig) -> Result<String> {
@@ -1343,7 +1334,8 @@ mod tests {
         }
 
         let handler = StandardToolHandler::<MockTabularTool2>::new();
-        let tabular = "NAME           STATUS\nrow1           ok\nrow2           ok\nrow3           ok\n";
+        let tabular =
+            "NAME           STATUS\nrow1           ok\nrow2           ok\nrow3           ok\n";
         let ctx = crate::ports::mock::create_test_context_with_mock_executor(
             server1_hosts(),
             mock_output(tabular),

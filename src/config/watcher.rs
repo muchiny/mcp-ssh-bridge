@@ -1129,8 +1129,12 @@ mod tests {
             called_clone.store(true, std::sync::atomic::Ordering::Relaxed);
         });
 
-        let watcher =
-            ConfigWatcher::with_notifications(&config_path, shared_config, Some(validator), on_reload);
+        let watcher = ConfigWatcher::with_notifications(
+            &config_path,
+            shared_config,
+            Some(validator),
+            on_reload,
+        );
 
         assert!(watcher.is_ok());
         assert_eq!(watcher.unwrap().path(), config_path);

@@ -205,7 +205,10 @@ mod tests {
         ];
         for zone in &zones {
             let parts: Vec<&str> = zone.split('-').collect();
-            assert!(parts.len() >= 3, "Zone should have at least 3 parts: {zone}");
+            assert!(
+                parts.len() >= 3,
+                "Zone should have at least 3 parts: {zone}"
+            );
         }
     }
 
@@ -247,9 +250,11 @@ mod tests {
     fn test_instance_name_valid_chars() {
         // GCP instance names must match [a-z]([-a-z0-9]*[a-z0-9])?
         let valid = "my-web-server-01";
-        assert!(valid
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'));
+        assert!(
+            valid
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        );
     }
 
     #[test]
