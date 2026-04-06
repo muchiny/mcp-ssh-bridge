@@ -18,6 +18,10 @@ use crate::ssh::{CommandOutput, ConnectionPool, PoolConfig, PoolStats, PooledCon
 /// create standalone connections behind feature flags.
 pub struct ExecutorRouter {
     ssh_pool: ConnectionPool,
+    /// Mock output for testing — when set, `get_connection_with_jump` returns
+    /// a `ConnectionGuard::Mock` that returns this output instead of connecting.
+    #[cfg(test)]
+    mock_output: Option<CommandOutput>,
 }
 
 impl ExecutorRouter {
@@ -26,6 +30,8 @@ impl ExecutorRouter {
     pub fn with_defaults() -> Self {
         Self {
             ssh_pool: ConnectionPool::with_defaults(),
+            #[cfg(test)]
+            mock_output: None,
         }
     }
 
@@ -34,6 +40,8 @@ impl ExecutorRouter {
     pub fn new(ssh_pool_config: PoolConfig) -> Self {
         Self {
             ssh_pool: ConnectionPool::new(ssh_pool_config),
+            #[cfg(test)]
+            mock_output: None,
         }
     }
 
@@ -71,6 +79,12 @@ impl ExecutorRouter {
         limits: &LimitsConfig,
         jump_host: Option<(&str, &HostConfig)>,
     ) -> Result<ConnectionGuard<'_>> {
+        // Test-only: return mock connection if configured
+        #[cfg(test)]
+        if let Some(ref output) = self.mock_output {
+            return Ok(ConnectionGuard::Mock(MockConnection::new(output.clone())));
+        }
+
         match host_config.protocol {
             Protocol::Ssh => {
                 let guard = self
@@ -198,6 +212,9 @@ impl ExecutorRouter {
 pub enum ConnectionGuard<'a> {
     /// SSH connection (pooled, returned to pool on drop).
     Ssh(PooledConnectionGuard<'a>),
+    /// Mock connection for testing (returns pre-configured output).
+    #[cfg(test)]
+    Mock(MockConnection),
     /// `WinRM` connection (HTTP/SOAP, stateless).
     #[cfg(feature = "winrm")]
     WinRm(crate::winrm::WinRmConnection),
@@ -249,6 +266,8 @@ impl ConnectionGuard<'_> {
     pub async fn exec(&mut self, command: &str, limits: &LimitsConfig) -> Result<CommandOutput> {
         match self {
             Self::Ssh(guard) => guard.exec(command, limits).await,
+            #[cfg(test)]
+            Self::Mock(conn) => conn.exec(command, limits),
             #[cfg(feature = "winrm")]
             Self::WinRm(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "telnet")]
@@ -280,6 +299,8 @@ impl ConnectionGuard<'_> {
     pub fn mark_failed(&mut self) {
         match self {
             Self::Ssh(guard) => guard.mark_failed(),
+            #[cfg(test)]
+            Self::Mock(conn) => conn.mark_failed(),
             #[cfg(feature = "winrm")]
             Self::WinRm(conn) => conn.mark_failed(),
             #[cfg(feature = "telnet")]
@@ -304,6 +325,57 @@ impl ConnectionGuard<'_> {
             Self::Nats(conn) => conn.mark_failed(),
             #[cfg(feature = "mqtt")]
             Self::Mqtt(conn) => conn.mark_failed(),
+        }
+    }
+}
+
+// ============================================================================
+// Test-only mock infrastructure
+// ============================================================================
+
+/// Mock connection that returns pre-configured output for testing.
+///
+/// Used by `ExecutorRouter::mock()` to enable full pipeline testing
+/// of `StandardToolHandler` without real SSH connections.
+#[cfg(test)]
+pub struct MockConnection {
+    output: CommandOutput,
+    failed: bool,
+}
+
+#[cfg(test)]
+impl MockConnection {
+    /// Create a mock connection that returns the given output.
+    #[must_use]
+    pub fn new(output: CommandOutput) -> Self {
+        Self {
+            output,
+            failed: false,
+        }
+    }
+
+    /// Execute returns the pre-configured output.
+    pub fn exec(&self, _command: &str, _limits: &LimitsConfig) -> Result<CommandOutput> {
+        Ok(self.output.clone())
+    }
+
+    /// Mark this mock as failed.
+    pub fn mark_failed(&mut self) {
+        self.failed = true;
+    }
+}
+
+#[cfg(test)]
+impl ExecutorRouter {
+    /// Create a mock router that returns pre-configured output for any host.
+    ///
+    /// The mock router bypasses real SSH connections, enabling full pipeline
+    /// testing of `StandardToolHandler` steps 7-18.
+    #[must_use]
+    pub fn mock(output: CommandOutput) -> Self {
+        Self {
+            ssh_pool: ConnectionPool::with_defaults(),
+            mock_output: Some(output),
         }
     }
 }
@@ -365,5 +437,93 @@ mod tests {
 
         let s2 = router.stats().await;
         assert_eq!(s2.total_connections, 0);
+    }
+
+    #[test]
+    fn test_executor_router_custom_pool_config() {
+        let config = PoolConfig {
+            max_connections_per_host: 5,
+            max_idle_seconds: 120,
+            max_age_seconds: 1800,
+        };
+        let _router = ExecutorRouter::new(config);
+    }
+
+    #[test]
+    fn test_pool_config_default_values() {
+        let config = PoolConfig::default();
+        assert_eq!(config.max_connections_per_host, 10);
+        assert_eq!(config.max_idle_seconds, 300);
+        assert_eq!(config.max_age_seconds, 3600);
+    }
+
+    #[tokio::test]
+    async fn test_executor_router_stats_empty_connections_by_host() {
+        let router = ExecutorRouter::with_defaults();
+        let stats = router.stats().await;
+        assert_eq!(stats.total_connections, 0);
+        assert!(stats.connections_by_host.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_executor_router_cleanup_then_stats() {
+        let router = ExecutorRouter::with_defaults();
+        router.cleanup().await;
+        let stats = router.stats().await;
+        assert_eq!(stats.total_connections, 0);
+        assert!(stats.connections_by_host.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_executor_router_close_all_idempotent() {
+        let router = ExecutorRouter::with_defaults();
+        router.close_all().await;
+        router.close_all().await;
+        let stats = router.stats().await;
+        assert_eq!(stats.total_connections, 0);
+    }
+
+    #[tokio::test]
+    async fn test_executor_router_health_check_idempotent() {
+        let router = ExecutorRouter::with_defaults();
+        router.health_check().await;
+        router.health_check().await;
+        let stats = router.stats().await;
+        assert_eq!(stats.total_connections, 0);
+    }
+
+    #[tokio::test]
+    async fn test_executor_router_interleaved_operations() {
+        let router = ExecutorRouter::with_defaults();
+
+        router.health_check().await;
+        let s1 = router.stats().await;
+        assert_eq!(s1.total_connections, 0);
+
+        router.cleanup().await;
+        let s2 = router.stats().await;
+        assert_eq!(s2.total_connections, 0);
+
+        router.close_all().await;
+        let s3 = router.stats().await;
+        assert_eq!(s3.total_connections, 0);
+
+        // Run all again
+        router.health_check().await;
+        router.cleanup().await;
+        let s4 = router.stats().await;
+        assert_eq!(s4.total_connections, 0);
+    }
+
+    #[test]
+    fn test_pool_config_custom_values_preserved() {
+        let config = PoolConfig {
+            max_connections_per_host: 1,
+            max_idle_seconds: 10,
+            max_age_seconds: 60,
+        };
+        let router = ExecutorRouter::new(config);
+        // Router created successfully with minimal pool config
+        let _ = router;
     }
 }

@@ -305,8 +305,7 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         let raw_output = response.stdout.clone();
         let mut jq_was_applied = false;
         if response.exit_code == 0 && !dr.is_empty() {
-            jq_was_applied =
-                apply_typed_reduction(&mut response.stdout, &dr, T::OUTPUT_KIND)?;
+            jq_was_applied = apply_typed_reduction(&mut response.stdout, &dr, T::OUTPUT_KIND)?;
         }
 
         let post_reduction_chars = response.stdout.len();
@@ -382,6 +381,9 @@ fn apply_typed_reduction(
     match kind {
         OutputKind::Json => {
             jq_applied = try_apply_jq(stdout, dr)?;
+            if !jq_applied {
+                try_apply_json_limit(stdout, dr);
+            }
         }
         OutputKind::Tabular => {
             try_apply_tabular_reduction(stdout, dr);
@@ -432,9 +434,7 @@ fn try_apply_tabular_reduction(
     if dr.columns.is_none() && dr.limit.is_none() {
         return;
     }
-    if let Some(mut table) =
-        crate::mcp::tool_handlers::utils::parse_columnar_output(stdout)
-    {
+    if let Some(mut table) = crate::mcp::tool_handlers::utils::parse_columnar_output(stdout) {
         if let Some(ref cols) = dr.columns {
             table = table.select_columns(cols);
         }
@@ -442,6 +442,29 @@ fn try_apply_tabular_reduction(
             table.limit_rows(usize::try_from(limit).unwrap_or(usize::MAX));
         }
         *stdout = table.to_tsv();
+    }
+}
+
+/// Try to apply `limit` to a JSON array output.
+///
+/// If `limit` is set and stdout parses as a JSON array, truncates to the
+/// first N elements. Objects and non-JSON are left unchanged.
+fn try_apply_json_limit(
+    stdout: &mut String,
+    dr: &crate::domain::data_reduction::DataReductionArgs,
+) {
+    let Some(limit) = dr.limit else { return };
+    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(stdout) else {
+        return;
+    };
+    if let serde_json::Value::Array(arr) = parsed
+        && arr.len() > limit
+    {
+        let truncated = serde_json::Value::Array(arr.into_iter().take(limit).collect());
+        if let Ok(s) = serde_json::to_string_pretty(&truncated) {
+            *stdout = s;
+        }
     }
 }
 
@@ -666,5 +689,674 @@ mod tests {
             panic!("Expected text content")
         };
         assert!(text.contains("Rate limit exceeded"));
+    }
+
+    // ============== OS Guard tests ==============
+
+    #[tokio::test]
+    async fn test_os_guard_linux_rejects_windows_host() {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
+        use std::collections::HashMap;
+
+        let handler = StandardToolHandler::<MockLinuxTool>::new();
+        let mut hosts = HashMap::new();
+        hosts.insert(
+            "winhost".to_string(),
+            HostConfig {
+                hostname: "10.0.0.1".to_string(),
+                port: 22,
+                user: "admin".to_string(),
+                auth: AuthConfig::Agent,
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: OsType::Windows,
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
+        let ctx = crate::ports::mock::create_test_context_with_hosts(hosts);
+        let result = handler
+            .execute(Some(json!({"host": "winhost"})), &ctx)
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(true));
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        assert!(text.contains("not available on Windows"));
+    }
+
+    #[tokio::test]
+    async fn test_os_guard_none_allows_any_os() {
+        // MockTool has no OS guard — should pass host lookup for any OS
+        let handler = StandardToolHandler::<MockTool>::new();
+        let ctx = create_test_context_with_host(); // server1 is Linux
+        // This will fail at SSH connection (step 11) but pass OS guard (step 3)
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await;
+        // Should NOT be an OS guard error — it should be a connection error
+        match &result {
+            Ok(r) => {
+                // If it somehow succeeds, it should not be an OS guard error
+                if let Some(true) = r.is_error {
+                    let crate::ports::protocol::ToolContent::Text { text } = &r.content[0] else {
+                        panic!("Expected text content")
+                    };
+                    assert!(!text.contains("not available on Windows"));
+                    assert!(!text.contains("only available on Windows"));
+                }
+            }
+            Err(_) => {
+                // Connection error is expected — OS guard passed
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_data_reduction_extraction() {
+        // Verify data reduction params are stripped before arg parsing
+        let handler = StandardToolHandler::<MockTool>::new();
+        let ctx = create_test_context_with_host();
+        // Adding columns/limit should not cause parse errors
+        let result = handler
+            .execute(
+                Some(json!({
+                    "host": "server1",
+                    "columns": ["NAME"],
+                    "limit": 5
+                })),
+                &ctx,
+            )
+            .await;
+        // Should fail at SSH connection, not at arg parsing
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(_) => {
+                panic!("columns/limit should have been stripped before parsing")
+            }
+            _ => {} // Connection error or similar is expected
+        }
+    }
+
+    // ============== apply_typed_reduction tests ==============
+
+    #[test]
+    fn test_apply_typed_reduction_raw_text_noop() {
+        use crate::domain::output_kind::OutputKind;
+        let mut stdout = "hello world".to_string();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::RawText).unwrap();
+        assert!(!jq);
+        assert_eq!(stdout, "hello world");
+    }
+
+    #[test]
+    fn test_apply_typed_reduction_tabular_with_columns() {
+        use crate::domain::output_kind::OutputKind;
+        let mut stdout = "NAME           STATUS    CPU\nnginx          running   5%\npostgres       running   12%\n".to_string();
+        let mut v = json!({"columns": ["NAME", "STATUS"]});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Tabular).unwrap();
+        assert!(!jq);
+        // After tabular reduction, only NAME and STATUS columns should remain
+        assert!(stdout.contains("NAME"));
+        assert!(stdout.contains("STATUS"));
+    }
+
+    #[test]
+    fn test_apply_typed_reduction_tabular_with_limit() {
+        use crate::domain::output_kind::OutputKind;
+        let mut stdout =
+            "NAME           STATUS\nrow1           ok\nrow2           ok\nrow3           ok\n"
+                .to_string();
+        let mut v = json!({"limit": 1});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Tabular).unwrap();
+        assert!(!jq);
+        // Should keep header + 1 row
+        let lines: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert_eq!(lines.len(), 2); // header + 1 data row
+    }
+
+    #[test]
+    fn test_apply_typed_reduction_tabular_no_params_noop() {
+        use crate::domain::output_kind::OutputKind;
+        let original = "NAME  STATUS\nfoo   bar\n".to_string();
+        let mut stdout = original.clone();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Tabular).unwrap();
+        assert!(!jq);
+        assert_eq!(stdout, original);
+    }
+
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_apply_typed_reduction_json_with_jq() {
+        use crate::domain::output_kind::OutputKind;
+        let mut stdout = r#"{"name": "test", "value": 42}"#.to_string();
+        let mut v = json!({"jq_filter": ".name"});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
+        assert!(jq);
+        assert!(stdout.contains("test"));
+    }
+
+    #[test]
+    fn test_apply_typed_reduction_json_without_jq_noop() {
+        use crate::domain::output_kind::OutputKind;
+        let original = r#"{"name": "test"}"#.to_string();
+        let mut stdout = original.clone();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
+        assert!(!jq);
+        assert_eq!(stdout, original);
+    }
+
+    #[test]
+    fn test_apply_typed_reduction_auto_falls_back_to_tabular() {
+        use crate::domain::output_kind::OutputKind;
+        // Non-JSON output with columns param → should fall back to tabular reduction
+        let mut stdout = "NAME           STATUS\nnginx          running\n".to_string();
+        let mut v = json!({"columns": ["NAME"]});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Auto).unwrap();
+        assert!(!jq); // jq not applied (not JSON)
+        assert!(stdout.contains("NAME"));
+    }
+
+    // ============== try_apply_tabular_reduction tests ==============
+
+    #[test]
+    fn test_tabular_reduction_unparseable_noop() {
+        // Non-columnar output should be left unchanged
+        let mut stdout = "this is just a random string without columns".to_string();
+        let mut v = json!({"columns": ["NAME"]});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        try_apply_tabular_reduction(&mut stdout, &dr);
+        assert_eq!(stdout, "this is just a random string without columns");
+    }
+
+    #[test]
+    fn test_tabular_reduction_empty_dr_noop() {
+        let mut stdout = "NAME  STATUS\nfoo   bar\n".to_string();
+        let original = stdout.clone();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        try_apply_tabular_reduction(&mut stdout, &dr);
+        assert_eq!(stdout, original);
+    }
+
+    // ============== try_apply_json_limit tests ==============
+
+    #[test]
+    fn test_json_limit_truncates_array() {
+        let mut stdout = r#"[{"a":1},{"a":2},{"a":3},{"a":4},{"a":5}]"#.to_string();
+        let mut v = json!({"limit": 2});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        try_apply_json_limit(&mut stdout, &dr);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(parsed.len(), 2);
+    }
+
+    #[test]
+    fn test_json_limit_no_op_on_object() {
+        let original = r#"{"name": "test"}"#.to_string();
+        let mut stdout = original.clone();
+        let mut v = json!({"limit": 1});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        try_apply_json_limit(&mut stdout, &dr);
+        assert_eq!(stdout, original);
+    }
+
+    #[test]
+    fn test_json_limit_no_op_when_under_limit() {
+        let original = r#"[{"a":1},{"a":2}]"#.to_string();
+        let mut stdout = original.clone();
+        let mut v = json!({"limit": 10});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        try_apply_json_limit(&mut stdout, &dr);
+        assert_eq!(stdout, original);
+    }
+
+    #[test]
+    fn test_json_limit_no_op_on_non_json() {
+        let original = "not json at all".to_string();
+        let mut stdout = original.clone();
+        let mut v = json!({"limit": 1});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        try_apply_json_limit(&mut stdout, &dr);
+        assert_eq!(stdout, original);
+    }
+
+    #[test]
+    fn test_json_limit_no_op_without_limit() {
+        let original = r#"[{"a":1},{"a":2},{"a":3}]"#.to_string();
+        let mut stdout = original.clone();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        try_apply_json_limit(&mut stdout, &dr);
+        assert_eq!(stdout, original);
+    }
+
+    #[test]
+    fn test_apply_typed_reduction_json_with_limit() {
+        use crate::domain::output_kind::OutputKind;
+        let mut stdout = r#"[{"a":1},{"a":2},{"a":3}]"#.to_string();
+        let mut v = json!({"limit": 1});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
+        assert!(!jq);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(parsed.len(), 1);
+    }
+
+    // ============== auto_populate_structured_content tests ==============
+
+    #[test]
+    fn test_auto_populate_no_app_noop() {
+        let result = ToolCallResult::text("just text");
+        let result = auto_populate_structured_content(result);
+        assert!(result.structured_content.is_none());
+    }
+
+    #[test]
+    fn test_auto_populate_already_set_noop() {
+        let mut result = ToolCallResult::text("text");
+        result.structured_content = Some(json!({"existing": true}));
+        let result = auto_populate_structured_content(result);
+        assert_eq!(result.structured_content, Some(json!({"existing": true})));
+    }
+
+    #[test]
+    fn test_auto_populate_from_app_content() {
+        use crate::ports::protocol::AppContent;
+
+        let app = AppContent {
+            app_type: "table".to_string(),
+            title: Some("Test".to_string()),
+            data: json!({"rows": [{"name": "foo"}]}),
+            actions: None,
+        };
+        let result = ToolCallResult::text("text").with_app(app);
+        assert!(result.structured_content.is_none());
+        let result = auto_populate_structured_content(result);
+        assert!(result.structured_content.is_some());
+        assert_eq!(
+            result.structured_content.unwrap(),
+            json!({"rows": [{"name": "foo"}]})
+        );
+    }
+
+    // ============== try_apply_jq tests ==============
+
+    #[test]
+    fn test_try_apply_jq_no_filter_noop() {
+        let mut stdout = r#"{"key": "value"}"#.to_string();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let applied = try_apply_jq(&mut stdout, &dr).unwrap();
+        assert!(!applied);
+    }
+
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_try_apply_jq_with_filter() {
+        let mut stdout = r#"{"name": "test", "value": 42}"#.to_string();
+        let mut v = json!({"jq_filter": ".name"});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        let applied = try_apply_jq(&mut stdout, &dr).unwrap();
+        assert!(applied);
+        assert!(stdout.contains("test"));
+    }
+
+    // ============== Full pipeline tests (steps 7-18 via mock executor) ==============
+
+    fn mock_output(stdout: &str) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 42,
+        }
+    }
+
+    fn mock_output_with_exit(stdout: &str, exit_code: u32) -> crate::ssh::CommandOutput {
+        crate::ssh::CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code,
+            duration_ms: 42,
+        }
+    }
+
+    fn server1_hosts() -> std::collections::HashMap<String, crate::config::HostConfig> {
+        let mut hosts = std::collections::HashMap::new();
+        hosts.insert(
+            "server1".to_string(),
+            crate::config::HostConfig {
+                hostname: "192.168.1.100".to_string(),
+                port: 22,
+                user: "test".to_string(),
+                auth: crate::config::AuthConfig::Agent,
+                description: None,
+                host_key_verification: crate::config::HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: crate::config::OsType::default(),
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+            },
+        );
+        hosts
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success() {
+        let handler = StandardToolHandler::<MockTool>::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("hello world"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        assert!(text.contains("hello world"));
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_nonzero_exit() {
+        let handler = StandardToolHandler::<MockTool>::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output_with_exit("error output", 1),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        // Non-zero exit should include exit code in output
+        assert!(text.contains("exit") || text.contains("error output"));
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_with_timeout_override() {
+        let handler = StandardToolHandler::<MockTool>::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("timeout test"),
+        );
+        let result = handler
+            .execute(
+                Some(json!({"host": "server1", "timeout_seconds": 5})),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        assert!(text.contains("timeout test"));
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_with_max_output_truncation() {
+        let handler = StandardToolHandler::<MockTool>::new();
+        let long_output = "x".repeat(10_000);
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output(&long_output),
+        );
+        // Set max_output to 100 chars
+        let result = handler
+            .execute(
+                Some(json!({"host": "server1", "max_output": 100})),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        // Output should be truncated (less than 10000 chars)
+        assert!(text.len() < 500);
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_with_save_output() {
+        let handler = StandardToolHandler::<MockTool>::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("saved output"),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let save_path = dir.path().join("test_output.txt");
+        let result = handler
+            .execute(
+                Some(json!({
+                    "host": "server1",
+                    "save_output": save_path.to_str().unwrap()
+                })),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        // Should mention save success
+        assert!(text.contains("saved") || text.contains("Saved") || text.contains("output"));
+        // File should exist
+        assert!(save_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_with_data_reduction_columns() {
+        // Use a tool with Tabular output kind
+        struct MockTabularTool;
+        impl StandardTool for MockTabularTool {
+            type Args = MockArgs;
+            const NAME: &'static str = "mock_tabular_tool";
+            const DESCRIPTION: &'static str = "Mock tabular tool";
+            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+                crate::domain::output_kind::OutputKind::Tabular;
+
+            fn build_command(_args: &MockArgs, _host_config: &HostConfig) -> Result<String> {
+                Ok("echo tabular".to_string())
+            }
+        }
+
+        let handler = StandardToolHandler::<MockTabularTool>::new();
+        let tabular = "NAME           STATUS    CPU\nnginx          running   5%\npostgres       running   12%\n";
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output(tabular),
+        );
+        let result = handler
+            .execute(
+                Some(json!({"host": "server1", "columns": ["NAME", "STATUS"]})),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        assert!(text.contains("NAME"));
+        assert!(text.contains("STATUS"));
+    }
+
+    #[cfg(feature = "jq")]
+    #[tokio::test]
+    async fn test_full_pipeline_with_jq_filter() {
+        struct MockJsonTool;
+        impl StandardTool for MockJsonTool {
+            type Args = MockArgs;
+            const NAME: &'static str = "mock_json_tool";
+            const DESCRIPTION: &'static str = "Mock JSON tool";
+            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+                crate::domain::output_kind::OutputKind::Json;
+
+            fn build_command(_args: &MockArgs, _host_config: &HostConfig) -> Result<String> {
+                Ok("echo json".to_string())
+            }
+        }
+
+        let handler = StandardToolHandler::<MockJsonTool>::new();
+        let json_output = r#"{"name": "test", "value": 42, "extra": "data"}"#;
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output(json_output),
+        );
+        let result = handler
+            .execute(
+                Some(json!({"host": "server1", "jq_filter": ".name"})),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        assert!(text.contains("test"));
+        // jq filter should reduce the output
+        assert!(!text.contains("extra"));
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_with_post_process() {
+        // Mock tool with post_process that adds App content
+        struct MockPostProcessTool;
+        impl StandardTool for MockPostProcessTool {
+            type Args = MockArgs;
+            const NAME: &'static str = "mock_pp_tool";
+            const DESCRIPTION: &'static str = "Mock with post_process";
+            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+
+            fn build_command(_args: &MockArgs, _host_config: &HostConfig) -> Result<String> {
+                Ok("echo pp".to_string())
+            }
+
+            fn post_process(
+                result: ToolCallResult,
+                _args: &MockArgs,
+                _output: &str,
+                _dr: &crate::domain::data_reduction::DataReductionArgs,
+            ) -> ToolCallResult {
+                use crate::ports::protocol::AppContent;
+                let app = AppContent {
+                    app_type: "table".to_string(),
+                    title: Some("Test Table".to_string()),
+                    data: json!({"rows": [{"col1": "val1"}]}),
+                    actions: None,
+                };
+                result.with_app(app)
+            }
+        }
+
+        let handler = StandardToolHandler::<MockPostProcessTool>::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("post process output"),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        // Should have text + app content
+        assert!(result.content.len() >= 2);
+        // structured_content should be auto-populated from App
+        assert!(result.structured_content.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_security_denied() {
+        let _handler = StandardToolHandler::<MockTool>::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("should not reach"),
+        );
+        // MockTool builds "echo hello" which is safe. Test with a validating tool
+        // that always validates but uses a command the security policy rejects.
+        struct MockDangerousTool;
+        impl StandardTool for MockDangerousTool {
+            type Args = MockArgs;
+            const NAME: &'static str = "mock_dangerous";
+            const DESCRIPTION: &'static str = "Mock dangerous tool";
+            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+
+            fn build_command(_args: &MockArgs, _host_config: &HostConfig) -> Result<String> {
+                // This command should be blocked by the validator
+                Ok("rm -rf /".to_string())
+            }
+        }
+        let handler_dangerous = StandardToolHandler::<MockDangerousTool>::new();
+        let result = handler_dangerous
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await;
+        // Should be denied by security validation
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_empty_output() {
+        let handler = StandardToolHandler::<MockTool>::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output(""),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .unwrap();
+        assert!(result.is_error.is_none() || result.is_error == Some(false));
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_with_limit_data_reduction() {
+        struct MockTabularTool2;
+        impl StandardTool for MockTabularTool2 {
+            type Args = MockArgs;
+            const NAME: &'static str = "mock_tab2";
+            const DESCRIPTION: &'static str = "Mock tabular 2";
+            const SCHEMA: &'static str = r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+                crate::domain::output_kind::OutputKind::Tabular;
+            fn build_command(_a: &MockArgs, _h: &HostConfig) -> Result<String> {
+                Ok("echo tab".to_string())
+            }
+        }
+
+        let handler = StandardToolHandler::<MockTabularTool2>::new();
+        let tabular = "NAME           STATUS\nrow1           ok\nrow2           ok\nrow3           ok\n";
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output(tabular),
+        );
+        let result = handler
+            .execute(Some(json!({"host": "server1", "limit": 1})), &ctx)
+            .await
+            .unwrap();
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        // With limit=1, should have header + 1 row max
+        let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert!(lines.len() <= 3); // header + 1 data row + possible exit info
     }
 }

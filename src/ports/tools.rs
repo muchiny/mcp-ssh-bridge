@@ -96,10 +96,7 @@ impl ToolContext {
         // Extract path from file:// URIs in roots
         for root in &self.roots {
             let root_path = root.uri.strip_prefix("file://").unwrap_or(&root.uri);
-            if root_path == "/"
-                || path == root_path
-                || path.starts_with(&format!("{root_path}/"))
-            {
+            if root_path == "/" || path == root_path || path.starts_with(&format!("{root_path}/")) {
                 return Ok(());
             }
         }
@@ -271,6 +268,52 @@ pub mod mock {
             audit_logger,
             history,
             connection_pool: Arc::new(ExecutorRouter::with_defaults()),
+            execute_use_case,
+            rate_limiter: Arc::new(RateLimiter::new(0)),
+            session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
+            tunnel_manager: Arc::new(TunnelManager::new(20)),
+            output_cache: None,
+            runtime_max_output_chars: None,
+            roots: Vec::new(),
+            session_recorder: None,
+            metrics: None,
+        }
+    }
+
+    /// Create a test context with a mock executor that returns pre-configured output.
+    ///
+    /// This enables testing the full `StandardToolHandler` pipeline (steps 7-18)
+    /// without real SSH connections. The mock executor returns the given output
+    /// for any `exec()` call.
+    #[must_use]
+    pub fn create_test_context_with_mock_executor(
+        hosts: HashMap<String, HostConfig>,
+        mock_output: crate::ssh::CommandOutput,
+    ) -> ToolContext {
+        let config = Config {
+            hosts,
+            ..Config::default()
+        };
+
+        let validator = Arc::new(CommandValidator::new(&SecurityConfig::default()));
+        let sanitizer = Arc::new(Sanitizer::with_defaults());
+        let audit_logger = Arc::new(AuditLogger::disabled());
+        let history = Arc::new(CommandHistory::new(&HistoryConfig::default()));
+
+        let execute_use_case = Arc::new(ExecuteCommandUseCase::new(
+            Arc::clone(&validator),
+            Arc::clone(&sanitizer),
+            Arc::clone(&audit_logger),
+            Arc::clone(&history),
+        ));
+
+        ToolContext {
+            config: Arc::new(config),
+            validator,
+            sanitizer,
+            audit_logger,
+            history,
+            connection_pool: Arc::new(ExecutorRouter::mock(mock_output)),
             execute_use_case,
             rate_limiter: Arc::new(RateLimiter::new(0)),
             session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
