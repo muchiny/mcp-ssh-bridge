@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-04-08
+
+### Summary
+
+**TSV output for jq/yq filters** | **YAML filtering via yq_filter** | **0 new dependencies**
+
+Adds two complementary features to the data reduction pipeline:
+
+1. **`output_format=tsv`** parameter on all `Json`/`Auto`/`Yaml` tools to serialize jq/yq results as tab-separated values instead of JSON. Reduces token consumption by 60-80% on tabular data.
+2. **`yq_filter`** parameter for tools producing YAML output. Uses the existing jaq-core engine on a YAML→JSON converted value tree (via the existing `serde-saphyr` dependency, no new crates).
+
+### Added
+
+- **`apply_jq_filter_tsv()`** in `src/domain/jq_filter.rs` — TSV serializer for jq results. Arrays are joined with tabs, rows with newlines. Strings are unquoted. Null becomes empty string. Object iteration order is alphabetical (use array filters `[.foo, .bar]` for predictable column order).
+- **`apply_yq_filter()` and `apply_yq_filter_tsv()`** in new `src/domain/yq_filter.rs` — jq-syntax filtering on YAML inputs. Parses YAML to `serde_json::Value` via `serde-saphyr` then runs the existing jaq pipeline.
+- **`OutputKind::Yaml`** — new variant in `src/domain/output_kind.rs` for tools producing YAML output. Supports `yq_filter` + `limit` + `output_format`.
+- **`DataReductionArgs::yq_filter`** and **`DataReductionArgs::output_format`** — new fields with `wants_tsv()` helper.
+- **Schema injection** in `src/mcp/registry.rs` `inject_reduction_schema()` exposes `output_format` (json/tsv enum) on all `Json`/`Yaml`/`Auto` tools and `yq_filter` on `Yaml` tools.
+- **30+ new tests** covering TSV serialization (arrays, objects, nulls, scalars, token efficiency) and yq filtering (nested access, arrays, TSV combo, invalid YAML).
+
+### Why
+
+- `jaq-core 3.0.0` does **not** support the `@tsv` jq builtin (verified by direct test). The previous `join("\t")` workaround produces literal `\t` strings, not real tabs. Server-side post-conversion was the only way to get true TSV from jq filters.
+- For YAML-first technologies (kubectl/helm `-o yaml`, ansible-navigator), there was no way to filter server-side. Now the same jq-syntax expressions work on both JSON and YAML inputs.
+
+### Token efficiency example
+
+```
+ssh_awx_job_summary(job_id=123)
+  → 600 chars JSON (per-host fields)
+
+ssh_awx_job_summary(
+  job_id=123,
+  jq_filter=".results[] | [.host_name, .ok, .changed, .failures]",
+  output_format="tsv"
+)
+  → 50 chars TSV (web01\t12\t2\t0\nweb02\t8\t0\t1)
+```
+
 ## [1.9.1] - 2026-04-07
 
 ### Fixed

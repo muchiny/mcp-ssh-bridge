@@ -27,6 +27,14 @@ pub enum OutputKind {
     /// For tools whose commands always return JSON.
     Json,
 
+    /// Guaranteed YAML output — supports `yq_filter`.
+    ///
+    /// For tools whose commands always return YAML (e.g., kubectl/helm
+    /// with `-o yaml`, ansible-navigator, ansible-inventory --yaml).
+    /// At runtime the YAML is parsed via serde-saphyr to a generic value
+    /// tree and the same jaq-core engine is used to filter it.
+    Yaml,
+
     /// Output may be JSON or tabular depending on parameters —
     /// supports both `jq_filter` and `columns`.
     ///
@@ -41,6 +49,12 @@ impl OutputKind {
         matches!(self, Self::Json | Self::Auto)
     }
 
+    /// Whether this kind supports `yq_filter`.
+    #[must_use]
+    pub const fn supports_yq(&self) -> bool {
+        matches!(self, Self::Yaml)
+    }
+
     /// Whether this kind supports `columns`.
     #[must_use]
     pub const fn supports_columns(&self) -> bool {
@@ -50,7 +64,7 @@ impl OutputKind {
     /// Whether this kind supports `limit`.
     #[must_use]
     pub const fn supports_limit(&self) -> bool {
-        matches!(self, Self::Tabular | Self::Auto | Self::Json)
+        matches!(self, Self::Tabular | Self::Auto | Self::Json | Self::Yaml)
     }
 }
 
@@ -68,7 +82,17 @@ mod tests {
         assert!(!OutputKind::RawText.supports_jq());
         assert!(!OutputKind::Tabular.supports_jq());
         assert!(OutputKind::Json.supports_jq());
+        assert!(!OutputKind::Yaml.supports_jq());
         assert!(OutputKind::Auto.supports_jq());
+    }
+
+    #[test]
+    fn test_supports_yq() {
+        assert!(!OutputKind::RawText.supports_yq());
+        assert!(!OutputKind::Tabular.supports_yq());
+        assert!(!OutputKind::Json.supports_yq());
+        assert!(OutputKind::Yaml.supports_yq());
+        assert!(!OutputKind::Auto.supports_yq());
     }
 
     #[test]
@@ -76,6 +100,7 @@ mod tests {
         assert!(!OutputKind::RawText.supports_columns());
         assert!(OutputKind::Tabular.supports_columns());
         assert!(!OutputKind::Json.supports_columns());
+        assert!(!OutputKind::Yaml.supports_columns());
         assert!(OutputKind::Auto.supports_columns());
     }
 
@@ -84,6 +109,7 @@ mod tests {
         assert!(!OutputKind::RawText.supports_limit());
         assert!(OutputKind::Tabular.supports_limit());
         assert!(OutputKind::Json.supports_limit());
+        assert!(OutputKind::Yaml.supports_limit());
         assert!(OutputKind::Auto.supports_limit());
     }
 

@@ -13,6 +13,8 @@ pub mod output_truncator;
 pub mod runbook;
 pub mod task_store;
 pub mod use_cases;
+#[cfg(feature = "jq")]
+pub mod yq_filter;
 
 pub use history::{CommandHistory, HistoryConfig, HistoryEntry};
 pub use output_cache::OutputCache;

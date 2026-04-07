@@ -121,10 +121,13 @@ impl ToolRegistry {
 /// Inject data-reduction parameters into a tool's JSON schema based on its
 /// [`OutputKind`].
 ///
-/// - `Json` → `jq_filter`
+/// - `Json` → `jq_filter` + `output_format`
 /// - `Tabular` → `columns`
-/// - `Auto` → both
+/// - `Yaml` → `yq_filter` + `output_format`
+/// - `Auto` → `jq_filter` + `columns` + `output_format`
 /// - `RawText` → nothing
+///
+/// All `Json`/`Yaml`/`Auto` tools also accept `limit`.
 fn inject_reduction_schema(schema: &mut Value, kind: crate::domain::output_kind::OutputKind) {
     use crate::domain::output_kind::OutputKind;
 
@@ -142,7 +145,24 @@ fn inject_reduction_schema(schema: &mut Value, kind: crate::domain::output_kind:
                     you need. Examples: '.[] | {name, status}' (select fields), \
                     '.items[0:5]' (first 5 items), \
                     '[.items[] | {name: .metadata.name}]' (K8s pod names). \
+                    For minimal token usage, return arrays and combine with output_format='tsv': \
+                    '.[] | [.name, .status]' + output_format='tsv'. \
                     Only works when command output is valid JSON."
+            }),
+        );
+    }
+
+    if kind.supports_yq() {
+        props.insert(
+            "yq_filter".to_string(),
+            json!({
+                "type": "string",
+                "description": "RECOMMENDED: jq-syntax expression applied server-side to YAML \
+                    output (parsed via serde-saphyr to a generic value tree). Same syntax as \
+                    jq_filter. Use this when the underlying command produces YAML \
+                    (e.g., kubectl/helm/ansible-navigator with yaml output). \
+                    Combine with output_format='tsv' for minimal tokens: \
+                    '.all.children.webservers.hosts | keys' + output_format='tsv'."
             }),
         );
     }
@@ -172,6 +192,22 @@ fn inject_reduction_schema(schema: &mut Value, kind: crate::domain::output_kind:
                     For JSON output: caps top-level array elements. \
                     Use this to reduce token consumption when you only need the top N results. \
                     Example: limit=10 returns only 10 rows/items."
+            }),
+        );
+    }
+
+    if kind.supports_jq() || kind.supports_yq() {
+        props.insert(
+            "output_format".to_string(),
+            json!({
+                "type": "string",
+                "enum": ["json", "tsv"],
+                "description": "Output serialization for jq_filter/yq_filter results. \
+                    Default 'json' returns the jq result as JSON. \
+                    'tsv' joins each result row with tabs (and rows with newlines) for \
+                    maximum token efficiency. To use TSV, your filter MUST produce arrays \
+                    (e.g., '.[] | [.name, .status]'). Objects work too but the field order \
+                    is alphabetical. Token savings: ~60-80% on tabular data."
             }),
         );
     }

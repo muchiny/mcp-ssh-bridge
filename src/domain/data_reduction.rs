@@ -17,6 +17,12 @@ pub struct DataReductionArgs {
     #[cfg(feature = "jq")]
     pub jq_filter: Option<String>,
 
+    /// yq filter expression for YAML output (requires `jq` feature).
+    /// Same syntax as jq, applied after parsing YAML to a generic value tree.
+    /// Example: `.all.children.webservers.hosts | keys`
+    #[cfg(feature = "jq")]
+    pub yq_filter: Option<String>,
+
     /// Column filter for tabular output.
     /// Case-insensitive header match; unknown columns are silently ignored.
     /// Example: `["NAME", "STATUS", "CPU"]`
@@ -25,6 +31,14 @@ pub struct DataReductionArgs {
     /// Maximum number of data rows to return (header always kept).
     /// Applied after column filtering.
     pub limit: Option<u64>,
+
+    /// Output format for jq/yq filter results. `"json"` (default) returns
+    /// jaq-native JSON serialization. `"tsv"` joins array elements with
+    /// tabs and rows with newlines for maximum token efficiency.
+    /// The jq/yq filter must produce arrays for TSV output (objects
+    /// fall back to JSON serialization).
+    #[cfg(feature = "jq")]
+    pub output_format: Option<String>,
 }
 
 impl DataReductionArgs {
@@ -40,6 +54,11 @@ impl DataReductionArgs {
             .remove("jq_filter")
             .and_then(|v| v.as_str().map(String::from));
 
+        #[cfg(feature = "jq")]
+        let yq_filter = obj
+            .remove("yq_filter")
+            .and_then(|v| v.as_str().map(String::from));
+
         let columns = obj.remove("columns").and_then(|v| {
             v.as_array().map(|arr| {
                 arr.iter()
@@ -50,11 +69,20 @@ impl DataReductionArgs {
 
         let limit = obj.remove("limit").and_then(|v| v.as_u64());
 
+        #[cfg(feature = "jq")]
+        let output_format = obj
+            .remove("output_format")
+            .and_then(|v| v.as_str().map(String::from));
+
         Self {
             #[cfg(feature = "jq")]
             jq_filter,
+            #[cfg(feature = "jq")]
+            yq_filter,
             columns,
             limit,
+            #[cfg(feature = "jq")]
+            output_format,
         }
     }
 
@@ -64,6 +92,10 @@ impl DataReductionArgs {
         if self.jq_filter.is_some() {
             return false;
         }
+        #[cfg(feature = "jq")]
+        if self.yq_filter.is_some() {
+            return false;
+        }
         if self.columns.is_some() {
             return false;
         }
@@ -71,6 +103,15 @@ impl DataReductionArgs {
             return false;
         }
         true
+    }
+
+    /// Returns true if TSV output format was requested.
+    #[cfg(feature = "jq")]
+    #[must_use]
+    pub fn wants_tsv(&self) -> bool {
+        self.output_format
+            .as_deref()
+            .is_some_and(|s| s.eq_ignore_ascii_case("tsv"))
     }
 }
 
@@ -166,5 +207,58 @@ mod tests {
         let mut v = serde_json::json!({"limit": "ten"});
         let args = DataReductionArgs::extract(&mut v);
         assert!(args.limit.is_none());
+    }
+
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_extract_yq_filter() {
+        let mut v = serde_json::json!({"host": "prod", "yq_filter": ".all.children | keys"});
+        let args = DataReductionArgs::extract(&mut v);
+        assert_eq!(args.yq_filter.as_deref(), Some(".all.children | keys"));
+        assert!(v.get("yq_filter").is_none());
+        assert!(v.get("host").is_some());
+    }
+
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_is_empty_with_yq_filter() {
+        let mut v = serde_json::json!({"yq_filter": ".name"});
+        let args = DataReductionArgs::extract(&mut v);
+        assert!(!args.is_empty());
+    }
+
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_extract_output_format_tsv() {
+        let mut v = serde_json::json!({"output_format": "tsv"});
+        let args = DataReductionArgs::extract(&mut v);
+        assert_eq!(args.output_format.as_deref(), Some("tsv"));
+        assert!(args.wants_tsv());
+        assert!(v.get("output_format").is_none());
+    }
+
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_wants_tsv_case_insensitive() {
+        let mut v = serde_json::json!({"output_format": "TSV"});
+        let args = DataReductionArgs::extract(&mut v);
+        assert!(args.wants_tsv());
+    }
+
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_wants_tsv_default_false() {
+        let v = serde_json::json!({});
+        let mut v = v;
+        let args = DataReductionArgs::extract(&mut v);
+        assert!(!args.wants_tsv());
+    }
+
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_wants_tsv_json_format() {
+        let mut v = serde_json::json!({"output_format": "json"});
+        let args = DataReductionArgs::extract(&mut v);
+        assert!(!args.wants_tsv());
     }
 }

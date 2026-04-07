@@ -388,6 +388,9 @@ fn apply_typed_reduction(
         OutputKind::Tabular => {
             try_apply_tabular_reduction(stdout, dr);
         }
+        OutputKind::Yaml => {
+            jq_applied = try_apply_yq(stdout, dr)?;
+        }
         OutputKind::Auto => {
             // Try JSON + jq first (if jq_filter is present and output parses as JSON)
             jq_applied = try_apply_jq(stdout, dr)?;
@@ -402,7 +405,42 @@ fn apply_typed_reduction(
     Ok(jq_applied)
 }
 
+/// Try to apply a `yq_filter` to stdout. Returns `true` if applied.
+///
+/// Parses the YAML stdout to a generic value tree, then runs the jaq engine
+/// (with optional TSV serialization).
+#[allow(clippy::unnecessary_wraps)]
+fn try_apply_yq(
+    stdout: &mut String,
+    dr: &crate::domain::data_reduction::DataReductionArgs,
+) -> Result<bool> {
+    let _ = &(&stdout, &dr);
+
+    #[cfg(feature = "jq")]
+    if let Some(ref filter) = dr.yq_filter {
+        let before = stdout.len();
+        *stdout = if dr.wants_tsv() {
+            crate::domain::yq_filter::apply_yq_filter_tsv(stdout, filter)?
+        } else {
+            crate::domain::yq_filter::apply_yq_filter(stdout, filter)?
+        };
+        tracing::debug!(
+            before_chars = before,
+            after_chars = stdout.len(),
+            filter = filter.as_str(),
+            tsv = dr.wants_tsv(),
+            "yq_filter applied"
+        );
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
 /// Try to apply a `jq_filter` to stdout. Returns `true` if applied.
+///
+/// When `output_format="tsv"` is set, results are emitted as tab-separated
+/// values instead of JSON for maximum token efficiency.
 #[allow(clippy::unnecessary_wraps)]
 fn try_apply_jq(
     stdout: &mut String,
@@ -413,11 +451,16 @@ fn try_apply_jq(
     #[cfg(feature = "jq")]
     if let Some(ref filter) = dr.jq_filter {
         let before = stdout.len();
-        *stdout = crate::domain::jq_filter::apply_jq_filter(stdout, filter)?;
+        *stdout = if dr.wants_tsv() {
+            crate::domain::jq_filter::apply_jq_filter_tsv(stdout, filter)?
+        } else {
+            crate::domain::jq_filter::apply_jq_filter(stdout, filter)?
+        };
         tracing::debug!(
             before_chars = before,
             after_chars = stdout.len(),
             filter = filter.as_str(),
+            tsv = dr.wants_tsv(),
             "jq_filter applied"
         );
         return Ok(true);
