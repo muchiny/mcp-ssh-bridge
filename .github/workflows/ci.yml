@@ -72,6 +72,7 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     needs: test
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -81,9 +82,47 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-tarpaulin
-      - name: Generate coverage
-        run: cargo tarpaulin --engine llvm --all-features --out xml --output-dir coverage --fail-under 59
+
+      # Phase A: start the SSH test container and generate the integration
+      # test config so the previously-#[ignore]'d tests in
+      # ssh_integration.rs / sftp_integration.rs / e2e_docker.rs are picked
+      # up by --include-ignored. Container is stopped in the always() step.
+      - name: Start test SSH container
+        run: |
+          docker compose -f docker-compose.test.yml up -d --wait
+          docker compose -f docker-compose.test.yml ps
+
+      - name: Generate ssh_test_config.yaml fixture
+        run: |
+          cat > tests/ssh_test_config.yaml <<'EOF'
+          # Auto-generated for CI by the coverage job. The local file is
+          # gitignored. Points at the test-sshd container started by
+          # docker-compose.test.yml.
+          ssh_test:
+            hostname: "127.0.0.1"
+            port: 2222
+            user: "testuser"
+            auth:
+              password: "testpass123"
+            host_key_verification: "off"
+            remote_test_dir: "/tmp/mcp-ssh-bridge-tests"
+          EOF
+
+      - name: Generate coverage (with integration tests)
+        run: |
+          cargo tarpaulin --engine llvm --all-features \
+            --out xml --output-dir coverage \
+            --fail-under 70 \
+            --timeout 600 \
+            --skip-clean \
+            -- --include-ignored
+
+      - name: Stop test SSH container
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+
       - name: Upload coverage artifact
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
