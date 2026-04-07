@@ -53,6 +53,7 @@ jobs:
     name: Feature powerset
     runs-on: ubuntu-latest
     needs: test
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -62,7 +63,10 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
-      - run: cargo hack check --feature-powerset --no-dev-deps
+      # Limit feature combinations to depth 2 and exclude meta-features that
+      # would explode the powerset. The full powerset of 22 features would
+      # generate millions of builds.
+      - run: cargo hack check --feature-powerset --depth 2 --no-dev-deps --exclude-features full,air-gapped,all-protocols
 
   coverage:
     name: Coverage
