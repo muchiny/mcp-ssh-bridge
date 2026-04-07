@@ -140,7 +140,7 @@ aws-config = { version = "1", features = ["behavior-version-latest"], optional =
 zeromq = { version = "0.5", optional = true }
 
 # NATS adapter (optional) — event-driven messaging
-async-nats = { version = "0.46", optional = true }
+async-nats = { version = "0.47", optional = true }
 
 # MQTT adapter (optional) — IoT/Edge messaging
 rumqttc = { version = "0.25", optional = true }
