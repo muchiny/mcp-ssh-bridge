@@ -63,10 +63,10 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
-      # Limit feature combinations to depth 2 and exclude meta-features that
-      # would explode the powerset. The full powerset of 22 features would
-      # generate millions of builds.
-      - run: cargo hack check --feature-powerset --depth 2 --no-dev-deps --exclude-features full,air-gapped,all-protocols
+      # Limit to depth 1 (each feature individually) and exclude meta-features.
+      # Full powerset of 22 features would be millions of builds; depth 2 was
+      # ~150 builds × ~30s = >75min. Depth 1 = 18 builds = ~10 min.
+      - run: cargo hack check --feature-powerset --depth 1 --no-dev-deps --exclude-features full,air-gapped,all-protocols,cloud,messaging
 
   coverage:
     name: Coverage
