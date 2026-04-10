@@ -6,7 +6,7 @@ disable-model-invocation: false
 argument-hint: "[tool|config|status] [args...]"
 ---
 
-# SSH Bridge CLI — Remote Tool Execution & Configuration
+# SSH Bridge CLI — Remote Tool Execution and Configuration
 
 Execute MCP tools on remote hosts or manage bridge configuration via the token-efficient CLI.
 
@@ -17,14 +17,14 @@ Host status:
 
 ## Instructions
 
-### If no `$ARGUMENTS` or `$ARGUMENTS` is "status":
+### No arguments or status
 
 Show host status (above) and available tool groups:
 !`mcp-ssh-bridge list-tools --groups-only`
 
 Then ask the user what they want to do.
 
-### If `$ARGUMENTS` is "config":
+### Config mode
 
 Help the user configure the bridge. Show current config state:
 
@@ -37,6 +37,7 @@ Help the user configure the bridge. Show current config state:
 Then guide the user through configuration. The config file has these sections:
 
 **Adding a host:**
+
 ```yaml
 hosts:
   my-server:
@@ -53,6 +54,7 @@ hosts:
 ```
 
 **Security modes:**
+
 ```yaml
 security:
   mode: standard     # strict = whitelist only | standard = whitelist for exec, blacklist for tools | permissive = blacklist only
@@ -65,6 +67,7 @@ security:
 ```
 
 **Filtering tool groups (reduce MCP context):**
+
 ```yaml
 tool_groups:
   groups:
@@ -74,6 +77,7 @@ tool_groups:
 ```
 
 **SSH config auto-discovery:**
+
 ```yaml
 ssh_config:
   enabled: true   # auto-import hosts from ~/.ssh/config
@@ -81,27 +85,27 @@ ssh_config:
 
 Reference: `config/config.example.yaml` has the full documented example.
 
-### If `$ARGUMENTS` is "config validate":
+### Config validate
 
 Validate the configuration:
 !`mcp-ssh-bridge validate 2>&1`
 
-### If `$ARGUMENTS` is "config diff":
+### Config diff
 
 Compare current config with defaults:
 !`mcp-ssh-bridge config-diff 2>&1`
 
-### If `$ARGUMENTS` matches a tool group name (e.g., "docker", "kubernetes", "systemd"):
+### Tool group name (e.g., docker, kubernetes, systemd)
 
 List tools in that group:
 !`mcp-ssh-bridge list-tools --group $ARGUMENTS`
 
-### If `$ARGUMENTS` looks like a search query (no "=" in args, not a known subcommand):
+### Search query (no "=" in args, not a known subcommand)
 
 Search tools by keyword:
 !`mcp-ssh-bridge list-tools --search $ARGUMENTS`
 
-### If `$ARGUMENTS` contains a tool name with key=value pairs:
+### Tool name with key=value pairs
 
 Execute the tool directly:
 !`mcp-ssh-bridge --json tool $ARGUMENTS`
