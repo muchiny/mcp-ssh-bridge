@@ -66,7 +66,7 @@ jobs:
       # Limit to depth 1 (each feature individually) and exclude meta-features.
       # Full powerset of 22 features would be millions of builds; depth 2 was
       # ~150 builds × ~30s = >75min. Depth 1 = 18 builds = ~10 min.
-      - run: cargo hack check --feature-powerset --depth 1 --no-dev-deps --exclude-features full,air-gapped,all-protocols,cloud,messaging
+      - run: cargo hack check --feature-powerset --depth 1 --no-dev-deps --exclude-features full,air-gapped,all-protocols,cloud
 
   coverage:
     name: Coverage

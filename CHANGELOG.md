@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-04-10
+
+### Summary
+
+**Remove 5 unused protocols** | **Rewrite Telnet (zero deps)** | **CLI data-reduction** | **GCP runtime check** | **-7 dependencies**
+
+### Removed
+
+- **5 protocol adapters** — MQTT (`rumqttc`), NATS (`async-nats`), NETCONF (`netconf-rs`), SNMP (`snmp`), ZeroMQ (`zeromq`). These were non-functional stubs with no real-world usage. Removing them eliminates 7 transitive dependencies and simplifies the feature matrix.
+- **`messaging` feature bundle** — was `zeromq + nats + mqtt`, no longer exists.
+- **`RemoteExecutor::supports_structured_config()`** — only used by NETCONF/SNMP, removed from the port trait.
+
+### Changed
+
+- **Telnet adapter rewritten** — replaced `mini-telnet` crate with an in-house minimal RFC 854 client using raw `tokio::net::TcpStream`. Zero unmaintained transitive dependencies. Negotiation policy: refuse all options (`DONT`/`WONT`), drop subnegotiation blocks. Sufficient for command-line network gear.
+- **`air-gapped` feature** — now `winrm + telnet` (was `winrm + telnet + netconf`).
+- **`all-protocols` feature** — now 7 adapters (was 12): SSH, WinRM, Telnet, K8s Exec, Serial, SSM, Azure, GCP.
+- **CLI `describe-tool`** — now shows data-reduction parameters (`jq_filter`, `yq_filter`, `columns`, `output_format`, `limit`) based on the tool's `OutputKind`. Previously these were only visible in MCP mode.
+- **CLI `tool` invocation** — type coercion now uses the enriched schema including data-reduction parameters for correct auto-detection of argument types.
+- **README CLI section** — expanded with data-reduction examples, exit codes, shell completions, and Claude Code integration instructions.
+
+### Added
+
+- **GCP `gcloud` runtime check** — `warn_if_gcloud_missing()` logs a warning on first use when `gcloud` CLI is not in `$PATH`. Uses `OnceLock` for one-shot check.
+- **`config/claude-code/`** — Claude Code rule (`cli-bridge.md`) and skill (`/bridge`) for CLI-aware AI assistance. Copy to `.claude/` to enable.
+- **`inject_reduction_schema()` is now `pub`** — allows CLI runner to reuse the same schema enrichment as MCP mode.
+
 ## [1.10.0] - 2026-04-08
 
 ### Summary

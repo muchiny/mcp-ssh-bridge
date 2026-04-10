@@ -8,9 +8,47 @@
 //!
 //! Feature-gated behind `gcp`.
 
+use std::sync::OnceLock;
 use std::time::Instant;
 
 use tracing::{debug, info, warn};
+
+/// One-shot check that `gcloud` is on `$PATH`. Logs a warning the first time
+/// the GCP adapter is used on a host without `gcloud` installed.
+fn warn_if_gcloud_missing() {
+    static CHECKED: OnceLock<()> = OnceLock::new();
+    CHECKED.get_or_init(|| {
+        if which_gcloud().is_none() {
+            warn!(
+                "GCP adapter is configured but `gcloud` CLI was not found in $PATH. \
+                 Install Google Cloud SDK on the bridge host or remove GCP hosts from config."
+            );
+        }
+    });
+}
+
+/// Best-effort lookup of `gcloud` in `$PATH`. Returns the absolute path if found.
+fn which_gcloud() -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        let candidate = dir.join("gcloud");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        #[cfg(windows)]
+        {
+            let candidate_exe = dir.join("gcloud.exe");
+            if candidate_exe.is_file() {
+                return Some(candidate_exe);
+            }
+            let candidate_cmd = dir.join("gcloud.cmd");
+            if candidate_cmd.is_file() {
+                return Some(candidate_cmd);
+            }
+        }
+    }
+    None
+}
 
 use crate::config::{HostConfig, LimitsConfig};
 use crate::error::{BridgeError, Result};
@@ -47,6 +85,7 @@ impl GcpRunConnection {
         _limits: &LimitsConfig,
     ) -> Result<Self> {
         info!(host = %host_name, instance = %host_config.hostname, "Connecting via GCP OS Command");
+        warn_if_gcloud_missing();
 
         let project = if host_config.user.is_empty() || host_config.user == "root" {
             // Try to get project from gcloud config

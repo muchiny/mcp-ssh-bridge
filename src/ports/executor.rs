@@ -1,7 +1,7 @@
 //! Remote Executor Port
 //!
 //! This module defines the protocol-agnostic trait for remote command execution.
-//! Each protocol adapter (SSH, `WinRM`, Telnet, NETCONF, etc.) implements
+//! Each protocol adapter (SSH, `WinRM`, Telnet, etc.) implements
 //! this trait, allowing the domain layer to remain protocol-agnostic.
 
 use std::path::Path;
@@ -48,11 +48,6 @@ pub trait RemoteExecutor: Send + Sync {
 
     /// Whether this protocol supports interactive/PTY sessions.
     fn supports_interactive(&self) -> bool {
-        false
-    }
-
-    /// Whether this protocol supports structured configuration (NETCONF, SNMP).
-    fn supports_structured_config(&self) -> bool {
         false
     }
 }
@@ -105,7 +100,6 @@ mod tests {
 
         let executor = DummyExecutor;
         assert!(!executor.supports_interactive());
-        assert!(!executor.supports_structured_config());
         assert_eq!(executor.protocol_name(), "dummy");
     }
 }

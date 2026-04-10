@@ -2,7 +2,7 @@
 //!
 //! `ExecutorRouter` wraps the SSH `ConnectionPool` and dispatches connections
 //! based on the `protocol` field in each host's configuration. Non-SSH
-//! protocol adapters (`WinRM`, Telnet, NETCONF) are feature-gated.
+//! protocol adapters (`WinRM`, Telnet, K8s, Serial, SSM, Azure, GCP) are feature-gated.
 //!
 //! The router exposes the same public API as `ConnectionPool`, enabling a
 //! clean cut-over in `ToolContext` without changing any of the 337 tool handlers.
@@ -104,13 +104,6 @@ impl ExecutorRouter {
                     .await?;
                 Ok(ConnectionGuard::Telnet(conn))
             }
-            #[cfg(feature = "netconf")]
-            Protocol::Netconf => {
-                let conn =
-                    crate::netconf::NetconfConnection::connect(host_name, host_config, limits)
-                        .await?;
-                Ok(ConnectionGuard::Netconf(conn))
-            }
             #[cfg(feature = "k8s-exec")]
             Protocol::K8sExec => {
                 let conn =
@@ -124,13 +117,6 @@ impl ExecutorRouter {
                     crate::serial_port::SerialConnection::connect(host_name, host_config, limits)
                         .await?;
                 Ok(ConnectionGuard::Serial(conn))
-            }
-            #[cfg(feature = "snmp")]
-            Protocol::Snmp => {
-                let conn =
-                    crate::snmp_client::SnmpConnection::connect(host_name, host_config, limits)
-                        .await?;
-                Ok(ConnectionGuard::Snmp(conn))
             }
             #[cfg(feature = "ssm")]
             Protocol::Ssm => {
@@ -157,26 +143,6 @@ impl ExecutorRouter {
                 )
                 .await?;
                 Ok(ConnectionGuard::Gcp(conn))
-            }
-            #[cfg(feature = "zeromq")]
-            Protocol::ZeroMq => {
-                let conn =
-                    crate::zmq_exec::ZmqConnection::connect(host_name, host_config, limits).await?;
-                Ok(ConnectionGuard::ZeroMq(conn))
-            }
-            #[cfg(feature = "nats")]
-            Protocol::Nats => {
-                let conn =
-                    crate::nats_exec::NatsConnection::connect(host_name, host_config, limits)
-                        .await?;
-                Ok(ConnectionGuard::Nats(conn))
-            }
-            #[cfg(feature = "mqtt")]
-            Protocol::Mqtt => {
-                let conn =
-                    crate::mqtt_exec::MqttConnection::connect(host_name, host_config, limits)
-                        .await?;
-                Ok(ConnectionGuard::Mqtt(conn))
             }
         }
     }
@@ -221,18 +187,12 @@ pub enum ConnectionGuard<'a> {
     /// Telnet connection (persistent TCP session).
     #[cfg(feature = "telnet")]
     Telnet(crate::telnet::TelnetConnection),
-    /// NETCONF session (RFC 6241 over SSH).
-    #[cfg(feature = "netconf")]
-    Netconf(crate::netconf::NetconfConnection),
     /// Kubernetes Exec (direct K8s API pod exec).
     #[cfg(feature = "k8s-exec")]
     K8sExec(crate::k8s_exec::K8sExecConnection),
     /// Serial port (RS-232/USB).
     #[cfg(feature = "serial")]
     Serial(crate::serial_port::SerialConnection),
-    /// SNMP session (v1/v2c UDP).
-    #[cfg(feature = "snmp")]
-    Snmp(crate::snmp_client::SnmpConnection),
     /// AWS SSM (Systems Manager `SendCommand`).
     #[cfg(feature = "ssm")]
     Ssm(crate::ssm::SsmConnection),
@@ -242,15 +202,6 @@ pub enum ConnectionGuard<'a> {
     /// GCP OS Command (`gcloud` CLI).
     #[cfg(feature = "gcp")]
     Gcp(crate::cloud_exec::gcp::GcpRunConnection),
-    /// `ZeroMQ` REQ/REP (fleet-scale messaging).
-    #[cfg(feature = "zeromq")]
-    ZeroMq(crate::zmq_exec::ZmqConnection),
-    /// NATS request/reply (event-driven messaging).
-    #[cfg(feature = "nats")]
-    Nats(crate::nats_exec::NatsConnection),
-    /// MQTT pub/sub (IoT/Edge messaging).
-    #[cfg(feature = "mqtt")]
-    Mqtt(crate::mqtt_exec::MqttConnection),
 }
 
 impl ConnectionGuard<'_> {
@@ -272,26 +223,16 @@ impl ConnectionGuard<'_> {
             Self::WinRm(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "telnet")]
             Self::Telnet(conn) => conn.exec(command, limits).await,
-            #[cfg(feature = "netconf")]
-            Self::Netconf(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "k8s-exec")]
             Self::K8sExec(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "serial")]
             Self::Serial(conn) => conn.exec(command, limits).await,
-            #[cfg(feature = "snmp")]
-            Self::Snmp(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "ssm")]
             Self::Ssm(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "azure")]
             Self::Azure(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "gcp")]
             Self::Gcp(conn) => conn.exec(command, limits).await,
-            #[cfg(feature = "zeromq")]
-            Self::ZeroMq(conn) => conn.exec(command, limits).await,
-            #[cfg(feature = "nats")]
-            Self::Nats(conn) => conn.exec(command, limits).await,
-            #[cfg(feature = "mqtt")]
-            Self::Mqtt(conn) => conn.exec(command, limits).await,
         }
     }
 
@@ -305,26 +246,16 @@ impl ConnectionGuard<'_> {
             Self::WinRm(conn) => conn.mark_failed(),
             #[cfg(feature = "telnet")]
             Self::Telnet(conn) => conn.mark_failed(),
-            #[cfg(feature = "netconf")]
-            Self::Netconf(conn) => conn.mark_failed(),
             #[cfg(feature = "k8s-exec")]
             Self::K8sExec(conn) => conn.mark_failed(),
             #[cfg(feature = "serial")]
             Self::Serial(conn) => conn.mark_failed(),
-            #[cfg(feature = "snmp")]
-            Self::Snmp(conn) => conn.mark_failed(),
             #[cfg(feature = "ssm")]
             Self::Ssm(conn) => conn.mark_failed(),
             #[cfg(feature = "azure")]
             Self::Azure(conn) => conn.mark_failed(),
             #[cfg(feature = "gcp")]
             Self::Gcp(conn) => conn.mark_failed(),
-            #[cfg(feature = "zeromq")]
-            Self::ZeroMq(conn) => conn.mark_failed(),
-            #[cfg(feature = "nats")]
-            Self::Nats(conn) => conn.mark_failed(),
-            #[cfg(feature = "mqtt")]
-            Self::Mqtt(conn) => conn.mark_failed(),
         }
     }
 }

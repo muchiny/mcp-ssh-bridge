@@ -40,7 +40,7 @@ Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──13 protocols�
 ## Features
 
 - **338 tools, 74 groups** — manage Linux, Windows, Docker, Kubernetes, Podman, databases, LDAP, network equipment, certificates, and more
-- **13 protocol adapters** — SSH, WinRM, Telnet, NETCONF, K8s Exec, Serial, SNMP, AWS SSM, Azure, GCP, ZeroMQ, NATS, MQTT
+- **8 protocol adapters** — SSH, WinRM, Telnet, K8s Exec, Serial, AWS SSM, Azure, GCP
 - **Security-first** — command whitelist/blacklist, 56 secret-redaction patterns + entropy detection, tamper-proof session recording
 - **Auto-discovery** — reads `~/.ssh/config` automatically, merges with YAML config
 - **Smart output** — truncation with paginated fetch via `ssh_output_fetch`, per-client size limits, jq filtering
@@ -131,7 +131,7 @@ mcp-ssh-bridge status
 
 ## Architecture
 
-MCP SSH Bridge sits between Claude Code and your infrastructure. It routes commands through 13 protocol adapters with built-in security validation, output sanitization, and audit logging.
+MCP SSH Bridge sits between Claude Code and your infrastructure. It routes commands through 8 protocol adapters with built-in security validation, output sanitization, and audit logging.
 
 ```mermaid
 graph LR
@@ -144,21 +144,15 @@ graph LR
         ER -->|SSH| P1[Linux / Windows<br/>Docker · K8s · Network]
         ER -->|WinRM| P2[Windows]
         ER -->|Telnet| P3[Legacy Devices]
-        ER -->|NETCONF| P4[YANG / Network]
     end
 
     subgraph "Infrastructure Protocols"
         ER -->|K8s API| P6[K8s Exec]
         ER -->|Serial| P7[Serial Devices]
-        ER -->|SNMP| P8[SNMP Agents]
     end
 
     subgraph "Cloud Protocols"
         ER -->|SSM · Azure · GCP| P9[Cloud Instances]
-    end
-
-    subgraph "Messaging Protocols"
-        ER -->|ZeroMQ · NATS · MQTT| P10[Message Brokers]
     end
 ```
 
@@ -479,25 +473,110 @@ tool_groups:
 
 ## CLI Usage
 
-The binary also works standalone (outside MCP mode):
+The binary works standalone (outside MCP mode) with **10-32x token savings** for AI agent workflows.
+
+### Basic commands
 
 ```bash
-mcp-ssh-bridge                              # MCP server mode (default)
-mcp-ssh-bridge --config /path/config.yaml   # Custom config path
-mcp-ssh-bridge status                       # Show configured hosts
+mcp-ssh-bridge status                       # Show configured hosts & security
 mcp-ssh-bridge exec <host> "<command>"      # Execute a command directly
 mcp-ssh-bridge history [--limit 20]         # Show command history
-mcp-ssh-bridge upload <host> <local> <remote>
-mcp-ssh-bridge download <host> <remote> <local>
+mcp-ssh-bridge upload <host> <local> <remote>   # SFTP upload
+mcp-ssh-bridge download <host> <remote> <local> # SFTP download
+mcp-ssh-bridge validate                     # Validate config file
+mcp-ssh-bridge config-diff                  # Compare config vs defaults
 ```
 
-All 338 MCP tools are also accessible via CLI for scripting and token-efficient AI workflows:
+### Tool invocation (all 338 MCP tools)
 
 ```bash
+# Invoke any tool with key=value pairs
 mcp-ssh-bridge tool ssh_docker_ps host=prod
-mcp-ssh-bridge list-tools --groups-only       # 74 groups (~2K tokens)
-mcp-ssh-bridge describe-tool ssh_exec         # Full schema for 1 tool
+mcp-ssh-bridge tool ssh_exec host=prod command="df -h"
+
+# Or with JSON arguments
+mcp-ssh-bridge tool ssh_k8s_get --json-args '{"host":"k8s","resource":"pods","namespace":"default"}'
+
+# JSON output (for scripting/parsing)
+mcp-ssh-bridge --json tool ssh_docker_ps host=prod
 ```
+
+### Progressive discovery
+
+```bash
+mcp-ssh-bridge list-tools --groups-only       # 74 groups (~2K tokens)
+mcp-ssh-bridge list-tools --group docker      # Tools in a group (~500 tokens)
+mcp-ssh-bridge list-tools --search kubernetes # Keyword search
+mcp-ssh-bridge describe-tool ssh_docker_ps    # Full schema for 1 tool (~200 tokens)
+```
+
+### Data reduction (token-efficient output)
+
+Tools automatically expose filtering parameters based on their output type. Use `describe-tool` to see which params are available for a given tool.
+
+| Output type | Available params | Example tools |
+|-------------|-----------------|---------------|
+| **JSON** | `jq_filter`, `output_format` (json/tsv), `limit` | `docker_inspect`, `ansible_facts`, `cloud_metadata` |
+| **Tabular** | `columns`, `limit` | `process_list`, `docker_images`, `net_connections` |
+| **YAML** | `yq_filter`, `output_format` (json/tsv), `limit` | kubectl/helm with YAML output |
+| **Auto** | `jq_filter`, `columns`, `output_format`, `limit` | `k8s_get`, `docker_ps`, `vault_status` |
+| **Raw text** | — | `ssh_exec` |
+
+```bash
+# Filter JSON output with jq, return as TSV (60-80% token savings)
+mcp-ssh-bridge tool ssh_docker_inspect host=prod target=nginx \
+  jq_filter='.[] | [.Name, .State.Status]' output_format=tsv
+
+# Select specific columns from tabular output
+mcp-ssh-bridge tool ssh_process_list host=prod columns='["PID","USER","%CPU","COMMAND"]' limit=10
+```
+
+### Global flags
+
+| Flag | Description |
+|------|-------------|
+| `--config` / `-c` | Path to config file |
+| `--json` | JSON output for all commands |
+| `--dry-run` | Preview without executing |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Tool/command execution error |
+| 2 | CLI usage error (unknown tool, bad args) |
+| 3 | SSH connection error |
+| 4 | Security denial |
+| 5 | Configuration error |
+
+### Shell completions
+
+```bash
+mcp-ssh-bridge completions bash > ~/.bash_completion.d/mcp-ssh-bridge
+mcp-ssh-bridge completions zsh > ~/.zfunc/_mcp-ssh-bridge
+mcp-ssh-bridge completions fish > ~/.config/fish/completions/mcp-ssh-bridge.fish
+```
+
+### Claude Code integration (optional)
+
+If you use [Claude Code](https://claude.com/claude-code), copy the provided rule and skill to get CLI-aware assistance:
+
+```bash
+# Copy the CLI rule (tells Claude to prefer CLI over MCP for token efficiency)
+mkdir -p .claude/rules
+cp config/claude-code/rules/cli-bridge.md .claude/rules/
+
+# Copy the /bridge skill (interactive CLI workflows and config help)
+mkdir -p .claude/skills/bridge
+cp config/claude-code/skills/bridge/SKILL.md .claude/skills/bridge/
+```
+
+This enables:
+- Claude automatically uses the CLI via Bash instead of MCP tools
+- `/bridge` command for interactive tool discovery and config management
+- `/bridge config` for guided configuration setup
+- `/bridge docker` to explore tools in a group
 
 ---
 

@@ -317,9 +317,6 @@ pub enum Protocol {
     /// Telnet — legacy network equipment (Cisco IOS, switches, PLCs)
     #[cfg(feature = "telnet")]
     Telnet,
-    /// NETCONF — modern network device configuration (RFC 6241 over SSH)
-    #[cfg(feature = "netconf")]
-    Netconf,
     /// Kubernetes Exec — direct pod command execution via K8s API
     #[cfg(feature = "k8s-exec")]
     #[serde(alias = "kubernetes", alias = "k8s")]
@@ -327,9 +324,6 @@ pub enum Protocol {
     /// Serial — RS-232/USB serial port communication (PLCs, embedded, console)
     #[cfg(feature = "serial")]
     Serial,
-    /// SNMP — Simple Network Management Protocol (v1/v2c) for network devices
-    #[cfg(feature = "snmp")]
-    Snmp,
     /// AWS SSM — Systems Manager `SendCommand` for EC2 instances
     #[cfg(feature = "ssm")]
     Ssm,
@@ -339,16 +333,6 @@ pub enum Protocol {
     /// GCP OS Command — execute commands on GCP VMs via `gcloud` CLI
     #[cfg(feature = "gcp")]
     Gcp,
-    /// `ZeroMQ` — fleet-scale command execution via REQ/REP sockets
-    #[cfg(feature = "zeromq")]
-    #[serde(alias = "zmq")]
-    ZeroMq,
-    /// NATS — event-driven command execution via request/reply
-    #[cfg(feature = "nats")]
-    Nats,
-    /// MQTT — IoT/Edge command execution via pub/sub
-    #[cfg(feature = "mqtt")]
-    Mqtt,
 }
 
 const fn default_port() -> u16 {

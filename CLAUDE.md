@@ -117,8 +117,9 @@ dxt/                              # DXT packaging (Claude Desktop extension)
 
 - `default = ["cli"]` — CLI binary (disable for lib-only)
 - `full` — CLI + mimalloc + HTTP transport
-- `air-gapped` — WinRM + Telnet + NETCONF
-- `all-protocols` — All 13 protocol adapters (SSH, WinRM, Telnet, NETCONF, K8s, Serial, SNMP, SSM, Azure, GCP, ZeroMQ, NATS, MQTT)
+- `air-gapped` — WinRM + Telnet (no outbound internet required)
+- `cloud` — SSM + Azure + GCP (**NOT air-gapped** — requires connectivity to AWS/Azure/GCP APIs; GCP wraps the `gcloud` CLI which must be installed on the bridge host)
+- `all-protocols` — All 7 non-SSH adapters (WinRM, Telnet, K8s, Serial, SSM, Azure, GCP)
 - See `Cargo.toml` for full feature matrix
 
 ## Key Principles
@@ -149,9 +150,8 @@ Key sections: `hosts`, `security`, `limits`, `audit`, `tool_groups`, `recording`
 - RUSTSEC-2023-0071 — Marvin Attack on RSA (russh)
 - RUSTSEC-2026-0044 — aws-lc-sys X.509 bypass (aws-sdk)
 - RUSTSEC-2026-0048 — aws-lc-sys CRL logic error (aws-sdk)
-- RUSTSEC-2026-0049 — rustls-webpki CRL matching (russh/aws-sdk/rumqttc)
-- RUSTSEC-2021-0153 — encoding crate unmaintained (mini-telnet)
-- RUSTSEC-2025-0134 — rustls-pemfile unmaintained (kube/rumqttc/async-nats)
+- RUSTSEC-2026-0049 — rustls-webpki CRL matching (russh/aws-sdk)
+- RUSTSEC-2025-0134 — rustls-pemfile unmaintained (kube)
 
 ## Path-Scoped Rules
 

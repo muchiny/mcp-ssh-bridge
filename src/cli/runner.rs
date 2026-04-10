@@ -892,7 +892,7 @@ pub async fn run_tool(
     json_args: Option<&str>,
     json_output: bool,
 ) -> Result<i32> {
-    use crate::mcp::registry::create_filtered_registry;
+    use crate::mcp::registry::{create_filtered_registry, inject_reduction_schema};
 
     let registry = create_filtered_registry(&config.tool_groups);
     let ctx = create_context(Arc::clone(&config));
@@ -905,12 +905,21 @@ pub async fn run_tool(
     } else if kv_args.is_empty() {
         None
     } else {
-        // Parse key=value pairs into a JSON object, coercing types via schema
-        let schema_json = registry.get(tool_name).map(|h| h.schema().input_schema);
+        // Parse key=value pairs into a JSON object, coercing types via enriched schema
+        // (includes data-reduction params like jq_filter, columns, output_format, limit)
+        let enriched_schema = registry.get(tool_name).map(|h| {
+            let mut schema: serde_json::Value =
+                serde_json::from_str(h.schema().input_schema).unwrap_or_default();
+            inject_reduction_schema(&mut schema, h.output_kind());
+            serde_json::to_string(&schema).ok()
+        });
+        let schema_ref = enriched_schema
+            .as_ref()
+            .and_then(|opt| opt.as_deref());
         let mut map = serde_json::Map::new();
         for pair in kv_args {
             if let Some((key, value)) = pair.split_once('=') {
-                let coerced = coerce_value(value, key, schema_json);
+                let coerced = coerce_value(value, key, schema_ref);
                 map.insert(key.to_string(), coerced);
             } else {
                 return Err(BridgeError::Config(format!(
@@ -1007,7 +1016,7 @@ pub async fn run_describe_tool(
     tool_name: &str,
     json_output: bool,
 ) -> Result<()> {
-    use crate::mcp::registry::{create_filtered_registry, tool_group};
+    use crate::mcp::registry::{create_filtered_registry, inject_reduction_schema, tool_group};
 
     let registry = create_filtered_registry(&config.tool_groups);
     let handler = registry
@@ -1019,9 +1028,12 @@ pub async fn run_describe_tool(
     let schema = handler.schema();
     let group = tool_group(tool_name);
 
+    // Parse and enrich the schema with data-reduction params (jq_filter, columns, etc.)
+    let mut input_schema: serde_json::Value =
+        serde_json::from_str(schema.input_schema).unwrap_or_default();
+    inject_reduction_schema(&mut input_schema, handler.output_kind());
+
     if json_output {
-        let input_schema: serde_json::Value =
-            serde_json::from_str(schema.input_schema).unwrap_or_default();
         let obj = serde_json::json!({
             "name": schema.name,
             "group": group,
@@ -1038,13 +1050,12 @@ pub async fn run_describe_tool(
         println!("\nInput Schema:");
 
         // Pretty-print the schema, showing required fields and property types
-        if let Ok(input) = serde_json::from_str::<serde_json::Value>(schema.input_schema)
-            && let Some(props) = input.get("properties").and_then(|p| p.as_object())
+        if let Some(props) = input_schema.get("properties").and_then(|p| p.as_object())
         {
-            let required: Vec<&str> = input
+            let required: Vec<&str> = input_schema
                 .get("required")
-                .and_then(|r| r.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+                .and_then(serde_json::Value::as_array)
+                .map(|arr| arr.iter().filter_map(serde_json::Value::as_str).collect())
                 .unwrap_or_default();
 
             for (name, prop) in props {

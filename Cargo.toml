@@ -1,6 +1,6 @@
 [package]
 name = "mcp-ssh-bridge"
-version = "1.10.0"
+version = "1.11.0"
 edition = "2024"
 rust-version = "1.94"
 description = "MCP server that bridges Claude Code to air-gapped environments via SSH"
@@ -28,32 +28,25 @@ mimalloc = ["dep:mimalloc"]
 
 # Protocol adapters (Tier 1)
 winrm = ["dep:reqwest", "dep:quick-xml"]
-telnet = ["dep:mini-telnet"]
-netconf = ["dep:netconf-rs"]
+telnet = []
 # Protocol adapters (Tier 2)
 k8s-exec = ["dep:kube", "dep:k8s-openapi"]
 serial = ["dep:tokio-serial"]
-snmp = ["dep:snmp"]
 
 # Protocol adapters (Tier 3 — Cloud-only, non air-gapped)
 ssm = ["dep:aws-sdk-ssm", "dep:aws-config"]
 azure = ["dep:reqwest"]
+# GCP wraps the `gcloud` CLI — no Rust deps, but `gcloud` must be installed on the bridge host
 gcp = []
 cloud = ["ssm", "azure", "gcp"]
-
-# Protocol adapters (Tier 4 — Messaging, requires remote agent)
-zeromq = ["dep:zeromq"]
-nats = ["dep:async-nats"]
-mqtt = ["dep:rumqttc"]
-messaging = ["zeromq", "nats", "mqtt"]
 
 # Data reduction (jq filtering for tool output)
 jq = ["dep:jaq-core", "dep:jaq-std", "dep:jaq-json"]
 
 # Bundles
 full = ["cli", "mimalloc", "http", "jq"]
-air-gapped = ["winrm", "telnet", "netconf"]
-all-protocols = ["winrm", "telnet", "netconf", "k8s-exec", "serial", "snmp", "ssm", "azure", "gcp", "zeromq", "nats", "mqtt"]
+air-gapped = ["winrm", "telnet"]
+all-protocols = ["winrm", "telnet", "k8s-exec", "serial", "ssm", "azure", "gcp"]
 
 [dependencies]
 # Async runtime (explicit features instead of "full" for smaller binary)
@@ -116,12 +109,6 @@ mimalloc = { version = "0.1", default-features = false, optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"], optional = true }
 quick-xml = { version = "0.39", features = ["serialize"], optional = true }
 
-# Telnet adapter (optional) — legacy network equipment
-mini-telnet = { version = "0.1", optional = true }
-
-# NETCONF adapter (optional) — RFC 6241 over SSH
-netconf-rs = { version = "0.2", optional = true }
-
 # Kubernetes Exec adapter (optional) — direct pod exec via K8s API
 kube = { version = "3.1", default-features = false, features = ["client", "rustls-tls", "ws"], optional = true }
 k8s-openapi = { version = "0.27", features = ["v1_32"], optional = true }
@@ -129,21 +116,9 @@ k8s-openapi = { version = "0.27", features = ["v1_32"], optional = true }
 # Serial adapter (optional) — serial port communication (PLCs, embedded, console)
 tokio-serial = { version = "5.4", optional = true }
 
-# SNMP adapter (optional) — SNMP v1/v2c network monitoring
-snmp = { version = "0.2", optional = true }
-
 # AWS SSM adapter (optional) — cloud command execution via Systems Manager
 aws-sdk-ssm = { version = "1", optional = true }
 aws-config = { version = "1", features = ["behavior-version-latest"], optional = true }
-
-# ZeroMQ adapter (optional) — fleet-scale messaging (SaltStack model)
-zeromq = { version = "0.5", optional = true }
-
-# NATS adapter (optional) — event-driven messaging
-async-nats = { version = "0.46", optional = true }
-
-# MQTT adapter (optional) — IoT/Edge messaging
-rumqttc = { version = "0.25", optional = true }
 
 # jq filtering for tool output reduction (optional)
 jaq-core = { version = "3", optional = true }

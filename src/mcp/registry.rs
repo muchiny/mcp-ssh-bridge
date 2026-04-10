@@ -128,7 +128,7 @@ impl ToolRegistry {
 /// - `RawText` → nothing
 ///
 /// All `Json`/`Yaml`/`Auto` tools also accept `limit`.
-fn inject_reduction_schema(schema: &mut Value, kind: crate::domain::output_kind::OutputKind) {
+pub fn inject_reduction_schema(schema: &mut Value, kind: crate::domain::output_kind::OutputKind) {
     use crate::domain::output_kind::OutputKind;
 
     let Some(props) = schema.get_mut("properties").and_then(Value::as_object_mut) else {
