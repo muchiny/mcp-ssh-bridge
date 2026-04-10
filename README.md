@@ -573,6 +573,7 @@ cp config/claude-code/skills/bridge/SKILL.md .claude/skills/bridge/
 ```
 
 This enables:
+
 - Claude automatically uses the CLI via Bash instead of MCP tools
 - `/bridge` command for interactive tool discovery and config management
 - `/bridge config` for guided configuration setup
