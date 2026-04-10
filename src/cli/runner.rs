@@ -913,9 +913,7 @@ pub async fn run_tool(
             inject_reduction_schema(&mut schema, h.output_kind());
             serde_json::to_string(&schema).ok()
         });
-        let schema_ref = enriched_schema
-            .as_ref()
-            .and_then(|opt| opt.as_deref());
+        let schema_ref = enriched_schema.as_ref().and_then(|opt| opt.as_deref());
         let mut map = serde_json::Map::new();
         for pair in kv_args {
             if let Some((key, value)) = pair.split_once('=') {
@@ -1050,8 +1048,7 @@ pub async fn run_describe_tool(
         println!("\nInput Schema:");
 
         // Pretty-print the schema, showing required fields and property types
-        if let Some(props) = input_schema.get("properties").and_then(|p| p.as_object())
-        {
+        if let Some(props) = input_schema.get("properties").and_then(|p| p.as_object()) {
             let required: Vec<&str> = input_schema
                 .get("required")
                 .and_then(serde_json::Value::as_array)
