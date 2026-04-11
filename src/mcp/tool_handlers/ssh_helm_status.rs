@@ -6,6 +6,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::HelmCommandBuilder;
 use crate::error::Result;
@@ -33,6 +34,8 @@ pub struct SshHelmStatusArgs {
 }
 
 impl_common_args!(SshHelmStatusArgs);
+
+#[mcp_standard_tool(name = "ssh_helm_status", group = "kubernetes", annotation = "read_only")]
 
 pub struct HelmStatusTool;
 

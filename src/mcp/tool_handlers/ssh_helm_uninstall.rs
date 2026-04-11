@@ -6,6 +6,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::HelmCommandBuilder;
 use crate::error::Result;
@@ -33,6 +34,8 @@ pub struct SshHelmUninstallArgs {
 }
 
 impl_common_args!(SshHelmUninstallArgs);
+
+#[mcp_standard_tool(name = "ssh_helm_uninstall", group = "kubernetes", annotation = "destructive")]
 
 pub struct HelmUninstallTool;
 

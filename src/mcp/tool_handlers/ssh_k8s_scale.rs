@@ -6,6 +6,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::KubernetesCommandBuilder;
 use crate::error::Result;
@@ -28,6 +29,8 @@ pub struct SshK8sScaleArgs {
 }
 
 impl_common_args!(SshK8sScaleArgs);
+
+#[mcp_standard_tool(name = "ssh_k8s_scale", group = "kubernetes", annotation = "mutating")]
 
 pub struct K8sScaleTool;
 

@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::ansible::AnsibleCommandBuilder;
 use crate::error::Result;
@@ -31,6 +32,8 @@ pub struct SshAnsibleFactsArgs {
 }
 
 impl_common_args!(SshAnsibleFactsArgs);
+
+#[mcp_standard_tool(name = "ssh_ansible_facts", group = "ansible", annotation = "read_only")]
 
 pub struct AnsibleFactsTool;
 

@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::KubernetesCommandBuilder;
 use crate::error::Result;
@@ -28,6 +29,8 @@ pub struct SshK8sDescribeArgs {
 }
 
 impl_common_args!(SshK8sDescribeArgs);
+
+#[mcp_standard_tool(name = "ssh_k8s_describe", group = "kubernetes", annotation = "read_only")]
 
 pub struct K8sDescribeTool;
 

@@ -6,6 +6,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::KubernetesCommandBuilder;
 use crate::error::Result;
@@ -34,6 +35,8 @@ pub struct SshK8sDeleteArgs {
 }
 
 impl_common_args!(SshK8sDeleteArgs);
+
+#[mcp_standard_tool(name = "ssh_k8s_delete", group = "kubernetes", annotation = "destructive")]
 
 pub struct K8sDeleteTool;
 

@@ -7,6 +7,7 @@
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::HelmCommandBuilder;
 use crate::error::Result;
@@ -39,6 +40,8 @@ pub struct SshHelmListArgs {
 }
 
 impl_common_args!(SshHelmListArgs);
+
+#[mcp_standard_tool(name = "ssh_helm_list", group = "kubernetes", annotation = "read_only")]
 
 pub struct HelmListTool;
 

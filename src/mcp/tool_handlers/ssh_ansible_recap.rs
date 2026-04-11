@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::ansible::AnsibleCommandBuilder;
 use crate::error::Result;
@@ -48,6 +49,8 @@ pub struct SshAnsibleRecapArgs {
 }
 
 impl_common_args!(SshAnsibleRecapArgs);
+
+#[mcp_standard_tool(name = "ssh_ansible_recap", group = "ansible", annotation = "mutating")]
 
 pub struct AnsibleRecapTool;
 

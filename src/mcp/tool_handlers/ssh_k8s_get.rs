@@ -7,6 +7,7 @@
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::KubernetesCommandBuilder;
 use crate::error::Result;
@@ -43,6 +44,8 @@ pub struct SshK8sGetArgs {
 }
 
 impl_common_args!(SshK8sGetArgs);
+
+#[mcp_standard_tool(name = "ssh_k8s_get", group = "kubernetes", annotation = "read_only")]
 
 pub struct K8sGetTool;
 

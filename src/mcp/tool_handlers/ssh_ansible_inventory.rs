@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::ansible::AnsibleCommandBuilder;
 use crate::error::Result;
@@ -35,6 +36,8 @@ pub struct SshAnsibleInventoryArgs {
 }
 
 impl_common_args!(SshAnsibleInventoryArgs);
+
+#[mcp_standard_tool(name = "ssh_ansible_inventory", group = "ansible", annotation = "read_only")]
 
 pub struct AnsibleInventoryTool;
 
