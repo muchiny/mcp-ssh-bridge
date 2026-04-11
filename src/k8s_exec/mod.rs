@@ -6,6 +6,10 @@
 //!
 //! Feature-gated behind `k8s-exec`.
 
+pub mod pool;
+
+pub use pool::{K8sExecPool, K8sExecPoolConfig};
+
 use std::time::Instant;
 
 use k8s_openapi::api::core::v1::Pod;
@@ -75,6 +79,51 @@ impl K8sExecConnection {
             pod = %pod_name,
             container = ?container,
             "K8s exec target resolved"
+        );
+
+        Ok(Self {
+            client,
+            namespace,
+            pod_name,
+            container,
+            host_name: host_name.to_string(),
+            failed: false,
+        })
+    }
+
+    /// Build a `K8sExecConnection` from a pooled `kube::Client`.
+    ///
+    /// Used by `K8sExecPool::get_connection()` to reuse an existing
+    /// `kube::Client` (and the HTTPS connection pool inside it)
+    /// instead of re-running `Config::infer()` + `Client::try_from()`
+    /// on every call.
+    ///
+    /// # Errors
+    ///
+    /// The host config must still be interpreted the same way as
+    /// `connect()` — `hostname` is the pod name or `namespace/pod`,
+    /// `user` is the namespace, `description` is the container name.
+    pub fn from_parts(
+        host_name: &str,
+        host_config: &HostConfig,
+        client: Client,
+    ) -> Result<Self> {
+        // Parse pod reference: "namespace/pod" or just "pod"
+        let (namespace, pod_name) = if host_config.hostname.contains('/') {
+            let parts: Vec<&str> = host_config.hostname.splitn(2, '/').collect();
+            (parts[0].to_string(), parts[1].to_string())
+        } else {
+            (host_config.user.clone(), host_config.hostname.clone())
+        };
+
+        let container = host_config.description.clone();
+
+        debug!(
+            host = %host_name,
+            namespace = %namespace,
+            pod = %pod_name,
+            container = ?container,
+            "K8sExecPool target resolved"
         );
 
         Ok(Self {

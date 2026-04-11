@@ -21,6 +21,9 @@ pub struct ExecutorRouter {
     /// Reqwest HTTPS client cache for `WinRM` hosts (Sprint 3 Phase B.4).
     #[cfg(feature = "winrm")]
     winrm_pool: crate::winrm::WinRmPool,
+    /// `kube::Client` cache for K8s Exec hosts (Sprint 3 Phase B.5).
+    #[cfg(feature = "k8s-exec")]
+    k8s_exec_pool: crate::k8s_exec::K8sExecPool,
     /// Mock output for testing — when set, `get_connection_with_jump` returns
     /// a `ConnectionGuard::Mock` that returns this output instead of connecting.
     #[cfg(test)]
@@ -39,6 +42,8 @@ impl ExecutorRouter {
             ssh_pool: ConnectionPool::with_defaults(),
             #[cfg(feature = "winrm")]
             winrm_pool: crate::winrm::WinRmPool::new(),
+            #[cfg(feature = "k8s-exec")]
+            k8s_exec_pool: crate::k8s_exec::K8sExecPool::new(),
             #[cfg(test)]
             mock_output: None,
             #[cfg(test)]
@@ -53,6 +58,8 @@ impl ExecutorRouter {
             ssh_pool: ConnectionPool::new(ssh_pool_config),
             #[cfg(feature = "winrm")]
             winrm_pool: crate::winrm::WinRmPool::new(),
+            #[cfg(feature = "k8s-exec")]
+            k8s_exec_pool: crate::k8s_exec::K8sExecPool::new(),
             #[cfg(test)]
             mock_output: None,
             #[cfg(test)]
@@ -128,9 +135,10 @@ impl ExecutorRouter {
             }
             #[cfg(feature = "k8s-exec")]
             Protocol::K8sExec => {
-                let conn =
-                    crate::k8s_exec::K8sExecConnection::connect(host_name, host_config, limits)
-                        .await?;
+                let conn = self
+                    .k8s_exec_pool
+                    .get_connection(host_name, host_config, limits)
+                    .await?;
                 Ok(ConnectionGuard::K8sExec(conn))
             }
             #[cfg(feature = "serial")]
@@ -174,6 +182,8 @@ impl ExecutorRouter {
         self.ssh_pool.cleanup().await;
         #[cfg(feature = "winrm")]
         self.winrm_pool.cleanup().await;
+        #[cfg(feature = "k8s-exec")]
+        self.k8s_exec_pool.cleanup().await;
     }
 
     /// Get statistics for the SSH connection pool.
@@ -192,6 +202,8 @@ impl ExecutorRouter {
         self.ssh_pool.close_all().await;
         #[cfg(feature = "winrm")]
         self.winrm_pool.close_all().await;
+        #[cfg(feature = "k8s-exec")]
+        self.k8s_exec_pool.close_all().await;
     }
 }
 
@@ -356,6 +368,8 @@ impl ExecutorRouter {
             ssh_pool: ConnectionPool::with_defaults(),
             #[cfg(feature = "winrm")]
             winrm_pool: crate::winrm::WinRmPool::new(),
+            #[cfg(feature = "k8s-exec")]
+            k8s_exec_pool: crate::k8s_exec::K8sExecPool::new(),
             mock_output: Some(output),
             mock_delay: None,
         }
@@ -373,6 +387,8 @@ impl ExecutorRouter {
             ssh_pool: ConnectionPool::with_defaults(),
             #[cfg(feature = "winrm")]
             winrm_pool: crate::winrm::WinRmPool::new(),
+            #[cfg(feature = "k8s-exec")]
+            k8s_exec_pool: crate::k8s_exec::K8sExecPool::new(),
             mock_output: Some(output),
             mock_delay: Some(delay),
         }
