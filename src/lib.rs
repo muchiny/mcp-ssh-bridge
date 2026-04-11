@@ -2,6 +2,12 @@
 // during test compilation; suppress this lint for test builds.
 #![cfg_attr(test, allow(clippy::large_stack_arrays))]
 
+// Alias the current crate under its own name so the `#[mcp_tool]`
+// proc macro (defined in `mcp-ssh-bridge-macros`) can emit fully-
+// qualified paths like `::mcp_ssh_bridge::mcp::registry::…` that
+// resolve both from within this crate AND from downstream crates.
+extern crate self as mcp_ssh_bridge;
+
 // Use mimalloc allocator when the feature is enabled (recommended for musl builds)
 #[cfg(feature = "mimalloc")]
 #[global_allocator]

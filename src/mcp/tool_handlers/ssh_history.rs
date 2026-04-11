@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 /// Arguments for `ssh_history` tool
@@ -20,6 +21,7 @@ struct SshHistoryArgs {
 }
 
 /// SSH History tool handler
+#[mcp_tool(name = "ssh_history", group = "core", annotation = "read_only")]
 pub struct SshHistoryHandler;
 
 impl SshHistoryHandler {

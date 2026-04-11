@@ -10,9 +10,11 @@ use serde_json::Value;
 
 use crate::error::Result;
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 /// SSH Health diagnostic tool handler
+#[mcp_tool(name = "ssh_health", group = "core", annotation = "read_only")]
 #[derive(Default)]
 pub struct SshHealthHandler;
 

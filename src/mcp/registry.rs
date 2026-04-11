@@ -1379,7 +1379,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshEsxiVmInfoHandler,
         SshEsxiVmListHandler,
         SshEsxiVmPowerHandler,
-        SshExecHandler,
         SshExecMultiHandler,
         SshFail2banStatusHandler,
         SshFileChmodHandler,
@@ -1407,7 +1406,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshGroupAddHandler,
         SshGroupDeleteHandler,
         SshGroupListHandler,
-        SshHealthHandler,
         SshHelmHistoryHandler,
         SshHelmInstallHandler,
         SshHelmListHandler,
@@ -1415,7 +1413,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshHelmStatusHandler,
         SshHelmUninstallHandler,
         SshHelmUpgradeHandler,
-        SshHistoryHandler,
         SshHostTagsHandler,
         SshHypervHostInfoHandler,
         SshHypervSnapshotCreateHandler,
@@ -1463,7 +1460,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshLogAggregateHandler,
         SshLogSearchMultiHandler,
         SshLogTailMultiHandler,
-        SshLsHandler,
         SshMetricsHandler,
         SshMetricsMultiHandler,
         SshMongodbStatusHandler,
@@ -1554,7 +1550,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshSessionExecHandler,
         SshSessionListHandler,
         SshSslAuditHandler,
-        SshStatusHandler,
         SshStigCheckHandler,
         SshStorageDfHandler,
         SshStorageFdiskHandler,
@@ -1645,11 +1640,9 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
 
     let all_handlers: Vec<Arc<dyn ToolHandler>> = vec![
         // Core
-        Arc::new(SshExecHandler),
+        // ssh_exec, ssh_status, ssh_history, ssh_health — registered via
+        // #[mcp_tool] inventory, see src/mcp/tool_handlers/*.rs.
         Arc::new(SshExecMultiHandler),
-        Arc::new(SshStatusHandler),
-        Arc::new(SshHistoryHandler),
-        Arc::new(SshHealthHandler),
         Arc::new(SshOutputFetchHandler),
         // Monitoring
         Arc::new(SshMetricsHandler),
@@ -1670,7 +1663,7 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshTunnelListHandler),
         Arc::new(SshTunnelCloseHandler),
         // Directory
-        Arc::new(SshLsHandler),
+        // ssh_ls — registered via #[mcp_tool] inventory.
         Arc::new(SshFindHandler),
         // Database
         Arc::new(SshDbQueryHandler::new()),

@@ -10,6 +10,7 @@ use tracing::{info, warn};
 use crate::domain::output_truncator::truncate_output_with_cache;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::ssh::{is_retryable_error, with_retry_if};
 
@@ -33,6 +34,7 @@ struct SshExecArgs {
 }
 
 /// SSH Exec tool handler
+#[mcp_tool(name = "ssh_exec", group = "core", annotation = "mutating")]
 pub struct SshExecHandler;
 
 impl SshExecHandler {

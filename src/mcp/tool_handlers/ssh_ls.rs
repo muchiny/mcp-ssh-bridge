@@ -9,6 +9,7 @@ use tracing::info;
 
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::security::{AuditEvent, CommandResult as AuditCommandResult};
 
@@ -30,6 +31,7 @@ struct SshLsArgs {
 }
 
 /// SSH List Directory tool handler
+#[mcp_tool(name = "ssh_ls", group = "directory", annotation = "read_only")]
 pub struct SshLsHandler;
 
 impl SshLsHandler {
