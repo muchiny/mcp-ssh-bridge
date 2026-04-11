@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::systemd::{SystemdCommandBuilder, validate_service_name};
@@ -27,6 +28,8 @@ pub struct SshServiceLogsArgs {
 }
 
 impl_common_args!(SshServiceLogsArgs);
+
+#[mcp_standard_tool(name = "ssh_service_logs", group = "systemd", annotation = "read_only")]
 
 pub struct ServiceLogsTool;
 

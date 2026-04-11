@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::mcp_tool;
 use crate::domain::use_cases::awx::{AwxCommandBuilder, HttpMethod};
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
@@ -70,6 +71,7 @@ const SCHEMA: &str = r#"{
 }"#;
 
 /// Handler for the `ssh_awx_job_follow` tool.
+#[mcp_tool(name = "ssh_awx_job_follow", group = "awx", annotation = "mutating")]
 pub struct SshAwxJobFollowHandler;
 
 impl Default for SshAwxJobFollowHandler {

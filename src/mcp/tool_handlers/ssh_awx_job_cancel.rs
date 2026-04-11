@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::mcp_tool;
 use crate::domain::use_cases::awx::{AwxCommandBuilder, HttpMethod};
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
@@ -32,6 +33,7 @@ const SCHEMA: &str = r#"{
 }"#;
 
 /// Handler for cancelling running AWX jobs.
+#[mcp_tool(name = "ssh_awx_job_cancel", group = "awx", annotation = "destructive")]
 pub struct SshAwxJobCancelHandler;
 
 impl Default for SshAwxJobCancelHandler {

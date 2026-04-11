@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::systemd_timers::TimerCommandBuilder;
 use crate::error::Result;
@@ -24,6 +25,8 @@ pub struct SshTimerDisableArgs {
 }
 
 impl_common_args!(SshTimerDisableArgs);
+
+#[mcp_standard_tool(name = "ssh_timer_disable", group = "systemd_timers", annotation = "mutating")]
 
 pub struct TimerDisableTool;
 

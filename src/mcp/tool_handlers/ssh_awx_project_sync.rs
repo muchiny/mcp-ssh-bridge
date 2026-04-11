@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::mcp_tool;
 use crate::domain::use_cases::awx::{AwxCommandBuilder, HttpMethod};
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
@@ -32,6 +33,7 @@ const SCHEMA: &str = r#"{
 }"#;
 
 /// Handler for triggering AWX project SCM syncs.
+#[mcp_tool(name = "ssh_awx_project_sync", group = "awx", annotation = "mutating")]
 pub struct SshAwxProjectSyncHandler;
 
 impl Default for SshAwxProjectSyncHandler {

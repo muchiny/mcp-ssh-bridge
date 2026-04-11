@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::mcp_tool;
 use crate::domain::output_kind::OutputKind;
 use crate::domain::use_cases::awx::{AwxCommandBuilder, HttpMethod};
 use crate::error::{BridgeError, Result};
@@ -25,6 +26,7 @@ struct SshAwxTemplateDetailArgs {
 }
 
 /// Handler for the `ssh_awx_template_detail` tool.
+#[mcp_tool(name = "ssh_awx_template_detail", group = "awx", annotation = "read_only")]
 pub struct SshAwxTemplateDetailHandler;
 
 impl Default for SshAwxTemplateDetailHandler {

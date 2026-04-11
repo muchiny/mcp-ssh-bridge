@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::systemd::SystemdCommandBuilder;
@@ -19,6 +20,8 @@ pub struct SshServiceDaemonReloadArgs {
 }
 
 impl_common_args!(SshServiceDaemonReloadArgs);
+
+#[mcp_standard_tool(name = "ssh_service_daemon_reload", group = "systemd", annotation = "read_only")]
 
 pub struct ServiceDaemonReloadTool;
 

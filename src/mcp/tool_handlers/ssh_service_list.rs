@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::systemd::SystemdCommandBuilder;
@@ -25,6 +26,8 @@ pub struct SshServiceListArgs {
 }
 
 impl_common_args!(SshServiceListArgs);
+
+#[mcp_standard_tool(name = "ssh_service_list", group = "systemd", annotation = "read_only")]
 
 pub struct ServiceListTool;
 

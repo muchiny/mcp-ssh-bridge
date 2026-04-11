@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::systemd::{SystemdCommandBuilder, validate_service_name};
@@ -20,6 +21,8 @@ pub struct SshServiceStartArgs {
 }
 
 impl_common_args!(SshServiceStartArgs);
+
+#[mcp_standard_tool(name = "ssh_service_start", group = "systemd", annotation = "mutating")]
 
 pub struct ServiceStartTool;
 
