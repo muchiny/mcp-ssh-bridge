@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::inventory::InventoryCommandBuilder;
 use crate::error::Result;
@@ -25,6 +26,8 @@ pub struct SshInventorySyncArgs {
 }
 
 impl_common_args!(SshInventorySyncArgs);
+
+#[mcp_standard_tool(name = "ssh_inventory_sync", group = "inventory", annotation = "read_only")]
 
 pub struct InventorySyncTool;
 

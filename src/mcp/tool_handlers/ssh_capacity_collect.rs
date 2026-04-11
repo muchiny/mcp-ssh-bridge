@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::capacity::CapacityCommandBuilder;
@@ -23,6 +24,8 @@ pub struct SshCapacityCollectArgs {
 }
 
 impl_common_args!(SshCapacityCollectArgs);
+
+#[mcp_standard_tool(name = "ssh_capacity_collect", group = "capacity", annotation = "read_only")]
 
 pub struct CapacityCollectTool;
 

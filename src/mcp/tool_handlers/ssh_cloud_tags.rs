@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::cloud::CloudCommandBuilder;
 use crate::error::Result;
@@ -28,6 +29,8 @@ pub struct SshCloudTagsArgs {
 }
 
 impl_common_args!(SshCloudTagsArgs);
+
+#[mcp_standard_tool(name = "ssh_cloud_tags", group = "cloud", annotation = "read_only")]
 
 pub struct CloudTagsTool;
 

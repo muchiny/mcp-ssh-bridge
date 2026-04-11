@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::incident::IncidentCommandBuilder;
@@ -29,6 +30,8 @@ pub struct SshIncidentTimelineArgs {
 }
 
 impl_common_args!(SshIncidentTimelineArgs);
+
+#[mcp_standard_tool(name = "ssh_incident_timeline", group = "incident", annotation = "read_only")]
 
 pub struct IncidentTimelineTool;
 

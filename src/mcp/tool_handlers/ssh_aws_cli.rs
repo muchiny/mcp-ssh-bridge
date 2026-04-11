@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::cloud::CloudCommandBuilder;
 use crate::error::Result;
@@ -32,6 +33,8 @@ pub struct SshAwsCliArgs {
 }
 
 impl_common_args!(SshAwsCliArgs);
+
+#[mcp_standard_tool(name = "ssh_aws_cli", group = "cloud", annotation = "read_only")]
 
 pub struct AwsCliTool;
 

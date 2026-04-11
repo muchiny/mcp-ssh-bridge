@@ -6,6 +6,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::orchestration::OrchestrationCommandBuilder;
 use crate::error::Result;
@@ -26,6 +27,8 @@ pub struct SshRollingExecArgs {
 }
 
 impl_common_args!(SshRollingExecArgs);
+
+#[mcp_standard_tool(name = "ssh_rolling_exec", group = "orchestration", annotation = "mutating")]
 
 pub struct RollingExecTool;
 

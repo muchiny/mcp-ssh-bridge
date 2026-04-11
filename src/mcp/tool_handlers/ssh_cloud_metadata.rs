@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::cloud::CloudCommandBuilder;
 use crate::error::Result;
@@ -25,6 +26,8 @@ pub struct SshCloudMetadataArgs {
 }
 
 impl_common_args!(SshCloudMetadataArgs);
+
+#[mcp_standard_tool(name = "ssh_cloud_metadata", group = "cloud", annotation = "read_only")]
 
 pub struct CloudMetadataTool;
 

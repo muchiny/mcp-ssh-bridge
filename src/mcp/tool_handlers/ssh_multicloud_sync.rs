@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::multicloud::MulticloudCommandBuilder;
 use crate::error::Result;
@@ -25,6 +26,8 @@ pub struct SshMulticloudSyncArgs {
 }
 
 impl_common_args!(SshMulticloudSyncArgs);
+
+#[mcp_standard_tool(name = "ssh_multicloud_sync", group = "multicloud", annotation = "read_only")]
 
 pub struct MulticloudSyncTool;
 

@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::incident::IncidentCommandBuilder;
@@ -28,6 +29,8 @@ pub struct SshIncidentCorrelateArgs {
 }
 
 impl_common_args!(SshIncidentCorrelateArgs);
+
+#[mcp_standard_tool(name = "ssh_incident_correlate", group = "incident", annotation = "read_only")]
 
 pub struct IncidentCorrelateTool;
 

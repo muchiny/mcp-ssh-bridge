@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::alerting::AlertingCommandBuilder;
@@ -31,6 +32,8 @@ pub struct SshAlertCheckArgs {
 }
 
 impl_common_args!(SshAlertCheckArgs);
+
+#[mcp_standard_tool(name = "ssh_alert_check", group = "alerting", annotation = "read_only")]
 
 pub struct AlertCheckTool;
 
