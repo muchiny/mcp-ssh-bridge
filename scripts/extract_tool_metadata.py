@@ -195,12 +195,17 @@ def parse_all_handlers_vec(source: str) -> List[Tuple[str, bool]]:
     inside create_filtered_registry.
 
     Returns a list of (TypeName, has_new_call) tuples in declaration order.
+    Returns an empty list if the legacy vec has been removed — once the
+    inventory migration is complete, the function body is a pure
+    `inventory::iter()` loop with no `vec![` literal at all.
     """
     fn_body = extract_function_body(source, "create_filtered_registry")
-    # The vec body is between `vec![` and its matching `];`.
     vec_start = fn_body.find("vec![")
     if vec_start < 0:
-        raise RuntimeError("create_filtered_registry: vec! not found")
+        # Post-migration state: no legacy vec. Every handler is in
+        # inventory and will be picked up by the already_migrated
+        # backfill loop.
+        return []
     start = vec_start + len("vec![")
     depth = 1
     i = start

@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_process::WindowsProcessCommandBuilder;
@@ -22,6 +23,8 @@ pub struct SshWinProcessKillArgs {
 }
 
 impl_common_args!(SshWinProcessKillArgs);
+
+#[mcp_standard_tool(name = "ssh_win_process_kill", group = "windows_process", annotation = "destructive")]
 
 pub struct WinProcessKillTool;
 

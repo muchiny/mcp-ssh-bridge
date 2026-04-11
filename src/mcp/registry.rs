@@ -1277,150 +1277,19 @@ pub fn create_default_registry() -> ToolRegistry {
 /// Create a registry filtered by the tool groups configuration.
 ///
 /// Only tools whose group is enabled in the config will be registered.
+///
+/// **Sprint 3 Phase C — pure inventory loop.** Every handler is
+/// registered via the `#[mcp_tool]` / `#[mcp_standard_tool]` proc
+/// macro in its source file, which emits an `inventory::submit!` that
+/// this function walks at startup. No legacy manual `Vec` anymore.
 #[must_use]
-#[allow(clippy::too_many_lines, clippy::large_stack_arrays)]
 pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry {
-    use super::tool_handlers::{
-        // Phase 3: Enterprise Windows
-        SshWinNetAdaptersHandler,
-        SshWinNetConnectionsHandler,
-        SshWinNetDnsHandler,
-        SshWinNetIpHandler,
-        SshWinNetPingHandler,
-        SshWinNetRoutesHandler,
-        SshWinProcessByNameHandler,
-        SshWinProcessInfoHandler,
-        SshWinProcessKillHandler,
-        SshWinProcessListHandler,
-        SshWinProcessTopHandler,
-    };
-
     let mut registry = ToolRegistry::new();
-
-    let all_handlers: Vec<Arc<dyn ToolHandler>> = vec![
-        // Core
-        // ssh_exec, ssh_status, ssh_history, ssh_health — registered via
-        // #[mcp_tool] inventory, see src/mcp/tool_handlers/*.rs.
-        // Monitoring
-        // File transfer
-        // Sessions
-        // Tunnels
-        // Directory
-        // ssh_ls — registered via #[mcp_tool] inventory.
-        // Database
-        // Backup
-        // Docker
-        // ssh_docker_ps — registered via #[mcp_standard_tool] inventory.
-        // ESXi
-        // Git
-        // Kubernetes (kubectl)
-        // Kubernetes (helm)
-        // Ansible
-        // AWX
-        // Systemd
-        // Network
-        // Process
-        // Package
-        // Firewall
-        // Cron
-        // Cron Analysis
-        // Performance Profiling
-        // Container Log Analysis
-        // Network Security
-        // Compliance
-        // Cloud
-        // Inventory
-        // Multi-cloud
-        // Alerting
-        // Capacity
-        // Incident
-        // Log Aggregation
-        // Key Management
-        // Backup Enhanced
-        // ChatOps
-        // Config Templates
-        // Interactive PTY
-        // Certificates
-        // Nginx
-        // Diagnostics
-        // Orchestration
-        // Drift Detection
-        // File Advanced (added to file_ops group)
-        // Security Scanning
-        // Runbooks
-        // Recording / Compliance
-        // Redis
-        // PostgreSQL
-        // MySQL
-        // Apache
-        // Let's Encrypt
-        // MongoDB
-        // Terraform
-        // Vault
-        // Config
-        // File Operations
-        // User Management
-        // Storage
-        // Journald
-        // Systemd Timers
-        // Security Modules
-        // Network Equipment
-        // Podman
-        // LDAP
-        // Windows Services
-        // Windows Events
-        // Active Directory
-        // Scheduled Tasks
-        // Windows Firewall
-        // IIS
-        // Windows Updates
-        // Windows Performance
-        // Hyper-V
-        // Windows Registry
-        // Windows Features
-        // Windows Network
-        Arc::new(SshWinNetAdaptersHandler::new()),
-        Arc::new(SshWinNetIpHandler::new()),
-        Arc::new(SshWinNetRoutesHandler::new()),
-        Arc::new(SshWinNetConnectionsHandler::new()),
-        Arc::new(SshWinNetPingHandler::new()),
-        Arc::new(SshWinNetDnsHandler::new()),
-        // Windows Process
-        Arc::new(SshWinProcessListHandler::new()),
-        Arc::new(SshWinProcessInfoHandler::new()),
-        Arc::new(SshWinProcessKillHandler::new()),
-        Arc::new(SshWinProcessTopHandler::new()),
-        Arc::new(SshWinProcessByNameHandler::new()),
-    ];
-
-    for handler in all_handlers {
-        let group = tool_group(handler.name());
-        if tool_groups.is_group_enabled(group) {
-            registry.register(handler);
-        }
-    }
-
-    // Sprint 3 Phase C: also pull in any handler that was registered
-    // via `#[mcp_tool]` (inventory) and is NOT already covered by the
-    // legacy `all_handlers` list above. This lets migrated handlers
-    // coexist with the manual list so we can do incremental cut-over
-    // without a single giant-bang migration.
-    //
-    // Each entry's `factory()` produces an `Arc<dyn ToolHandler>`; we
-    // check the legacy registry first to avoid double-registration
-    // for entries that live in both the manual list *and* the
-    // inventory (will happen during migration).
     for entry in inventory::iter::<ToolRegistryEntry>() {
-        if registry.get(entry.name).is_some() {
-            // Already registered via the legacy path — leave it.
-            continue;
+        if tool_groups.is_group_enabled(entry.group) {
+            registry.register((entry.factory)());
         }
-        if !tool_groups.is_group_enabled(entry.group) {
-            continue;
-        }
-        registry.register((entry.factory)());
     }
-
     registry
 }
 

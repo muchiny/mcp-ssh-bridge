@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_process::WindowsProcessCommandBuilder;
@@ -20,6 +21,8 @@ pub struct SshWinProcessInfoArgs {
 }
 
 impl_common_args!(SshWinProcessInfoArgs);
+
+#[mcp_standard_tool(name = "ssh_win_process_info", group = "windows_process", annotation = "read_only")]
 
 pub struct WinProcessInfoTool;
 

@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_process::WindowsProcessCommandBuilder;
@@ -23,6 +24,8 @@ pub struct SshWinProcessTopArgs {
 }
 
 impl_common_args!(SshWinProcessTopArgs);
+
+#[mcp_standard_tool(name = "ssh_win_process_top", group = "windows_process", annotation = "read_only")]
 
 pub struct WinProcessTopTool;
 

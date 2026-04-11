@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_network::WindowsNetworkCommandBuilder;
@@ -19,6 +20,8 @@ pub struct SshWinNetRoutesArgs {
 }
 
 impl_common_args!(SshWinNetRoutesArgs);
+
+#[mcp_standard_tool(name = "ssh_win_net_routes", group = "windows_network", annotation = "read_only")]
 
 pub struct WinNetRoutesTool;
 
