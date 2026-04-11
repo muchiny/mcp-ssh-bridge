@@ -4,6 +4,7 @@
 //! represent the core business logic of the MCP SSH Bridge.
 
 pub mod data_reduction;
+pub mod diff;
 pub mod history;
 #[cfg(feature = "jq")]
 pub mod jq_filter;

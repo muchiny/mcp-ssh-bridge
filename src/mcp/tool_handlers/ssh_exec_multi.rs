@@ -37,6 +37,23 @@ struct SshExecMultiArgs {
     sudo: Option<bool>,
     sudo_user: Option<String>,
     save_output: Option<String>,
+    /// Sprint 3 Phase B.7: enable multi-host output diffing.
+    /// When `true`, the response additionally carries a `diff`
+    /// section produced by [`crate::domain::diff::compute_multi_host_diff`]
+    /// telling the caller which hosts match the baseline and
+    /// which diverge, with a unified diff attached to each
+    /// divergent host.
+    #[serde(default)]
+    diff: Option<bool>,
+    /// Host to use as the diff baseline. Defaults to the first
+    /// entry in `hosts`.
+    #[serde(default)]
+    diff_baseline: Option<String>,
+    /// When `diff=true`, normalize volatile tokens (timestamps,
+    /// PIDs, UUIDs) before comparing so hosts that differ only on
+    /// runtime metadata still count as matching.
+    #[serde(default)]
+    normalize: Option<bool>,
 }
 
 /// Result for a single host execution
@@ -61,6 +78,10 @@ struct MultiExecResult {
     succeeded: usize,
     failed: usize,
     results: Vec<HostResult>,
+    /// Optional Sprint 3 Phase B.7 multi-host diff summary.
+    /// Populated only when the caller passes `diff=true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diff: Option<crate::domain::diff::MultiHostDiff>,
 }
 
 /// SSH Exec Multi tool handler
@@ -112,6 +133,20 @@ impl SshExecMultiHandler {
             "sudo_user": {
                 "type": "string",
                 "description": "User to run sudo as (default: root)"
+            },
+            "diff": {
+                "type": "boolean",
+                "description": "Compute a multi-host diff of the results against a baseline host (default: false). The response gains a 'diff' section listing which hosts match the baseline and a unified diff for each divergent host. Useful for detecting config drift across a fleet.",
+                "default": false
+            },
+            "diff_baseline": {
+                "type": "string",
+                "description": "Host name to use as the diff baseline (default: first host in 'hosts'). Only meaningful when diff=true."
+            },
+            "normalize": {
+                "type": "boolean",
+                "description": "Normalize volatile tokens (timestamps, PIDs, UUIDs) before diffing so hosts that differ only on runtime metadata still count as matching. Only meaningful when diff=true. Default: false.",
+                "default": false
             }
         },
         "required": ["hosts", "command"]
@@ -245,11 +280,49 @@ impl ToolHandler for SshExecMultiHandler {
         let succeeded = results.iter().filter(|r| r.success).count();
         let failed = results.len() - succeeded;
 
+        // Optional: compute a multi-host diff (Sprint 3 Phase B.7).
+        // Runs against whatever succeeded — failed hosts still appear
+        // in the diff with their error output, which is usually what
+        // you want because "host fails while others succeed" IS the
+        // kind of drift this feature is meant to surface.
+        let diff_section = if args.diff.unwrap_or(false) {
+            let diff_inputs: Vec<(String, String, i32)> = results
+                .iter()
+                .map(|r| {
+                    let output = r
+                        .output
+                        .clone()
+                        .or_else(|| r.error.clone())
+                        .unwrap_or_default();
+                    let exit = i32::try_from(r.exit_code.unwrap_or(0)).unwrap_or(0);
+                    (r.host.clone(), output, exit)
+                })
+                .collect();
+
+            let baseline = args
+                .diff_baseline
+                .clone()
+                .unwrap_or_else(|| args.hosts[0].clone());
+            let normalize = args.normalize.unwrap_or(false);
+
+            match crate::domain::diff::compute_multi_host_diff(&baseline, &diff_inputs, normalize)
+            {
+                Ok(d) => Some(d),
+                Err(e) => {
+                    warn!(error = %e, "multi-host diff failed, skipping");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let multi_result = MultiExecResult {
             total_hosts: results.len(),
             succeeded,
             failed,
             results,
+            diff: diff_section,
         };
 
         let mut json_output = serde_json::to_string(&multi_result)
@@ -808,6 +881,7 @@ mod tests {
                     duration_ms: Some(30000),
                 },
             ],
+            diff: None,
         };
 
         let json = serde_json::to_string_pretty(&result).unwrap();
@@ -817,6 +891,69 @@ mod tests {
         assert!(json.contains('2'));
         assert!(json.contains("failed"));
         assert!(json.contains('1'));
+        // diff section is skipped when None
+        assert!(!json.contains("\"diff\""));
+    }
+
+    /// **Sprint 3 Phase B.7:** when `diff=true` is requested, the
+    /// serialized MultiExecResult gains a `diff` section produced
+    /// by `crate::domain::diff::compute_multi_host_diff`.
+    #[test]
+    fn test_multi_exec_result_with_diff_section_serializes() {
+        use crate::domain::diff::compute_multi_host_diff;
+
+        let diff_inputs: Vec<(String, String, i32)> = vec![
+            ("web1".to_string(), "nginx/1.24.0\n".to_string(), 0),
+            ("web2".to_string(), "nginx/1.24.0\n".to_string(), 0),
+            ("web3".to_string(), "nginx/1.22.1\n".to_string(), 0),
+        ];
+        let diff = compute_multi_host_diff("web1", &diff_inputs, false).unwrap();
+
+        let result = MultiExecResult {
+            total_hosts: 3,
+            succeeded: 3,
+            failed: 0,
+            results: vec![
+                HostResult {
+                    host: "web1".to_string(),
+                    success: true,
+                    exit_code: Some(0),
+                    output: Some("nginx/1.24.0".to_string()),
+                    error: None,
+                    duration_ms: Some(50),
+                },
+                HostResult {
+                    host: "web2".to_string(),
+                    success: true,
+                    exit_code: Some(0),
+                    output: Some("nginx/1.24.0".to_string()),
+                    error: None,
+                    duration_ms: Some(60),
+                },
+                HostResult {
+                    host: "web3".to_string(),
+                    success: true,
+                    exit_code: Some(0),
+                    output: Some("nginx/1.22.1".to_string()),
+                    error: None,
+                    duration_ms: Some(70),
+                },
+            ],
+            diff: Some(diff),
+        };
+
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        assert!(
+            json.contains("\"diff\""),
+            "diff section should be present when populated"
+        );
+        assert!(json.contains("baseline_host"));
+        assert!(json.contains("web1"));
+        assert!(
+            json.contains("divergent_hosts"),
+            "summary.divergent_hosts should serialize"
+        );
+        assert!(json.contains("web3"), "divergent host web3 should appear");
     }
 
     // ============== elapsed_ms Tests ==============
