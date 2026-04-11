@@ -116,7 +116,8 @@ jobs:
             --timeout 600 \
             --skip-clean \
             --exclude-files tests/e2e_raspberry.rs \
-            -- --include-ignored --skip e2e_raspberry
+            -- --include-ignored \
+               --skip e2e_raspberry
 
       - name: Stop test SSH container
         if: always()

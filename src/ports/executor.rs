@@ -101,5 +101,65 @@ mod tests {
         let executor = DummyExecutor;
         assert!(!executor.supports_interactive());
         assert_eq!(executor.protocol_name(), "dummy");
+        assert!(!executor.supports_file_transfer());
+    }
+
+    #[tokio::test]
+    async fn test_dummy_executor_async_methods_exercised() {
+        struct DummyExecutor;
+
+        #[async_trait]
+        impl RemoteExecutor for DummyExecutor {
+            async fn execute(
+                &self,
+                _host: &str,
+                _command: &str,
+                _timeout: Duration,
+            ) -> Result<CommandOutput> {
+                Ok(CommandOutput {
+                    stdout: "out".to_string(),
+                    stderr: "err".to_string(),
+                    exit_code: 42,
+                    duration_ms: 7,
+                })
+            }
+            async fn upload(&self, _host: &str, _local: &Path, _remote: &Path) -> Result<()> {
+                Ok(())
+            }
+            async fn download(&self, _host: &str, _remote: &Path, _local: &Path) -> Result<()> {
+                Ok(())
+            }
+            async fn is_reachable(&self, _host: &str) -> bool {
+                true
+            }
+            fn protocol_name(&self) -> &'static str {
+                "dummy"
+            }
+            fn supports_file_transfer(&self) -> bool {
+                true
+            }
+            fn supports_interactive(&self) -> bool {
+                true
+            }
+        }
+
+        let executor: Box<dyn RemoteExecutor> = Box::new(DummyExecutor);
+        let out = executor
+            .execute("host", "cmd", Duration::from_secs(1))
+            .await
+            .unwrap();
+        assert_eq!(out.stdout, "out");
+        assert_eq!(out.stderr, "err");
+        assert_eq!(out.exit_code, 42);
+        assert_eq!(out.duration_ms, 7);
+
+        let local = Path::new("/tmp/local");
+        let remote = Path::new("/tmp/remote");
+        executor.upload("host", local, remote).await.unwrap();
+        executor.download("host", remote, local).await.unwrap();
+
+        assert!(executor.is_reachable("host").await);
+        assert!(executor.supports_file_transfer());
+        assert!(executor.supports_interactive());
     }
 }

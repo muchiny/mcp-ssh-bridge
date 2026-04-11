@@ -374,14 +374,19 @@ mod tests {
         );
         write_config_to_file(&config_path, &initial_config);
 
-        // Wait for PollWatcher to detect the change (500ms poll + margin)
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-
-        let current_config = config.read().await;
-        assert!(
-            current_config.hosts.contains_key("new-host"),
-            "Config watcher did not detect changes"
-        );
+        // Poll for the change rather than sleeping a fixed interval. Filesystem
+        // event delivery latency varies widely (especially under instrumented
+        // builds like llvm-cov), so a fixed 1500ms sleep is flaky. Retry for up
+        // to 5 seconds, sleeping 100ms between checks.
+        let mut detected = false;
+        for _ in 0..50 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            if config.read().await.hosts.contains_key("new-host") {
+                detected = true;
+                break;
+            }
+        }
+        assert!(detected, "Config watcher did not detect changes");
     }
 
     #[tokio::test]
