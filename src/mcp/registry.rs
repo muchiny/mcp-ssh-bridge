@@ -1329,12 +1329,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshIisStatusHandler,
         SshIisStopHandler,
         SshIncidentTriageHandler,
-        SshKeyAuditHandler,
-        SshKeyDistributeHandler,
-        SshKeyGenerateHandler,
-        SshLogAggregateHandler,
-        SshLogSearchMultiHandler,
-        SshLogTailMultiHandler,
         SshMetricsHandler,
         SshMetricsMultiHandler,
         SshMongodbStatusHandler,
@@ -1353,13 +1347,9 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshNginxReloadHandler,
         SshNginxStatusHandler,
         SshNginxTestHandler,
-        SshNotifyHandler,
         SshPortScanHandler,
         SshPostgresqlQueryHandler,
         SshPostgresqlStatusHandler,
-        SshPtyExecHandler,
-        SshPtyInteractHandler,
-        SshPtyResizeHandler,
         SshRecordingListHandler,
         SshRecordingReplayHandler,
         SshRecordingStartHandler,
@@ -1373,9 +1363,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshRegListHandler,
         SshRegQueryHandler,
         SshRegSetHandler,
-        SshRunbookExecuteHandler,
-        SshRunbookListHandler,
-        SshRunbookValidateHandler,
         SshSbomGenerateHandler,
         SshSchtaskDisableHandler,
         SshSchtaskEnableHandler,
@@ -1385,11 +1372,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshSslAuditHandler,
         SshStigCheckHandler,
         SshTailHandler,
-        SshTemplateApplyHandler,
-        SshTemplateDiffHandler,
-        SshTemplateListHandler,
-        SshTemplateShowHandler,
-        SshTemplateValidateHandler,
         SshTerraformApplyHandler,
         SshTerraformInitHandler,
         SshTerraformOutputHandler,
@@ -1400,7 +1382,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshVaultStatusHandler,
         SshVaultWriteHandler,
         SshVulnScanHandler,
-        SshWebhookSendHandler,
         SshWinDiskUsageHandler,
         SshWinEventExportHandler,
         SshWinEventLogsHandler,
@@ -1513,27 +1494,11 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Capacity
         // Incident
         // Log Aggregation
-        Arc::new(SshLogSearchMultiHandler::new()),
-        Arc::new(SshLogAggregateHandler::new()),
-        Arc::new(SshLogTailMultiHandler::new()),
         // Key Management
-        Arc::new(SshKeyGenerateHandler::new()),
-        Arc::new(SshKeyDistributeHandler::new()),
-        Arc::new(SshKeyAuditHandler::new()),
         // Backup Enhanced
         // ChatOps
-        Arc::new(SshWebhookSendHandler::new()),
-        Arc::new(SshNotifyHandler::new()),
         // Config Templates
-        Arc::new(SshTemplateListHandler::new()),
-        Arc::new(SshTemplateShowHandler::new()),
-        Arc::new(SshTemplateApplyHandler::new()),
-        Arc::new(SshTemplateValidateHandler::new()),
-        Arc::new(SshTemplateDiffHandler::new()),
         // Interactive PTY
-        Arc::new(SshPtyExecHandler::new()),
-        Arc::new(SshPtyInteractHandler::new()),
-        Arc::new(SshPtyResizeHandler::new()),
         // Certificates
         // Nginx
         Arc::new(SshNginxStatusHandler::new()),
@@ -1552,9 +1517,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshVulnScanHandler::new()),
         Arc::new(SshComplianceCheckHandler::new()),
         // Runbooks
-        Arc::new(SshRunbookListHandler),
-        Arc::new(SshRunbookExecuteHandler),
-        Arc::new(SshRunbookValidateHandler),
         // Recording / Compliance
         Arc::new(SshRecordingStartHandler),
         Arc::new(SshRecordingStopHandler),

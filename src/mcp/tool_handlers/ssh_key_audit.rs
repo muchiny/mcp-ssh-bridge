@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::key_management::KeyManagementCommandBuilder;
@@ -23,6 +24,8 @@ pub struct SshKeyAuditArgs {
 }
 
 impl_common_args!(SshKeyAuditArgs);
+
+#[mcp_standard_tool(name = "ssh_key_audit", group = "key_management", annotation = "read_only")]
 
 pub struct KeyAuditTool;
 

@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::templates::{TemplateCommandBuilder, validate_dest_path};
@@ -27,6 +28,8 @@ pub struct SshTemplateDiffArgs {
 }
 
 impl_common_args!(SshTemplateDiffArgs);
+
+#[mcp_standard_tool(name = "ssh_template_diff", group = "templates", annotation = "read_only")]
 
 pub struct TemplateDiffTool;
 

@@ -6,6 +6,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::shell;
@@ -30,6 +31,8 @@ pub struct SshPtyInteractArgs {
 }
 
 impl_common_args!(SshPtyInteractArgs);
+
+#[mcp_standard_tool(name = "ssh_pty_interact", group = "pty", annotation = "mutating")]
 
 pub struct PtyInteractTool;
 

@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::templates::TemplateCommandBuilder;
@@ -26,6 +27,8 @@ pub struct SshTemplateListArgs {
 }
 
 impl_common_args!(SshTemplateListArgs);
+
+#[mcp_standard_tool(name = "ssh_template_list", group = "templates", annotation = "read_only")]
 
 pub struct TemplateListTool;
 

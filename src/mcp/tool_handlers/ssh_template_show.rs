@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::templates::{TemplateCommandBuilder, validate_template_name};
@@ -25,6 +26,8 @@ pub struct SshTemplateShowArgs {
 }
 
 impl_common_args!(SshTemplateShowArgs);
+
+#[mcp_standard_tool(name = "ssh_template_show", group = "templates", annotation = "read_only")]
 
 pub struct TemplateShowTool;
 

@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::key_management::KeyManagementCommandBuilder;
@@ -25,6 +26,8 @@ pub struct SshKeyDistributeArgs {
 }
 
 impl_common_args!(SshKeyDistributeArgs);
+
+#[mcp_standard_tool(name = "ssh_key_distribute", group = "key_management", annotation = "mutating")]
 
 pub struct KeyDistributeTool;
 

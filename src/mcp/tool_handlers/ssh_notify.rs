@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::chatops::ChatOpsCommandBuilder;
 use crate::error::Result;
@@ -26,6 +27,8 @@ pub struct SshNotifyArgs {
 }
 
 impl_common_args!(SshNotifyArgs);
+
+#[mcp_standard_tool(name = "ssh_notify", group = "chatops", annotation = "mutating")]
 
 pub struct NotifyTool;
 

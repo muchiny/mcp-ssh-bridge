@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::log_aggregation::LogAggregationCommandBuilder;
@@ -27,6 +28,8 @@ pub struct SshLogAggregateArgs {
 }
 
 impl_common_args!(SshLogAggregateArgs);
+
+#[mcp_standard_tool(name = "ssh_log_aggregate", group = "log_aggregation", annotation = "read_only")]
 
 pub struct LogAggregateTool;
 

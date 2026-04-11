@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::pty::{PtyCommandBuilder, validate_dimensions};
@@ -28,6 +29,8 @@ pub struct SshPtyResizeArgs {
 }
 
 impl_common_args!(SshPtyResizeArgs);
+
+#[mcp_standard_tool(name = "ssh_pty_resize", group = "pty", annotation = "read_only")]
 
 pub struct PtyResizeTool;
 
