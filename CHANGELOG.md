@@ -30,9 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`crates/mcp-ssh-bridge-macros/`** — new proc-macro crate providing `#[mcp_tool(name, group, annotation)]` and `#[mcp_standard_tool(...)]` attributes. Both emit an `inventory::submit!` that populates a static `ToolRegistryEntry` table at compile time; the main crate walks that table to build the registry, map names to groups, and map names to annotation kinds.
 - **`ToolRegistryEntry`, `ToolAnnotationKind`** public types in `src/mcp/registry.rs` backing the inventory entries. Two `OnceLock<HashMap>` caches (`inventory_group_map` / `inventory_annotation_map`) are built on first call and reused for the life of the process.
-
-### Changed
-
 - **`Cargo.toml`** is now a workspace (`[workspace] members = [".", "crates/mcp-ssh-bridge-macros"]`) and depends on `inventory = "0.3"` + the local macro crate + `similar = "2.6"` (multi-host diff).
 - **`src/lib.rs`** adds `extern crate self as mcp_ssh_bridge;` so the proc-macro-generated fully-qualified paths (`::mcp_ssh_bridge::mcp::registry::…`) resolve both when building the main crate and from downstream consumers.
 - **All 357 tool handlers migrated to `#[mcp_tool]` / `#[mcp_standard_tool]`.** Each handler file gained a single-line attribute (329 `#[mcp_standard_tool]` markers + 28 `#[mcp_tool]` direct-impl structs). Migration done by a dedicated Python tooling suite (`scripts/extract_tool_metadata.py`, `scripts/migrate_handler.py`, `scripts/validate_baseline.py`) in 18 group-at-a-time waves, each with its own atomic commit and a full `cargo test --lib` + `cargo clippy -D warnings` + baseline-count gate.

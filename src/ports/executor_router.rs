@@ -16,6 +16,7 @@ use crate::ssh::{CommandOutput, ConnectionPool, PoolConfig, PoolStats, PooledCon
 /// Holds one connection pool per protocol backend. For SSH hosts (the default),
 /// connections are delegated to the inner `ConnectionPool`. Non-SSH adapters
 /// create standalone connections behind feature flags.
+#[allow(clippy::struct_field_names)]
 pub struct ExecutorRouter {
     ssh_pool: ConnectionPool,
     /// Reqwest HTTPS client cache for `WinRM` hosts (Sprint 3 Phase B.4).

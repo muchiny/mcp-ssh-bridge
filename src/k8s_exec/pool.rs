@@ -15,7 +15,7 @@
 //! name amortizes the cold-path cost across every subsequent call.
 //!
 //! Design mirrors `crate::winrm::WinRmPool`: one `kube::Client` per
-//! host_name, 300-second idle TTL (K8s auth tokens typically have
+//! `host_name`, 300-second idle TTL (K8s auth tokens typically have
 //! 1-hour lifetimes so 5 minutes of idle is very safe), eviction on
 //! `mark_failed()`.
 

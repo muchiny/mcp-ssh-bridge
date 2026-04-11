@@ -15,9 +15,9 @@
 //!
 //! Design:
 //!
-//! - One cached `reqwest::Client` per host_name, holding the
+//! - One cached `reqwest::Client` per `host_name`, holding the
 //!   per-host TLS settings (SSL accept-invalid-certs vs strict).
-//! - 120-second idle TTL. WinRM servers aggressively close idle
+//! - 120-second idle TTL. `WinRM` servers aggressively close idle
 //!   sessions — shorter TTL than SSH (default 1800 s) reflects that.
 //! - `get_connection()` returns a `WinRmConnection` whose HTTP
 //!   client is taken from the pool. `mark_failed()` propagates a
@@ -38,7 +38,7 @@ use crate::error::{BridgeError, Result};
 
 /// Default idle TTL for cached `reqwest::Client` entries.
 ///
-/// WinRM servers typically close idle HTTPS connections after
+/// `WinRM` servers typically close idle HTTPS connections after
 /// 120-180 seconds. 120 seconds keeps us comfortably inside the
 /// window while still letting short bursts of back-to-back calls
 /// reuse the same TLS session.
