@@ -168,7 +168,9 @@ def parse_tool_annotations(source: str) -> Dict[str, str]:
     body = extract_function_body(source, "tool_annotations")
     match_start = body.find("match tool_name")
     if match_start < 0:
-        raise RuntimeError("tool_annotations: cannot find `match tool_name`")
+        # Post-migration (commit C) the match block is gone — return
+        # an empty map, same as parse_tool_group above.
+        return {}
     body = body[match_start:]
 
     # The arms look like:
