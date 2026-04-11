@@ -34,9 +34,12 @@ pub use runner::{
     mcp-ssh-bridge tool ssh_exec host=prod command=\"ls -la\" --json
     mcp-ssh-bridge tool ssh_k8s_get --json-args '{\"host\":\"k8s\",\"resource\":\"pods\"}'
 
-    # Reduce output with jq / columns / limit (ergonomic flags)
+    # Reduce output with jq / columns / limit / output-format (ergonomic flags)
     mcp-ssh-bridge --json --jq '.containers[].Names' tool ssh_docker_ps host=prod
     mcp-ssh-bridge --columns name,status --limit 10 tool ssh_docker_ps host=prod
+    mcp-ssh-bridge --jq '.items[] | [.metadata.name, .status.phase]' --output-format=tsv \\
+        tool ssh_k8s_get host=k8s resource=pods
+    mcp-ssh-bridge tool ssh_output_fetch output_id=abc123 offset=40000  # paginate truncated output
 
     # Progressive tool discovery (token-efficient for AI agents)
     mcp-ssh-bridge list-tools --groups-only
@@ -83,6 +86,13 @@ pub struct Cli {
     /// Explicit `limit=N` in tool args wins.
     #[arg(long, global = true)]
     pub limit: Option<usize>,
+
+    /// Output format for jq/yq filter results: `json` (default) or `tsv` for
+    /// 60-80% token savings on list-shaped data. Equivalent to
+    /// `output_format=<value>`. Explicit `output_format=...` in tool args wins.
+    /// Example: `--output-format=tsv`
+    #[arg(long = "output-format", global = true, value_parser = ["json", "tsv"])]
+    pub output_format: Option<String>,
 
     #[command(subcommand)]
     pub command: Option<Commands>,

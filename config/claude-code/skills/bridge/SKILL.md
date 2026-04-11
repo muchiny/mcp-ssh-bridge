@@ -110,9 +110,51 @@ Search tools by keyword:
 Execute the tool directly:
 !`mcp-ssh-bridge --json tool $ARGUMENTS`
 
+### Token-efficient invocation
+
+ALWAYS run `describe-tool` before invoking a tool you haven't used recently —
+its schema (with `RECOMMENDED:` hints) lists which reduction params apply
+and costs ~200 tokens:
+
+```bash
+mcp-ssh-bridge describe-tool <tool_name>
+```
+
+Apply the right reduction strategy based on the tool's **Reduction
+Strategy** line (shown at the top of describe-tool output):
+
+| Output kind | Strategy | Example |
+|---|---|---|
+| **Tabular** (docker_ps, service_list, process_list) | `columns` + `limit` | `columns='["NAME","STATUS"]' limit=20` |
+| **Json** (k8s_get, docker_inspect, awx_*) | `jq_filter` + `output_format=tsv` | `jq_filter='.items[] \| [.metadata.name, .status.phase]' output_format=tsv` |
+| **Yaml** | `yq_filter` + `output_format=tsv` | same shape as jq |
+| **Auto** | Any of the above | tool auto-detects |
+| **RawText** (logs, arbitrary exec) | `save_output=/tmp/out.txt` | read the file locally afterwards |
+
+**Ergonomic global flags** (alternatives to `jq_filter=`, `columns=`, `limit=`):
+
+```bash
+mcp-ssh-bridge --jq '.items[] | {name, phase}' --output-format=tsv tool ssh_k8s_get host=k8s resource=pods
+mcp-ssh-bridge --columns name,status --limit 10 tool ssh_docker_ps host=prod
+```
+
+**Pagination cycle** for truncated output:
+
+1. A truncated result prints `[output_id: abc123]`
+2. Fetch the rest: `mcp-ssh-bridge tool ssh_output_fetch output_id=abc123 offset=N`
+
+**Common params on every tool**: `host`, `timeout_seconds`, `max_output`, `save_output`.
+
+Prefer server-side `jq_filter` over piping CLI stdout through `jq` — the
+filter runs BEFORE truncation, so you don't lose data to the cap.
+
 ### Workflow reminders
 
 1. Verify connectivity with `status` before executing tools
 2. Use `--json` output for structured parsing
 3. Use `--dry-run` before destructive operations
 4. Report results clearly with host name and command executed
+5. Run `describe-tool` first on unknown tools — the schema tells you which
+   reduction params apply and is ~200 tokens
+6. Prefer `output_format=tsv` for list-style JSON — 60-80% fewer tokens than
+   pretty JSON

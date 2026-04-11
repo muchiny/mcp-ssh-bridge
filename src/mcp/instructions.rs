@@ -109,15 +109,17 @@ pub fn build_instructions(config: &Config, tool_count: usize) -> String {
          ANNOTATIONS: Tools declare readOnlyHint or destructiveHint. \
          Prefer read-only tools for investigation before mutating ones.\n\
          \n\
-         OUTPUT: Truncated output includes an output_id \u{2014} call \
-         ssh_output_fetch to get the rest.\n\
+         OUTPUT: Truncated output returns an output_id. Call \
+         ssh_output_fetch output_id=<id> offset=<N> to paginate the rest.\n\
          \n\
          SESSIONS: For multi-step workflows needing shared state (cd, env vars), \
          use ssh_session_create + ssh_session_exec. Close with ssh_session_close when done.\n\
          \n\
-         TOKEN SAVINGS: Tools exposing jq_filter (JSON output) or columns (tabular output) \
-         support server-side data reduction. ALWAYS use these parameters to extract only \
-         the fields you need \u{2014} this reduces token consumption by 30-60%.\n\
+         TOKEN SAVINGS: Tools exposing jq_filter (JSON output), yq_filter (YAML), \
+         or columns (tabular output) support server-side data reduction. Add \
+         output_format=tsv for list-shaped results (60-80% fewer tokens than pretty JSON). \
+         ALWAYS use these parameters \u{2014} call describe-tool (CLI) or inspect the tool \
+         schema (MCP) to see the exact Reduction Strategy per tool.\n\
          \n\
          OVERRIDES: All tools accept timeout_seconds (override default timeout) and \
          max_output (override default output char limit) as optional parameters.\n\
@@ -271,10 +273,13 @@ mod tests {
         assert!(out.contains("PREFER SPECIALIZED TOOLS"));
         assert!(out.contains("ANNOTATIONS:"));
         assert!(out.contains("OUTPUT: Truncated output"));
+        assert!(out.contains("ssh_output_fetch"));
         assert!(out.contains("SESSIONS:"));
         assert!(out.contains("APPS:"));
         assert!(out.contains("ROOTS:"));
         assert!(out.contains("TOKEN SAVINGS:"));
+        assert!(out.contains("output_format=tsv"));
+        assert!(out.contains("yq_filter"));
         assert!(out.contains("OVERRIDES:"));
         assert!(out.contains("timeout_seconds"));
         assert!(out.contains("max_output"));

@@ -20,13 +20,38 @@ mcp-ssh-bridge tool ssh_k8s_get --json-args '{"host":"k8s","resource":"pods","na
 mcp-ssh-bridge list-tools --groups-only          # 74 groups (~2K tokens)
 mcp-ssh-bridge list-tools --group docker          # tools in group (~500 tokens)
 mcp-ssh-bridge list-tools --search kubernetes     # keyword search
-mcp-ssh-bridge describe-tool ssh_docker_ps        # full schema for 1 tool (~200 tokens)
+mcp-ssh-bridge describe-tool ssh_docker_ps        # full schema + Reduction Strategy (~200 tokens)
 mcp-ssh-bridge describe-tool ssh_exec --json      # schema as JSON
 
 # Global --json flag works on all commands
 mcp-ssh-bridge --json status
 mcp-ssh-bridge --json tool ssh_service_status host=web1 service=nginx
 ```
+
+### Token-efficient patterns (IMPORTANT for AI agents)
+
+**Always call `describe-tool` before invoking an unknown tool** — its top-of-output
+**Reduction Strategy** line tells you which params apply. Server-side filtering
+runs BEFORE truncation, so you never lose data to the output cap.
+
+| Output kind | Strategy | Example |
+|---|---|---|
+| **Tabular** (`docker_ps`, `service_list`) | `columns` + `limit` | `columns='["NAME","STATUS"]' limit=20` |
+| **Json** (`k8s_get`, `docker_inspect`, `awx_*`) | `jq_filter` + `output_format=tsv` | `jq_filter='.items[] \| [.name, .status]' output_format=tsv` (60-80% savings) |
+| **Yaml** | `yq_filter` + `output_format=tsv` | same shape as jq |
+| **Auto** | Any of the above | tool auto-detects |
+| **RawText** (logs, `ssh_exec`) | `save_output=/tmp/out.txt` | read file locally afterwards |
+
+Ergonomic global flags (equivalent to `jq_filter=`, `columns=`, `limit=`, `output_format=`):
+
+```bash
+mcp-ssh-bridge --jq '.items[] | {name, phase}' --output-format=tsv tool ssh_k8s_get host=k8s resource=pods
+mcp-ssh-bridge --columns name,status --limit 10 tool ssh_docker_ps host=prod
+```
+
+Pagination cycle for truncated output: `[output_id: abc123]` → `mcp-ssh-bridge tool ssh_output_fetch output_id=abc123 offset=N`.
+
+Common params on every tool: `host`, `timeout_seconds`, `max_output`, `save_output`.
 
 ### When to Use CLI vs MCP
 

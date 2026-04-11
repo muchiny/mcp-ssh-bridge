@@ -351,7 +351,7 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         let raw_output = response.stdout.clone();
         let mut jq_was_applied = false;
         if response.exit_code == 0 && !dr.is_empty() {
-            jq_was_applied = apply_typed_reduction(&mut response.stdout, &dr, T::OUTPUT_KIND)?;
+            jq_was_applied = apply_reduction(&mut response.stdout, &dr, T::OUTPUT_KIND)?;
         }
 
         let post_reduction_chars = response.stdout.len();
@@ -417,12 +417,23 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
 ///
 /// Returns `true` if a jq filter was applied (so `post_process` should be skipped).
 ///
-/// - `Json` → apply `jq_filter` if present
+/// Apply server-side data reduction to a tool's stdout based on its `OutputKind`.
+///
+/// This is the public entry point used both by `StandardToolHandler` (step 14
+/// of the standard pipeline) and by custom (non-`StandardTool`) handlers that
+/// want to opt into the same reduction semantics.
+///
+/// Strategy:
+/// - `Json` → apply `jq_filter` if present, fall back to `limit` on top-level arrays
 /// - `Tabular` → apply `columns`/`limit` filter (parse columnar → select → TSV)
+/// - `Yaml` → apply `yq_filter` if present
 /// - `Auto` → try JSON+jq first, fall back to tabular+columns+limit
 /// - `RawText` → no-op
+///
+/// Returns `true` if `jq_filter` or `yq_filter` was applied (used by the
+/// caller to skip post-processing steps that would duplicate filtering).
 #[allow(clippy::unnecessary_wraps)]
-fn apply_typed_reduction(
+pub fn apply_reduction(
     stdout: &mut String,
     dr: &crate::domain::data_reduction::DataReductionArgs,
     kind: crate::domain::output_kind::OutputKind,
@@ -874,25 +885,25 @@ mod tests {
         // Other errors (connection error or similar) are expected
     }
 
-    // ============== apply_typed_reduction tests ==============
+    // ============== apply_reduction tests ==============
 
     #[test]
-    fn test_apply_typed_reduction_raw_text_noop() {
+    fn test_apply_reduction_raw_text_noop() {
         use crate::domain::output_kind::OutputKind;
         let mut stdout = "hello world".to_string();
         let dr = crate::domain::data_reduction::DataReductionArgs::default();
-        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::RawText).unwrap();
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::RawText).unwrap();
         assert!(!jq);
         assert_eq!(stdout, "hello world");
     }
 
     #[test]
-    fn test_apply_typed_reduction_tabular_with_columns() {
+    fn test_apply_reduction_tabular_with_columns() {
         use crate::domain::output_kind::OutputKind;
         let mut stdout = "NAME           STATUS    CPU\nnginx          running   5%\npostgres       running   12%\n".to_string();
         let mut v = json!({"columns": ["NAME", "STATUS"]});
         let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
-        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Tabular).unwrap();
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::Tabular).unwrap();
         assert!(!jq);
         // After tabular reduction, only NAME and STATUS columns should remain
         assert!(stdout.contains("NAME"));
@@ -900,14 +911,14 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_typed_reduction_tabular_with_limit() {
+    fn test_apply_reduction_tabular_with_limit() {
         use crate::domain::output_kind::OutputKind;
         let mut stdout =
             "NAME           STATUS\nrow1           ok\nrow2           ok\nrow3           ok\n"
                 .to_string();
         let mut v = json!({"limit": 1});
         let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
-        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Tabular).unwrap();
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::Tabular).unwrap();
         assert!(!jq);
         // Should keep header + 1 row
         let lines: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -915,47 +926,47 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_typed_reduction_tabular_no_params_noop() {
+    fn test_apply_reduction_tabular_no_params_noop() {
         use crate::domain::output_kind::OutputKind;
         let original = "NAME  STATUS\nfoo   bar\n".to_string();
         let mut stdout = original.clone();
         let dr = crate::domain::data_reduction::DataReductionArgs::default();
-        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Tabular).unwrap();
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::Tabular).unwrap();
         assert!(!jq);
         assert_eq!(stdout, original);
     }
 
     #[cfg(feature = "jq")]
     #[test]
-    fn test_apply_typed_reduction_json_with_jq() {
+    fn test_apply_reduction_json_with_jq() {
         use crate::domain::output_kind::OutputKind;
         let mut stdout = r#"{"name": "test", "value": 42}"#.to_string();
         let mut v = json!({"jq_filter": ".name"});
         let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
-        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
         assert!(jq);
         assert!(stdout.contains("test"));
     }
 
     #[test]
-    fn test_apply_typed_reduction_json_without_jq_noop() {
+    fn test_apply_reduction_json_without_jq_noop() {
         use crate::domain::output_kind::OutputKind;
         let original = r#"{"name": "test"}"#.to_string();
         let mut stdout = original.clone();
         let dr = crate::domain::data_reduction::DataReductionArgs::default();
-        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
         assert!(!jq);
         assert_eq!(stdout, original);
     }
 
     #[test]
-    fn test_apply_typed_reduction_auto_falls_back_to_tabular() {
+    fn test_apply_reduction_auto_falls_back_to_tabular() {
         use crate::domain::output_kind::OutputKind;
         // Non-JSON output with columns param → should fall back to tabular reduction
         let mut stdout = "NAME           STATUS\nnginx          running\n".to_string();
         let mut v = json!({"columns": ["NAME"]});
         let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
-        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Auto).unwrap();
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::Auto).unwrap();
         assert!(!jq); // jq not applied (not JSON)
         assert!(stdout.contains("NAME"));
     }
@@ -1033,12 +1044,12 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_typed_reduction_json_with_limit() {
+    fn test_apply_reduction_json_with_limit() {
         use crate::domain::output_kind::OutputKind;
         let mut stdout = r#"[{"a":1},{"a":2},{"a":3}]"#.to_string();
         let mut v = json!({"limit": 1});
         let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
-        let jq = apply_typed_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
         assert!(!jq);
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
         assert_eq!(parsed.len(), 1);

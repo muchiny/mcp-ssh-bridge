@@ -1,7 +1,7 @@
 {
   "name": "mcp-ssh-bridge",
-  "version": "1.5.0",
-  "description": "Secure SSH bridge for AI-powered remote server management. 337 tools across 74 groups covering Linux, Windows, Docker, Kubernetes, and more.",
+  "version": "1.8.0",
+  "description": "Secure SSH bridge for AI-powered remote server management. 338 tools across 74 groups covering Linux, Windows, Docker, Kubernetes, and more.",
   "capabilities": {
     "tools": true,
     "resources": true,
@@ -16,10 +16,32 @@
   },
   "transports": ["stdio", "streamable-http"],
   "authentication": ["oauth2", "jwt"],
-  "tool_count": 337,
-  "tool_groups": 57,
+  "tool_count": 338,
+  "tool_groups": 74,
   "homepage": "https://github.com/muchiny/mcp-ssh-bridge",
   "repository": "https://github.com/muchiny/mcp-ssh-bridge",
   "license": "MIT",
-  "mcp_version": "2025-11-25"
+  "mcp_version": "2025-11-25",
+  "extensions": {
+    "data_reduction": {
+      "supported": true,
+      "description": "Server-side output reduction to minimize token consumption. Each tool declares an OutputKind (RawText/Tabular/Json/Yaml/Auto) that determines which params apply. Call describe-tool or inspect the tool schema to see the exact Reduction Strategy per tool.",
+      "params": {
+        "jq_filter": "jq expression applied server-side to JSON output (Json/Auto kinds)",
+        "yq_filter": "jq expression applied server-side to YAML output (Yaml/Auto kinds)",
+        "columns": "Case-insensitive column filter for tabular output (Tabular/Auto kinds)",
+        "limit": "Cap rows/array elements (all kinds except RawText)",
+        "output_format": "'json' (default) or 'tsv' for 60-80% token savings on list data",
+        "save_output": "Persist full untruncated output to a file path",
+        "max_output": "Override default output character cap",
+        "timeout_seconds": "Override default command timeout"
+      },
+      "formats": ["json", "tsv"],
+      "pagination": {
+        "mechanism": "output_id",
+        "fetch_tool": "ssh_output_fetch",
+        "description": "Truncated outputs return an output_id; call ssh_output_fetch output_id=<id> offset=<N> to retrieve the rest"
+      }
+    }
+  }
 }

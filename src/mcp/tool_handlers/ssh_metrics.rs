@@ -7,10 +7,13 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::info;
 
+use crate::domain::data_reduction::DataReductionArgs;
+use crate::domain::output_kind::OutputKind;
 use crate::domain::use_cases::parse_metrics::{self, SECTION_SEPARATOR, SystemMetrics};
 use crate::error::{BridgeError, Result};
 use crate::mcp::apps::dashboard;
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp::standard_tool::apply_reduction;
 use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::ssh::{is_retryable_error, with_retry_if};
@@ -107,12 +110,17 @@ impl ToolHandler for SshMetricsHandler {
         }
     }
 
+    fn output_kind(&self) -> OutputKind {
+        OutputKind::Json
+    }
+
     async fn execute(&self, args: Option<Value>, ctx: &ToolContext) -> Result<ToolCallResult> {
-        let Some(v) = args else {
+        let Some(mut v) = args else {
             return Err(BridgeError::McpMissingParam {
                 param: "arguments".to_string(),
             });
         };
+        let dr = DataReductionArgs::extract(&mut v);
         let args: SshMetricsArgs =
             serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))?;
 
@@ -211,7 +219,10 @@ impl ToolHandler for SshMetricsHandler {
         // Serialize to JSON and sanitize output
         let json_output = serde_json::to_string(&system_metrics)
             .unwrap_or_else(|e| format!("Error serializing metrics: {e}"));
-        let json_output = ctx.sanitizer.sanitize(&json_output).into_owned();
+        let mut json_output = ctx.sanitizer.sanitize(&json_output).into_owned();
+
+        // Apply server-side data reduction (jq_filter / output_format=tsv / limit)
+        apply_reduction(&mut json_output, &dr, OutputKind::Json)?;
 
         // Build dashboard app from metrics
         let mut dash = dashboard("System Metrics");

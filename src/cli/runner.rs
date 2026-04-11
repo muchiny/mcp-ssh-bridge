@@ -160,6 +160,9 @@ pub struct DataReductionFlags {
     pub columns: Option<Vec<String>>,
     /// Max rows/entries to return (mapped to `limit`).
     pub limit: Option<usize>,
+    /// Output format for jq/yq results: `json` (default) or `tsv` (mapped
+    /// to `output_format`).
+    pub output_format: Option<String>,
 }
 
 impl DataReductionFlags {
@@ -167,7 +170,10 @@ impl DataReductionFlags {
     /// `DataReductionFlags::default()`.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.jq.is_none() && self.columns.is_none() && self.limit.is_none()
+        self.jq.is_none()
+            && self.columns.is_none()
+            && self.limit.is_none()
+            && self.output_format.is_none()
     }
 }
 
@@ -211,6 +217,14 @@ fn merge_data_reduction(
         && !map.contains_key("limit")
     {
         map.insert("limit".to_string(), serde_json::Value::from(n));
+    }
+    if let Some(fmt) = flags.output_format.as_deref()
+        && !map.contains_key("output_format")
+    {
+        map.insert(
+            "output_format".to_string(),
+            serde_json::Value::String(fmt.to_string()),
+        );
     }
     args
 }
@@ -272,24 +286,51 @@ pub async fn run_list_tools(
     }
 
     if json_output {
-        let json =
-            serde_json::to_string_pretty(&tools).map_err(|e| BridgeError::Config(e.to_string()))?;
+        // Enrich the JSON with an output_kind marker per tool so scripts can sort/filter.
+        let enriched: Vec<serde_json::Value> = tools
+            .iter()
+            .map(|tool| {
+                let kind_marker = registry
+                    .get(&tool.name)
+                    .map_or("—", |h| h.output_kind().short_marker());
+                serde_json::json!({
+                    "name": tool.name,
+                    "description": tool.description,
+                    "inputSchema": tool.input_schema,
+                    "annotations": tool.annotations,
+                    "reduce": kind_marker,
+                })
+            })
+            .collect();
+        let json = serde_json::to_string_pretty(&enriched)
+            .map_err(|e| BridgeError::Config(e.to_string()))?;
         println!("{json}");
     } else {
-        println!("{:<40} {:<20} DESCRIPTION", "TOOL", "GROUP");
+        println!("{:<40} {:<18} {:<7} DESCRIPTION", "TOOL", "GROUP", "REDUCE");
         let separator = "-".repeat(100);
         println!("{separator}");
         for tool in &tools {
             let group = tool_group(&tool.name);
-            // Truncate description to 60 chars
-            let desc = if tool.description.len() > 60 {
-                format!("{}...", &tool.description[..57])
+            let reduce_marker = registry
+                .get(&tool.name)
+                .map_or("—", |h| h.output_kind().short_marker());
+            // Truncate description to 55 chars (a bit tighter to fit the new column)
+            let desc = if tool.description.len() > 55 {
+                format!("{}...", &tool.description[..52])
             } else {
                 tool.description.clone()
             };
-            println!("{:<40} {:<20} {}", tool.name, group, desc);
+            println!(
+                "{:<40} {:<18} {:<7} {}",
+                tool.name, group, reduce_marker, desc
+            );
         }
         println!("\nTotal: {} tools", tools.len());
+        println!(
+            "\nReduce legend: jq+tsv=jq_filter+output_format  yq+tsv=yq_filter+output_format  \
+             cols=columns+limit  *=any  —=none"
+        );
+        println!("Tip: run 'describe-tool <name>' to see the exact reduction params for a tool.");
     }
 
     Ok(())
@@ -1237,17 +1278,20 @@ pub async fn run_describe_tool(
 
     let schema = handler.schema();
     let group = tool_group(tool_name);
+    let output_kind = handler.output_kind();
 
     // Parse and enrich the schema with data-reduction params (jq_filter, columns, etc.)
     let mut input_schema: serde_json::Value =
         serde_json::from_str(schema.input_schema).unwrap_or_default();
-    inject_reduction_schema(&mut input_schema, handler.output_kind());
+    inject_reduction_schema(&mut input_schema, output_kind);
 
     if json_output {
         let obj = serde_json::json!({
             "name": schema.name,
             "group": group,
             "description": schema.description,
+            "output_kind": format!("{output_kind:?}"),
+            "reduction_strategy": output_kind.strategy_hint(),
             "input_schema": input_schema,
         });
         let json =
@@ -1257,6 +1301,9 @@ pub async fn run_describe_tool(
         println!("Tool: {}", schema.name);
         println!("Group: {group}");
         println!("Description: {}", schema.description);
+        println!();
+        println!("Output Kind: {output_kind:?}");
+        println!("Reduction Strategy: {}", output_kind.strategy_hint());
         println!("\nInput Schema:");
 
         // Pretty-print the schema, showing required fields and property types
@@ -1326,6 +1373,7 @@ mod tests {
             jq: Some(".name".to_string()),
             columns: None,
             limit: Some(5),
+            output_format: None,
         };
         let merged = merge_data_reduction(serde_json::Value::Null, &flags);
         let obj = merged.as_object().expect("should become object");
@@ -1346,6 +1394,7 @@ mod tests {
             jq: Some(".flag".to_string()),
             columns: None,
             limit: None,
+            output_format: None,
         };
         let merged = merge_data_reduction(args, &flags);
         assert_eq!(merged["jq_filter"], ".custom");
@@ -1357,6 +1406,7 @@ mod tests {
             jq: None,
             columns: Some(vec!["name".to_string(), "status".to_string()]),
             limit: None,
+            output_format: None,
         };
         let merged =
             merge_data_reduction(serde_json::Value::Object(serde_json::Map::new()), &flags);
@@ -1364,6 +1414,37 @@ mod tests {
         assert_eq!(arr.len(), 2);
         assert_eq!(arr[0], "name");
         assert_eq!(arr[1], "status");
+    }
+
+    #[test]
+    fn test_merge_injects_output_format_tsv() {
+        let flags = DataReductionFlags {
+            jq: Some(".[]".to_string()),
+            columns: None,
+            limit: None,
+            output_format: Some("tsv".to_string()),
+        };
+        let merged =
+            merge_data_reduction(serde_json::Value::Object(serde_json::Map::new()), &flags);
+        assert_eq!(merged["output_format"], "tsv");
+        assert_eq!(merged["jq_filter"], ".[]");
+    }
+
+    #[test]
+    fn test_merge_preserves_explicit_output_format() {
+        let mut m = serde_json::Map::new();
+        m.insert("output_format".to_string(), serde_json::Value::from("json"));
+        let args = serde_json::Value::Object(m);
+
+        let flags = DataReductionFlags {
+            jq: None,
+            columns: None,
+            limit: None,
+            output_format: Some("tsv".to_string()),
+        };
+        let merged = merge_data_reduction(args, &flags);
+        // Explicit "json" wins over --output-format=tsv flag.
+        assert_eq!(merged["output_format"], "json");
     }
 
     #[test]

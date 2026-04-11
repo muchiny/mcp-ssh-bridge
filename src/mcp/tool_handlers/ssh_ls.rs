@@ -94,13 +94,18 @@ impl ToolHandler for SshLsHandler {
         }
     }
 
+    fn output_kind(&self) -> crate::domain::output_kind::OutputKind {
+        crate::domain::output_kind::OutputKind::Json
+    }
+
     #[expect(clippy::too_many_lines, clippy::cast_possible_truncation)]
     async fn execute(&self, args: Option<Value>, ctx: &ToolContext) -> Result<ToolCallResult> {
-        let Some(v) = args else {
+        let Some(mut v) = args else {
             return Err(BridgeError::McpMissingParam {
                 param: "arguments".to_string(),
             });
         };
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
         let args: SshLsArgs =
             serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))?;
 
@@ -218,8 +223,14 @@ impl ToolHandler for SshLsHandler {
                     _ => entries.sort_by(|a, b| a.name.cmp(&b.name)),
                 }
 
-                let json_output =
+                let mut json_output =
                     serde_json::to_string(&entries).unwrap_or_else(|_| "[]".to_string());
+
+                crate::mcp::standard_tool::apply_reduction(
+                    &mut json_output,
+                    &dr,
+                    crate::domain::output_kind::OutputKind::Json,
+                )?;
 
                 Ok(ToolCallResult::text(json_output))
             }

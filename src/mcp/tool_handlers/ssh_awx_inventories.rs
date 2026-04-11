@@ -89,13 +89,12 @@ impl ToolHandler for SshAwxInventoriesHandler {
     }
 
     async fn execute(&self, args: Option<Value>, ctx: &ToolContext) -> Result<ToolCallResult> {
-        let args: SshAwxInventoriesArgs = args
-            .ok_or_else(|| BridgeError::McpMissingParam {
-                param: "arguments".to_string(),
-            })
-            .and_then(|v| {
-                serde_json::from_value(v).map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))
-            })?;
+        let mut raw = args.ok_or_else(|| BridgeError::McpMissingParam {
+            param: "arguments".to_string(),
+        })?;
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut raw);
+        let args: SshAwxInventoriesArgs = serde_json::from_value(raw)
+            .map_err(|e| BridgeError::McpInvalidRequest(e.to_string()))?;
 
         let awx = ctx.config.awx.as_ref().ok_or_else(|| {
             BridgeError::McpInvalidRequest(
@@ -138,6 +137,8 @@ impl ToolHandler for SshAwxInventoriesHandler {
             .execute_use_case
             .process_success(host, &cmd, &output.into())
             .stdout;
+        let mut stdout = stdout;
+        crate::mcp::standard_tool::apply_reduction(&mut stdout, &dr, OutputKind::Json)?;
         Ok(ToolCallResult::text(stdout))
     }
 }

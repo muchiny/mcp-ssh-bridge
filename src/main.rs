@@ -135,6 +135,7 @@ async fn main() -> Result<()> {
                 jq: cli.jq.clone(),
                 columns: cli.columns.clone(),
                 limit: cli.limit,
+                output_format: cli.output_format.clone(),
             };
             let exit_code = run_tool(
                 config,
