@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::info;
 
+use crate::mcp_tool;
 use crate::domain::use_cases::parse_metrics::{self, SECTION_SEPARATOR, SystemMetrics};
 use crate::error::{BridgeError, Result};
 use crate::mcp::apps::dashboard;
@@ -34,6 +35,7 @@ struct SshMetricsArgs {
 }
 
 /// SSH Metrics tool handler
+#[mcp_tool(name = "ssh_metrics", group = "monitoring", annotation = "read_only")]
 pub struct SshMetricsHandler;
 
 impl SshMetricsHandler {

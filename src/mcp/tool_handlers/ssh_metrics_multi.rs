@@ -12,6 +12,7 @@ use std::time::Instant;
 use tokio::task::JoinSet;
 use tracing::{info, warn};
 
+use crate::mcp_tool;
 use crate::config::Config;
 use crate::domain::use_cases::parse_metrics::{self, SECTION_SEPARATOR, SystemMetrics};
 use crate::error::{BridgeError, Result};
@@ -73,6 +74,7 @@ struct RawHostOutput {
 }
 
 /// SSH Metrics Multi tool handler
+#[mcp_tool(name = "ssh_metrics_multi", group = "monitoring", annotation = "read_only")]
 pub struct SshMetricsMultiHandler;
 
 impl SshMetricsMultiHandler {

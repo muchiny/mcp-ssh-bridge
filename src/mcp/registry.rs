@@ -1287,9 +1287,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshAdGroupMembersHandler,
         SshAdUserInfoHandler,
         SshAdUserListHandler,
-        SshConfigGetHandler,
-        SshConfigSetHandler,
-        SshDiskUsageHandler,
         SshHypervHostInfoHandler,
         SshHypervSnapshotCreateHandler,
         SshHypervSnapshotListHandler,
@@ -1305,13 +1302,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshIisStartHandler,
         SshIisStatusHandler,
         SshIisStopHandler,
-        SshMetricsHandler,
-        SshMetricsMultiHandler,
-        SshRecordingListHandler,
-        SshRecordingReplayHandler,
-        SshRecordingStartHandler,
-        SshRecordingStopHandler,
-        SshRecordingVerifyHandler,
         SshRegDeleteHandler,
         SshRegExportHandler,
         SshRegListHandler,
@@ -1322,7 +1312,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshSchtaskInfoHandler,
         SshSchtaskListHandler,
         SshSchtaskRunHandler,
-        SshTailHandler,
         SshWinDiskUsageHandler,
         SshWinEventExportHandler,
         SshWinEventLogsHandler,
@@ -1376,10 +1365,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // ssh_exec, ssh_status, ssh_history, ssh_health — registered via
         // #[mcp_tool] inventory, see src/mcp/tool_handlers/*.rs.
         // Monitoring
-        Arc::new(SshMetricsHandler),
-        Arc::new(SshMetricsMultiHandler),
-        Arc::new(SshTailHandler),
-        Arc::new(SshDiskUsageHandler),
         // File transfer
         // Sessions
         // Tunnels
@@ -1427,11 +1412,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Security Scanning
         // Runbooks
         // Recording / Compliance
-        Arc::new(SshRecordingStartHandler),
-        Arc::new(SshRecordingStopHandler),
-        Arc::new(SshRecordingListHandler),
-        Arc::new(SshRecordingReplayHandler),
-        Arc::new(SshRecordingVerifyHandler),
         // Redis
         // PostgreSQL
         // MySQL
@@ -1441,8 +1421,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Terraform
         // Vault
         // Config
-        Arc::new(SshConfigGetHandler),
-        Arc::new(SshConfigSetHandler),
         // File Operations
         // User Management
         // Storage

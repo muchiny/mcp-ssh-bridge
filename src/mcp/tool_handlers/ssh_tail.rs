@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::info;
 
+use crate::mcp_tool;
 use crate::domain::output_truncator::truncate_output_with_cache;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
@@ -29,6 +30,7 @@ struct SshTailArgs {
 }
 
 /// SSH Tail tool handler
+#[mcp_tool(name = "ssh_tail", group = "monitoring", annotation = "read_only")]
 pub struct SshTailHandler;
 
 impl SshTailHandler {

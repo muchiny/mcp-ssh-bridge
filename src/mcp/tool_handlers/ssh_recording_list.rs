@@ -7,10 +7,12 @@ use std::fmt::Write;
 use async_trait::async_trait;
 use serde_json::Value;
 
+use crate::mcp_tool;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
+#[mcp_tool(name = "ssh_recording_list", group = "recording", annotation = "read_only")]
 #[derive(Default)]
 pub struct SshRecordingListHandler;
 
