@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::active_directory::ActiveDirectoryCommandBuilder;
@@ -20,6 +21,8 @@ pub struct SshAdDomainInfoArgs {
 }
 
 impl_common_args!(SshAdDomainInfoArgs);
+
+#[mcp_standard_tool(name = "ssh_ad_domain_info", group = "active_directory", annotation = "read_only")]
 
 pub struct AdDomainInfoTool;
 

@@ -6,6 +6,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::active_directory::ActiveDirectoryCommandBuilder;
@@ -24,6 +25,8 @@ pub struct SshAdUserListArgs {
 }
 
 impl_common_args!(SshAdUserListArgs);
+
+#[mcp_standard_tool(name = "ssh_ad_user_list", group = "active_directory", annotation = "read_only")]
 
 pub struct AdUserListTool;
 

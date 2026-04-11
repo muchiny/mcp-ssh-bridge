@@ -1281,12 +1281,6 @@ pub fn create_default_registry() -> ToolRegistry {
 #[allow(clippy::too_many_lines, clippy::large_stack_arrays)]
 pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry {
     use super::tool_handlers::{
-        SshAdComputerListHandler,
-        SshAdDomainInfoHandler,
-        SshAdGroupListHandler,
-        SshAdGroupMembersHandler,
-        SshAdUserInfoHandler,
-        SshAdUserListHandler,
         SshHypervHostInfoHandler,
         SshHypervSnapshotCreateHandler,
         SshHypervSnapshotListHandler,
@@ -1313,11 +1307,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshSchtaskListHandler,
         SshSchtaskRunHandler,
         SshWinDiskUsageHandler,
-        SshWinEventExportHandler,
-        SshWinEventLogsHandler,
-        SshWinEventQueryHandler,
-        SshWinEventSourcesHandler,
-        SshWinEventTailHandler,
         SshWinFeatureInfoHandler,
         SshWinFeatureInstallHandler,
         SshWinFeatureListHandler,
@@ -1343,14 +1332,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshWinProcessKillHandler,
         SshWinProcessListHandler,
         SshWinProcessTopHandler,
-        SshWinServiceConfigHandler,
-        SshWinServiceDisableHandler,
-        SshWinServiceEnableHandler,
-        SshWinServiceListHandler,
-        SshWinServiceRestartHandler,
-        SshWinServiceStartHandler,
-        SshWinServiceStatusHandler,
-        SshWinServiceStopHandler,
         SshWinUpdateHistoryHandler,
         SshWinUpdateInstallHandler,
         SshWinUpdateListHandler,
@@ -1431,27 +1412,8 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Podman
         // LDAP
         // Windows Services
-        Arc::new(SshWinServiceStatusHandler::new()),
-        Arc::new(SshWinServiceStartHandler::new()),
-        Arc::new(SshWinServiceStopHandler::new()),
-        Arc::new(SshWinServiceRestartHandler::new()),
-        Arc::new(SshWinServiceListHandler::new()),
-        Arc::new(SshWinServiceEnableHandler::new()),
-        Arc::new(SshWinServiceDisableHandler::new()),
-        Arc::new(SshWinServiceConfigHandler::new()),
-        Arc::new(SshWinEventLogsHandler::new()),
         // Windows Events
-        Arc::new(SshWinEventQueryHandler::new()),
-        Arc::new(SshWinEventSourcesHandler::new()),
-        Arc::new(SshWinEventTailHandler::new()),
-        Arc::new(SshWinEventExportHandler::new()),
         // Active Directory
-        Arc::new(SshAdUserListHandler::new()),
-        Arc::new(SshAdUserInfoHandler::new()),
-        Arc::new(SshAdGroupListHandler::new()),
-        Arc::new(SshAdGroupMembersHandler::new()),
-        Arc::new(SshAdComputerListHandler::new()),
-        Arc::new(SshAdDomainInfoHandler::new()),
         // Scheduled Tasks
         Arc::new(SshSchtaskListHandler::new()),
         Arc::new(SshSchtaskInfoHandler::new()),

@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_event::{WindowsEventCommandBuilder, validate_log_name};
@@ -21,6 +22,8 @@ pub struct SshWinEventExportArgs {
 }
 
 impl_common_args!(SshWinEventExportArgs);
+
+#[mcp_standard_tool(name = "ssh_win_event_export", group = "windows_events", annotation = "mutating")]
 
 pub struct WinEventExportTool;
 

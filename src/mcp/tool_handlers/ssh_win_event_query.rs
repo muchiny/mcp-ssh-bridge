@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_event::{WindowsEventCommandBuilder, validate_log_name};
@@ -25,6 +26,8 @@ pub struct SshWinEventQueryArgs {
 }
 
 impl_common_args!(SshWinEventQueryArgs);
+
+#[mcp_standard_tool(name = "ssh_win_event_query", group = "windows_events", annotation = "read_only")]
 
 pub struct WinEventQueryTool;
 

@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_service::{
@@ -22,6 +23,8 @@ pub struct SshWinServiceStartArgs {
 }
 
 impl_common_args!(SshWinServiceStartArgs);
+
+#[mcp_standard_tool(name = "ssh_win_service_start", group = "windows_services", annotation = "mutating")]
 
 pub struct WinServiceStartTool;
 
