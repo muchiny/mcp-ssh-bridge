@@ -157,3 +157,160 @@ fn test_daemon_status_reports_stale_for_dead_pid() {
         other => panic!("expected Stale, got: {other:?}"),
     }
 }
+
+/// **Sprint 3 Phase B.2:** batch JSON-RPC requests are now supported
+/// in daemon mode thanks to the shared `serve_session()` dispatch
+/// path.
+///
+/// This test exercises the behavior that `daemon/connection.rs` used
+/// to reject with a warning: send a JSON array of three requests in
+/// a single frame and verify three responses come back — exactly
+/// what stdio has supported since Sprint 1.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_daemon_batch_requests_are_dispatched() {
+    let tmp = TempDir::new().expect("create tempdir");
+    let socket = tmp.path().join("batch.sock");
+
+    let config = Arc::new(test_config());
+    let daemon_handle = tokio::spawn({
+        let socket = socket.clone();
+        async move {
+            daemon::run_daemon(config, &socket)
+                .await
+                .expect("daemon ok");
+        }
+    });
+
+    // Wait for bind.
+    let mut ready = false;
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if socket.exists() {
+            ready = true;
+            break;
+        }
+    }
+    assert!(ready, "daemon failed to bind socket within 2s");
+
+    // Send a batch of three tools/list + resources/list + ping.
+    let mut client = UnixStream::connect(&socket).await.expect("connect");
+    let batch = br#"[{"jsonrpc":"2.0","id":1,"method":"tools/list"},{"jsonrpc":"2.0","id":2,"method":"resources/list"},{"jsonrpc":"2.0","id":3,"method":"ping"}]
+"#;
+    client.write_all(batch).await.expect("write");
+    client.flush().await.expect("flush");
+
+    let (r, _w) = client.split();
+    let mut reader = BufReader::new(r);
+    let mut response_line = String::new();
+    tokio::time::timeout(Duration::from_secs(5), reader.read_line(&mut response_line))
+        .await
+        .expect("read timeout")
+        .expect("read ok");
+
+    // The response must be a JSON array of 3 elements (batch response).
+    let response: serde_json::Value =
+        serde_json::from_str(response_line.trim()).expect("valid json batch response");
+    let arr = response
+        .as_array()
+        .expect("batch response must be a JSON array");
+    assert_eq!(
+        arr.len(),
+        3,
+        "batch of 3 requests must produce 3 responses, got: {arr:?}"
+    );
+    // Every response must carry one of the 3 ids.
+    let mut seen: Vec<i64> = arr
+        .iter()
+        .map(|r| r["id"].as_i64().expect("numeric id"))
+        .collect();
+    seen.sort_unstable();
+    assert_eq!(seen, vec![1, 2, 3]);
+
+    drop(client);
+    daemon_handle.abort();
+    let _ = tokio::time::timeout(Duration::from_secs(2), daemon_handle).await;
+    let _ = std::fs::remove_file(&socket);
+    let pid_file = socket.with_extension("sock.pid");
+    let _ = std::fs::remove_file(&pid_file);
+}
+
+/// **Sprint 3 Phase B.2:** malformed JSON on the daemon wire must not
+/// crash the session — it should receive a JSON-RPC parse_error
+/// (code -32700) and keep processing subsequent requests.
+///
+/// Before A.5 the daemon silently dropped malformed lines. After the
+/// transport unification it reuses stdio's parse_error response path.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_daemon_parse_error_response_sent_for_bad_json() {
+    let tmp = TempDir::new().expect("create tempdir");
+    let socket = tmp.path().join("parse.sock");
+
+    let config = Arc::new(test_config());
+    let daemon_handle = tokio::spawn({
+        let socket = socket.clone();
+        async move {
+            daemon::run_daemon(config, &socket)
+                .await
+                .expect("daemon ok");
+        }
+    });
+
+    // Wait for bind.
+    let mut ready = false;
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if socket.exists() {
+            ready = true;
+            break;
+        }
+    }
+    assert!(ready);
+
+    let mut client = UnixStream::connect(&socket).await.expect("connect");
+    // Line 1: garbage JSON.
+    client
+        .write_all(b"not actually json\n")
+        .await
+        .expect("write");
+    // Line 2: valid request to confirm the session survived.
+    client
+        .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"ping\"}\n")
+        .await
+        .expect("write");
+    client.flush().await.expect("flush");
+
+    let (r, _w) = client.split();
+    let mut reader = BufReader::new(r);
+
+    // First response should be a parse_error (id = null).
+    let mut err_line = String::new();
+    tokio::time::timeout(Duration::from_secs(5), reader.read_line(&mut err_line))
+        .await
+        .expect("read timeout")
+        .expect("read ok");
+    let err_resp: serde_json::Value =
+        serde_json::from_str(err_line.trim()).expect("valid parse error json");
+    assert_eq!(
+        err_resp["error"]["code"].as_i64(),
+        Some(-32700),
+        "expected parse_error code, got: {err_line}"
+    );
+
+    // Second response should be the successful ping with id=99.
+    let mut ok_line = String::new();
+    tokio::time::timeout(Duration::from_secs(5), reader.read_line(&mut ok_line))
+        .await
+        .expect("read timeout")
+        .expect("read ok");
+    let ok_resp: serde_json::Value =
+        serde_json::from_str(ok_line.trim()).expect("valid ping response");
+    assert_eq!(ok_resp["id"].as_i64(), Some(99));
+    assert!(ok_resp.get("result").is_some());
+
+    drop(client);
+    daemon_handle.abort();
+    let _ = tokio::time::timeout(Duration::from_secs(2), daemon_handle).await;
+    let _ = std::fs::remove_file(&socket);
+    let pid_file = socket.with_extension("sock.pid");
+    let _ = std::fs::remove_file(&pid_file);
+}
