@@ -90,9 +90,9 @@ impl Transport for UnixSocketTransport {
                         }
                         Err(e) => {
                             error!(error = %e, "UnixListener accept failed");
-                            // Brief backoff so a persistent error doesn't busy-spin.
+                            // Brief backoff so a persistent error doesn't busy-spin,
+                            // then fall through to the next loop iteration.
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                            continue;
                         }
                     }
                 }

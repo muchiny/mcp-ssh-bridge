@@ -224,51 +224,36 @@ fn render_unified_diff(baseline: &str, other: &str) -> String {
 /// easy but each rule is a risk of hiding a real divergence, so we
 /// keep the defaults conservative.
 fn maybe_normalize(output: &str, normalize: bool) -> String {
+    // Module-level statics so rustc (and clippy) don't flag
+    // `items_after_statements` when they sit inside the function.
+    // Each regex compiles lazily on first use.
+    static ISO_TIMESTAMP: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(
+            r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?",
+        )
+        .expect("valid ISO timestamp regex")
+    });
+    static SYSLOG_TIMESTAMP: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"[A-Z][a-z]{2} {1,2}\d{1,2} \d{2}:\d{2}:\d{2}")
+            .expect("valid syslog timestamp regex")
+    });
+    static PID_PATTERN: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"(pid=\d+|\[\d+\]:)").expect("valid pid regex")
+    });
+    static UUID_PATTERN: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+            .expect("valid uuid regex")
+    });
+
     if !normalize {
         return output.to_string();
     }
 
     let mut s = output.to_string();
-
-    // 1) RFC-3339 / ISO-8601 timestamps (2026-04-11T12:34:56, with
-    //    optional .fractional seconds and timezone).
-    static ISO_TIMESTAMP: std::sync::LazyLock<regex::Regex> =
-        std::sync::LazyLock::new(|| {
-            regex::Regex::new(
-                r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?",
-            )
-            .expect("valid ISO timestamp regex")
-        });
     s = ISO_TIMESTAMP.replace_all(&s, "<TIMESTAMP>").into_owned();
-
-    // 2) syslog-style timestamps: "Apr 11 12:34:56" (3-letter month
-    //    + day + HH:MM:SS). Leading letter is always uppercase,
-    //    trailing two chars always lowercase in syslog.
-    static SYSLOG_TIMESTAMP: std::sync::LazyLock<regex::Regex> =
-        std::sync::LazyLock::new(|| {
-            regex::Regex::new(
-                r"[A-Z][a-z]{2} {1,2}\d{1,2} \d{2}:\d{2}:\d{2}",
-            )
-            .expect("valid syslog timestamp regex")
-        });
     s = SYSLOG_TIMESTAMP.replace_all(&s, "<TIMESTAMP>").into_owned();
-
-    // 3) `pid=1234` or `[1234]:` style PIDs used in journalctl / dmesg.
-    static PID_PATTERN: std::sync::LazyLock<regex::Regex> =
-        std::sync::LazyLock::new(|| {
-            regex::Regex::new(r"(pid=\d+|\[\d+\]:)").expect("valid pid regex")
-        });
     s = PID_PATTERN.replace_all(&s, "<PID>").into_owned();
-
-    // 4) UUIDs.
-    static UUID_PATTERN: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
-        regex::Regex::new(
-            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-        )
-        .expect("valid uuid regex")
-    });
     s = UUID_PATTERN.replace_all(&s, "<UUID>").into_owned();
-
     s
 }
 
@@ -308,7 +293,7 @@ mod tests {
         assert_eq!(d.summary.matching, 3);
         assert_eq!(d.summary.divergent, 0);
         assert!(d.summary.divergent_hosts.is_empty());
-        for (_, entry) in &d.hosts {
+        for entry in d.hosts.values() {
             assert!(entry.matches_baseline);
             assert!(entry.diff.is_none());
         }

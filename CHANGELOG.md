@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Summary — Sprint 3 Phases A + B
+### Summary — Sprint 3 Phases A + B + C (foundation)
 
-**Transport unified** | **Daemon inherits stdio features** | **WinRM + K8sExec pools** | **Multi-host output diffing**
+**Transport unified** | **Daemon inherits stdio features** | **WinRM + K8sExec pools** | **Multi-host output diffing** | **`#[mcp_tool]` auto-registration foundation**
 
 ### Added
 
@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`McpServer::handle_request_with_cancel`** signature gains a `notification_tx` parameter propagated through `handle_tools_call` and `create_tool_context` so the per-session sender reaches every handler.
 - **`ExecutorRouter`** stores `WinRmPool` + `K8sExecPool` (feature-gated) and delegates `Protocol::WinRm` / `Protocol::K8sExec` routing to them instead of constructing a fresh connection on every call. `cleanup()` and `close_all()` forward to every pool so the shared cleanup tasks clear stale entries.
+
+- **`crates/mcp-ssh-bridge-macros/`** — new proc-macro crate providing `#[mcp_tool(name, group, annotation)]` and `#[mcp_standard_tool(...)]` attributes for auto-registering handlers via the `inventory` crate. Handlers that opt in no longer need manual entries in `create_filtered_registry`, `tool_group()`, or `tool_annotations()` — the registry lookup functions read an `inventory::iter::<ToolRegistryEntry>()` table first and fall back to the legacy match tables for un-migrated handlers. Migration is incremental and safe.
+- **`#[mcp_standard_tool]`** variant that wraps the annotated marker type in `StandardToolHandler<Marker>::new()` so both handler shapes (direct `impl ToolHandler` *and* `StandardToolHandler<T>` wrapper) reach the inventory via the same pattern.
+- **`ToolRegistryEntry`, `ToolAnnotationKind`** public types in `src/mcp/registry.rs` for the inventory entries.
+- **6 handlers migrated as prototypes**: `ssh_exec`, `ssh_status`, `ssh_history`, `ssh_health`, `ssh_ls` (direct `impl ToolHandler` path) and `ssh_docker_ps` (`StandardToolHandler` wrapper path). All now register via `#[mcp_tool]` / `#[mcp_standard_tool]` and their entries have been removed from the legacy `create_filtered_registry` vec + match tables.
+
+### Changed
+
+- **`Cargo.toml`** is now a workspace (`[workspace] members = [".", "crates/mcp-ssh-bridge-macros"]`) and depends on `inventory = "0.3"` + the local macro crate.
+- **`src/lib.rs`** adds `extern crate self as mcp_ssh_bridge;` so the proc-macro-generated fully-qualified paths (`::mcp_ssh_bridge::mcp::registry::…`) resolve both when building the main crate and from downstream consumers.
+- **`.claude/rules/tool-handlers.md`** — "Adding a new tool" is now **3 steps** instead of 8. Legacy instructions kept as "fallback for handlers not yet migrated".
 
 ### Removed
 

@@ -235,11 +235,11 @@ async fn test_daemon_batch_requests_are_dispatched() {
 }
 
 /// **Sprint 3 Phase B.2:** malformed JSON on the daemon wire must not
-/// crash the session — it should receive a JSON-RPC parse_error
+/// crash the session — it should receive a JSON-RPC `parse_error`
 /// (code -32700) and keep processing subsequent requests.
 ///
 /// Before A.5 the daemon silently dropped malformed lines. After the
-/// transport unification it reuses stdio's parse_error response path.
+/// transport unification it reuses stdio's `parse_error` response path.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_daemon_parse_error_response_sent_for_bad_json() {
     let tmp = TempDir::new().expect("create tempdir");

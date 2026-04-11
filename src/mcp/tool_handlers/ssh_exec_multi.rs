@@ -896,7 +896,7 @@ mod tests {
     }
 
     /// **Sprint 3 Phase B.7:** when `diff=true` is requested, the
-    /// serialized MultiExecResult gains a `diff` section produced
+    /// serialized `MultiExecResult` gains a `diff` section produced
     /// by `crate::domain::diff::compute_multi_host_diff`.
     #[test]
     fn test_multi_exec_result_with_diff_section_serializes() {
