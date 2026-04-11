@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::package::{PackageCommandBuilder, validate_package_name};
@@ -27,6 +28,8 @@ pub struct SshPkgInstallArgs {
 }
 
 impl_common_args!(SshPkgInstallArgs);
+
+#[mcp_standard_tool(name = "ssh_pkg_install", group = "package", annotation = "mutating")]
 
 pub struct PkgInstallTool;
 

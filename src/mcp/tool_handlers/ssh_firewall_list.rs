@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::firewall::FirewallCommandBuilder;
@@ -27,6 +28,8 @@ pub struct SshFirewallListArgs {
 }
 
 impl_common_args!(SshFirewallListArgs);
+
+#[mcp_standard_tool(name = "ssh_firewall_list", group = "firewall", annotation = "read_only")]
 
 pub struct FirewallListTool;
 

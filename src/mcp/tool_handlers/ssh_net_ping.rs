@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::network::NetworkCommandBuilder;
 use crate::error::Result;
@@ -30,6 +31,8 @@ pub struct SshNetPingArgs {
 }
 
 impl_common_args!(SshNetPingArgs);
+
+#[mcp_standard_tool(name = "ssh_net_ping", group = "network", annotation = "read_only")]
 
 pub struct NetPingTool;
 

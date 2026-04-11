@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::cron_analysis::CronAnalysisCommandBuilder;
@@ -26,6 +27,8 @@ pub struct SshCronAnalyzeArgs {
 }
 
 impl_common_args!(SshCronAnalyzeArgs);
+
+#[mcp_standard_tool(name = "ssh_cron_analyze", group = "cron_analysis", annotation = "read_only")]
 
 pub struct CronAnalyzeTool;
 

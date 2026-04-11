@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::cron::CronCommandBuilder;
@@ -27,6 +28,8 @@ pub struct SshCronRemoveArgs {
 }
 
 impl_common_args!(SshCronRemoveArgs);
+
+#[mcp_standard_tool(name = "ssh_cron_remove", group = "cron", annotation = "destructive")]
 
 pub struct CronRemoveTool;
 

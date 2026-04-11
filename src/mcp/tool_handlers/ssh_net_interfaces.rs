@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::network::NetworkCommandBuilder;
 use crate::error::Result;
@@ -24,6 +25,8 @@ pub struct SshNetInterfacesArgs {
 }
 
 impl_common_args!(SshNetInterfacesArgs);
+
+#[mcp_standard_tool(name = "ssh_net_interfaces", group = "network", annotation = "read_only")]
 
 pub struct NetInterfacesTool;
 

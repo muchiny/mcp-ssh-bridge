@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::firewall::{FirewallCommandBuilder, validate_port};
@@ -31,6 +32,8 @@ pub struct SshFirewallAllowArgs {
 }
 
 impl_common_args!(SshFirewallAllowArgs);
+
+#[mcp_standard_tool(name = "ssh_firewall_allow", group = "firewall", annotation = "mutating")]
 
 pub struct FirewallAllowTool;
 

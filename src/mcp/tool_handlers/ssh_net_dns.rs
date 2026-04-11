@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::network::NetworkCommandBuilder;
 use crate::error::Result;
@@ -30,6 +31,8 @@ pub struct SshNetDnsArgs {
 }
 
 impl_common_args!(SshNetDnsArgs);
+
+#[mcp_standard_tool(name = "ssh_net_dns", group = "network", annotation = "read_only")]
 
 pub struct NetDnsTool;
 

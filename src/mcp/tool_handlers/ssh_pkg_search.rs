@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::package::{PackageCommandBuilder, validate_search_query};
@@ -27,6 +28,8 @@ pub struct SshPkgSearchArgs {
 }
 
 impl_common_args!(SshPkgSearchArgs);
+
+#[mcp_standard_tool(name = "ssh_pkg_search", group = "package", annotation = "read_only")]
 
 pub struct PkgSearchTool;
 

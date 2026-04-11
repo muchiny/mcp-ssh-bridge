@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::process::ProcessCommandBuilder;
 use crate::error::Result;
@@ -26,6 +27,8 @@ pub struct SshProcessKillArgs {
 }
 
 impl_common_args!(SshProcessKillArgs);
+
+#[mcp_standard_tool(name = "ssh_process_kill", group = "process", annotation = "destructive")]
 
 pub struct ProcessKillTool;
 
