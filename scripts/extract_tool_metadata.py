@@ -108,9 +108,12 @@ def parse_tool_group(source: str) -> Dict[str, str]:
     """
     body = extract_function_body(source, "tool_group")
     # Take only the match block (skip the inventory fast-path we already added).
+    # Post-migration (commit B) the match block is gone entirely — return
+    # an empty map so the caller falls back to the inventory-discovered
+    # attributes for every tool.
     match_start = body.find("match tool_name")
     if match_start < 0:
-        raise RuntimeError("tool_group: cannot find `match tool_name`")
+        return {}
     body = body[match_start:]
 
     result: Dict[str, str] = {}
