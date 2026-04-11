@@ -125,14 +125,34 @@ fn extract_string_literal(expr: &Expr) -> Option<String> {
 /// Generates an `inventory::submit!` registration alongside the
 /// struct so `mcp::registry::create_filtered_registry()` can build
 /// its handler map from a compile-time table.
+///
+/// The factory produced by this macro is `|| Arc::new(Struct)`.
+/// Use this for direct `impl ToolHandler for Struct` handlers where
+/// the struct is a unit type that can be constructed by name.
+/// For handlers wrapped in `StandardToolHandler<T>`, use the
+/// companion [`mcp_standard_tool`] attribute instead.
 #[proc_macro_attribute]
 pub fn mcp_tool(attr: TokenStream, item: TokenStream) -> TokenStream {
+    expand_mcp_tool(attr, item, /* wrap_in_standard_tool */ false)
+}
+
+/// Attach name / group / annotation metadata to a `StandardTool`
+/// marker type (the empty struct referenced by a type alias like
+/// `type SshDockerPsHandler = StandardToolHandler<DockerPsTool>`).
+///
+/// The generated factory produces
+/// `Arc::new(StandardToolHandler::<Marker>::new())` so the
+/// registered value is the wrapper handler, not the raw marker.
+#[proc_macro_attribute]
+pub fn mcp_standard_tool(attr: TokenStream, item: TokenStream) -> TokenStream {
+    expand_mcp_tool(attr, item, /* wrap_in_standard_tool */ true)
+}
+
+fn expand_mcp_tool(attr: TokenStream, item: TokenStream, wrap_standard: bool) -> TokenStream {
     let args = parse_macro_input!(attr as McpToolArgs);
 
     // Parse just enough of the item to extract the type name and
-    // re-emit it verbatim. Using `syn::Item` lets us accept either
-    // `struct S;` or more complex forms; for this project every
-    // handler uses `pub struct XxxHandler;`.
+    // re-emit it verbatim.
     let input = parse_macro_input!(item as syn::Item);
 
     let struct_name = match &input {
@@ -140,7 +160,7 @@ pub fn mcp_tool(attr: TokenStream, item: TokenStream) -> TokenStream {
         _ => {
             return syn::Error::new_spanned(
                 &input,
-                "#[mcp_tool] can only be applied to a struct",
+                "#[mcp_tool]/#[mcp_standard_tool] can only be applied to a struct",
             )
             .to_compile_error()
             .into();
@@ -155,9 +175,20 @@ pub fn mcp_tool(attr: TokenStream, item: TokenStream) -> TokenStream {
         "destructive" => {
             quote! { ::mcp_ssh_bridge::mcp::registry::ToolAnnotationKind::Destructive }
         }
-        // Already validated above; this arm is unreachable but kept
-        // for defensive codegen.
         _ => unreachable!(),
+    };
+
+    let factory_expr = if wrap_standard {
+        quote! {
+            || ::std::sync::Arc::new(
+                ::mcp_ssh_bridge::mcp::standard_tool::StandardToolHandler::<#struct_name>::new()
+            ) as ::std::sync::Arc<dyn ::mcp_ssh_bridge::ports::ToolHandler>
+        }
+    } else {
+        quote! {
+            || ::std::sync::Arc::new(#struct_name)
+                as ::std::sync::Arc<dyn ::mcp_ssh_bridge::ports::ToolHandler>
+        }
     };
 
     let expanded = quote! {
@@ -168,7 +199,7 @@ pub fn mcp_tool(attr: TokenStream, item: TokenStream) -> TokenStream {
                 name: #name_lit,
                 group: #group_lit,
                 annotation_kind: #annotation_ident,
-                factory: || ::std::sync::Arc::new(#struct_name) as ::std::sync::Arc<dyn ::mcp_ssh_bridge::ports::ToolHandler>,
+                factory: #factory_expr,
             }
         }
     };

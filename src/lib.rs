@@ -19,9 +19,10 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 /// callers to add `inventory` to their own `Cargo.toml`.
 pub use ::inventory as inventory;
 
-/// Re-export the `#[mcp_tool]` attribute macro so handler files
-/// only need `use mcp_ssh_bridge::mcp_tool;`.
-pub use mcp_ssh_bridge_macros::mcp_tool;
+/// Re-export the `#[mcp_tool]` and `#[mcp_standard_tool]` attribute
+/// macros so handler files only need
+/// `use mcp_ssh_bridge::{mcp_tool, mcp_standard_tool};`.
+pub use mcp_ssh_bridge_macros::{mcp_standard_tool, mcp_tool};
 
 #[cfg(feature = "cli")]
 pub mod cli;

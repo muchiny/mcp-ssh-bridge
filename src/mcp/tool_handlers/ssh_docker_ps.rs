@@ -11,6 +11,7 @@ use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +35,7 @@ pub struct SshDockerPsArgs {
 
 impl_common_args!(SshDockerPsArgs);
 
+#[mcp_standard_tool(name = "ssh_docker_ps", group = "docker", annotation = "read_only")]
 pub struct DockerPsTool;
 
 impl StandardTool for DockerPsTool {

@@ -1364,7 +1364,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshDockerLogsHandler,
         SshDockerNetworkInspectHandler,
         SshDockerNetworkLsHandler,
-        SshDockerPsHandler,
         SshDockerStatsHandler,
         SshDockerVolumeInspectHandler,
         SshDockerVolumeLsHandler,
@@ -1674,7 +1673,7 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshBackupListHandler::new()),
         Arc::new(SshBackupRestoreHandler::new()),
         // Docker
-        Arc::new(SshDockerPsHandler::new()),
+        // ssh_docker_ps — registered via #[mcp_standard_tool] inventory.
         Arc::new(SshDockerLogsHandler::new()),
         Arc::new(SshDockerInspectHandler::new()),
         Arc::new(SshDockerExecHandler::new()),
