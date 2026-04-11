@@ -18,6 +18,9 @@ use crate::ssh::{CommandOutput, ConnectionPool, PoolConfig, PoolStats, PooledCon
 /// create standalone connections behind feature flags.
 pub struct ExecutorRouter {
     ssh_pool: ConnectionPool,
+    /// Reqwest HTTPS client cache for `WinRM` hosts (Sprint 3 Phase B.4).
+    #[cfg(feature = "winrm")]
+    winrm_pool: crate::winrm::WinRmPool,
     /// Mock output for testing — when set, `get_connection_with_jump` returns
     /// a `ConnectionGuard::Mock` that returns this output instead of connecting.
     #[cfg(test)]
@@ -34,6 +37,8 @@ impl ExecutorRouter {
     pub fn with_defaults() -> Self {
         Self {
             ssh_pool: ConnectionPool::with_defaults(),
+            #[cfg(feature = "winrm")]
+            winrm_pool: crate::winrm::WinRmPool::new(),
             #[cfg(test)]
             mock_output: None,
             #[cfg(test)]
@@ -46,6 +51,8 @@ impl ExecutorRouter {
     pub fn new(ssh_pool_config: PoolConfig) -> Self {
         Self {
             ssh_pool: ConnectionPool::new(ssh_pool_config),
+            #[cfg(feature = "winrm")]
+            winrm_pool: crate::winrm::WinRmPool::new(),
             #[cfg(test)]
             mock_output: None,
             #[cfg(test)]
@@ -107,7 +114,10 @@ impl ExecutorRouter {
             }
             #[cfg(feature = "winrm")]
             Protocol::WinRm => {
-                let conn = crate::winrm::WinRmConnection::new(host_name, host_config, limits)?;
+                let conn = self
+                    .winrm_pool
+                    .get_connection(host_name, host_config, limits)
+                    .await?;
                 Ok(ConnectionGuard::WinRm(conn))
             }
             #[cfg(feature = "telnet")]
@@ -162,6 +172,8 @@ impl ExecutorRouter {
     /// Clean up idle and expired connections across all protocol pools.
     pub async fn cleanup(&self) {
         self.ssh_pool.cleanup().await;
+        #[cfg(feature = "winrm")]
+        self.winrm_pool.cleanup().await;
     }
 
     /// Get statistics for the SSH connection pool.
@@ -178,6 +190,8 @@ impl ExecutorRouter {
     /// Close all connections across all protocol pools.
     pub async fn close_all(&self) {
         self.ssh_pool.close_all().await;
+        #[cfg(feature = "winrm")]
+        self.winrm_pool.close_all().await;
     }
 }
 
@@ -340,6 +354,8 @@ impl ExecutorRouter {
     pub fn mock(output: CommandOutput) -> Self {
         Self {
             ssh_pool: ConnectionPool::with_defaults(),
+            #[cfg(feature = "winrm")]
+            winrm_pool: crate::winrm::WinRmPool::new(),
             mock_output: Some(output),
             mock_delay: None,
         }
@@ -355,6 +371,8 @@ impl ExecutorRouter {
     pub fn mock_with_delay(output: CommandOutput, delay: std::time::Duration) -> Self {
         Self {
             ssh_pool: ConnectionPool::with_defaults(),
+            #[cfg(feature = "winrm")]
+            winrm_pool: crate::winrm::WinRmPool::new(),
             mock_output: Some(output),
             mock_delay: Some(delay),
         }

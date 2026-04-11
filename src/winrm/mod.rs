@@ -5,6 +5,10 @@
 //!
 //! Feature-gated behind `winrm`.
 
+pub mod pool;
+
+pub use pool::{WinRmPool, WinRmPoolConfig};
+
 use std::time::{Duration, Instant};
 
 use reqwest::Client;
@@ -83,6 +87,42 @@ impl WinRmConnection {
             })?;
 
         info!(host = %host_name, endpoint = %config.endpoint, "WinRM connection created");
+
+        Ok(Self {
+            client,
+            config,
+            host_name: host_name.to_string(),
+            user: host_config.user.clone(),
+            password,
+            failed: false,
+        })
+    }
+
+    /// Build a `WinRmConnection` from a pooled `reqwest::Client`.
+    ///
+    /// Used by `WinRmPool::get_connection()` to reuse an existing
+    /// HTTPS connection pool instead of dialing a new one. The
+    /// caller provides a client that was built with the correct TLS
+    /// settings for the target host, plus the derived `WinRmConfig`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `host_config` does not use password
+    /// authentication.
+    pub fn from_parts(
+        host_name: &str,
+        host_config: &HostConfig,
+        client: Client,
+        config: WinRmConfig,
+    ) -> Result<Self> {
+        let password = match &host_config.auth {
+            crate::config::AuthConfig::Password { password } => password.to_string(),
+            _ => {
+                return Err(BridgeError::Config(format!(
+                    "WinRM host '{host_name}' requires password authentication"
+                )));
+            }
+        };
 
         Ok(Self {
             client,
