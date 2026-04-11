@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_firewall::WindowsFirewallCommandBuilder;
@@ -22,6 +23,8 @@ pub struct SshWinFirewallListArgs {
 }
 
 impl_common_args!(SshWinFirewallListArgs);
+
+#[mcp_standard_tool(name = "ssh_win_firewall_list", group = "windows_firewall", annotation = "read_only")]
 
 pub struct WinFirewallListTool;
 

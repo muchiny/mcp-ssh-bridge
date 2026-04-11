@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::iis::{IisCommandBuilder, validate_site_name};
@@ -20,6 +21,8 @@ pub struct SshIisRestartArgs {
 }
 
 impl_common_args!(SshIisRestartArgs);
+
+#[mcp_standard_tool(name = "ssh_iis_restart", group = "iis", annotation = "read_only")]
 
 pub struct IisRestartTool;
 

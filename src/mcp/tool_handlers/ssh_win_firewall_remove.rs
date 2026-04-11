@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_firewall::{
@@ -22,6 +23,8 @@ pub struct SshWinFirewallRemoveArgs {
 }
 
 impl_common_args!(SshWinFirewallRemoveArgs);
+
+#[mcp_standard_tool(name = "ssh_win_firewall_remove", group = "windows_firewall", annotation = "destructive")]
 
 pub struct WinFirewallRemoveTool;
 

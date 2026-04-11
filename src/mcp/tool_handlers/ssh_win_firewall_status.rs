@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_firewall::WindowsFirewallCommandBuilder;
@@ -19,6 +20,8 @@ pub struct SshWinFirewallStatusArgs {
 }
 
 impl_common_args!(SshWinFirewallStatusArgs);
+
+#[mcp_standard_tool(name = "ssh_win_firewall_status", group = "windows_firewall", annotation = "read_only")]
 
 pub struct WinFirewallStatusTool;
 

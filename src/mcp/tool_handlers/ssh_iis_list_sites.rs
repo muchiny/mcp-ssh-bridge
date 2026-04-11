@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::iis::IisCommandBuilder;
@@ -22,6 +23,8 @@ pub struct SshIisListSitesArgs {
 }
 
 impl_common_args!(SshIisListSitesArgs);
+
+#[mcp_standard_tool(name = "ssh_iis_list_sites", group = "iis", annotation = "read_only")]
 
 pub struct IisListSitesTool;
 

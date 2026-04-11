@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_update::WindowsUpdateCommandBuilder;
@@ -20,6 +21,8 @@ pub struct SshWinUpdateSearchArgs {
 }
 
 impl_common_args!(SshWinUpdateSearchArgs);
+
+#[mcp_standard_tool(name = "ssh_win_update_search", group = "windows_updates", annotation = "read_only")]
 
 pub struct WinUpdateSearchTool;
 

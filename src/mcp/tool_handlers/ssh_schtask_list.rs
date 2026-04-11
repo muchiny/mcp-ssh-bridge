@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::scheduled_task::ScheduledTaskCommandBuilder;
@@ -22,6 +23,8 @@ pub struct SshSchtaskListArgs {
 }
 
 impl_common_args!(SshSchtaskListArgs);
+
+#[mcp_standard_tool(name = "ssh_schtask_list", group = "scheduled_tasks", annotation = "read_only")]
 
 pub struct SchtaskListTool;
 
