@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::storage::StorageCommandBuilder;
@@ -35,6 +36,8 @@ pub struct SshStorageDfArgs {
 }
 
 impl_common_args!(SshStorageDfArgs);
+
+#[mcp_standard_tool(name = "ssh_storage_df", group = "storage", annotation = "read_only")]
 
 pub struct StorageDfTool;
 

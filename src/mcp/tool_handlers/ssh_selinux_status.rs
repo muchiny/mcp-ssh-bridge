@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::security_modules::SecurityModulesCommandBuilder;
 use crate::error::Result;
@@ -21,6 +22,8 @@ pub struct SshSelinuxStatusArgs {
 }
 
 impl_common_args!(SshSelinuxStatusArgs);
+
+#[mcp_standard_tool(name = "ssh_selinux_status", group = "security_modules", annotation = "read_only")]
 
 pub struct SelinuxStatusTool;
 

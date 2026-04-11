@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::user_management::UserCommandBuilder;
 use crate::error::Result;
@@ -31,6 +32,8 @@ pub struct SshUserListArgs {
 }
 
 impl_common_args!(SshUserListArgs);
+
+#[mcp_standard_tool(name = "ssh_user_list", group = "user_management", annotation = "read_only")]
 
 pub struct UserListTool;
 

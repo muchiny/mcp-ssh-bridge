@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::user_management::UserCommandBuilder;
 use crate::error::Result;
@@ -42,6 +43,8 @@ pub struct SshUserAddArgs {
 }
 
 impl_common_args!(SshUserAddArgs);
+
+#[mcp_standard_tool(name = "ssh_user_add", group = "user_management", annotation = "mutating")]
 
 pub struct UserAddTool;
 

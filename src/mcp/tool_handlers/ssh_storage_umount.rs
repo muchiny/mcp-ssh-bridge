@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::storage::StorageCommandBuilder;
@@ -31,6 +32,8 @@ pub struct SshStorageUmountArgs {
 }
 
 impl_common_args!(SshStorageUmountArgs);
+
+#[mcp_standard_tool(name = "ssh_storage_umount", group = "storage", annotation = "mutating")]
 
 pub struct StorageUmountTool;
 

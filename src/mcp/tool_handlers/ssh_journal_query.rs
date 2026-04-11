@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::journald::JournaldCommandBuilder;
 use crate::error::Result;
@@ -35,6 +36,8 @@ pub struct SshJournalQueryArgs {
 }
 
 impl_common_args!(SshJournalQueryArgs);
+
+#[mcp_standard_tool(name = "ssh_journal_query", group = "journald", annotation = "read_only")]
 
 pub struct JournalQueryTool;
 
