@@ -22,6 +22,10 @@ pub struct ExecutorRouter {
     /// a `ConnectionGuard::Mock` that returns this output instead of connecting.
     #[cfg(test)]
     mock_output: Option<CommandOutput>,
+    /// Mock `exec()` delay for cancellation tests. Only meaningful when
+    /// `mock_output` is also set.
+    #[cfg(test)]
+    mock_delay: Option<std::time::Duration>,
 }
 
 impl ExecutorRouter {
@@ -32,6 +36,8 @@ impl ExecutorRouter {
             ssh_pool: ConnectionPool::with_defaults(),
             #[cfg(test)]
             mock_output: None,
+            #[cfg(test)]
+            mock_delay: None,
         }
     }
 
@@ -42,6 +48,8 @@ impl ExecutorRouter {
             ssh_pool: ConnectionPool::new(ssh_pool_config),
             #[cfg(test)]
             mock_output: None,
+            #[cfg(test)]
+            mock_delay: None,
         }
     }
 
@@ -82,7 +90,11 @@ impl ExecutorRouter {
         // Test-only: return mock connection if configured
         #[cfg(test)]
         if let Some(ref output) = self.mock_output {
-            return Ok(ConnectionGuard::Mock(MockConnection::new(output.clone())));
+            let conn = match self.mock_delay {
+                Some(delay) => MockConnection::new_with_delay(output.clone(), delay),
+                None => MockConnection::new(output.clone()),
+            };
+            return Ok(ConnectionGuard::Mock(conn));
         }
 
         match host_config.protocol {
@@ -218,7 +230,7 @@ impl ConnectionGuard<'_> {
         match self {
             Self::Ssh(guard) => guard.exec(command, limits).await,
             #[cfg(test)]
-            Self::Mock(conn) => conn.exec(command, limits),
+            Self::Mock(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "winrm")]
             Self::WinRm(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "telnet")]
@@ -272,22 +284,43 @@ impl ConnectionGuard<'_> {
 pub struct MockConnection {
     output: CommandOutput,
     failed: bool,
+    /// Optional delay before `exec()` returns. Used by cancellation tests
+    /// to simulate a long-running command that can be interrupted by a
+    /// `CancellationToken` racing against it in a `tokio::select!`.
+    delay: Option<std::time::Duration>,
 }
 
 #[cfg(test)]
 impl MockConnection {
-    /// Create a mock connection that returns the given output.
+    /// Create a mock connection that returns the given output immediately.
     #[must_use]
     pub fn new(output: CommandOutput) -> Self {
         Self {
             output,
             failed: false,
+            delay: None,
         }
     }
 
-    /// Execute returns the pre-configured output.
-    #[allow(clippy::unnecessary_wraps)]
-    pub fn exec(&self, _command: &str, _limits: &LimitsConfig) -> Result<CommandOutput> {
+    /// Create a mock connection that sleeps `delay` before returning.
+    ///
+    /// Useful for cancellation tests: the mock blocks inside `exec().await`
+    /// long enough that a concurrent `cancel_request()` can fire and the
+    /// outer `tokio::select!` can observe it.
+    #[must_use]
+    pub fn new_with_delay(output: CommandOutput, delay: std::time::Duration) -> Self {
+        Self {
+            output,
+            failed: false,
+            delay: Some(delay),
+        }
+    }
+
+    /// Execute returns the pre-configured output, optionally after a delay.
+    pub async fn exec(&self, _command: &str, _limits: &LimitsConfig) -> Result<CommandOutput> {
+        if let Some(delay) = self.delay {
+            tokio::time::sleep(delay).await;
+        }
         Ok(self.output.clone())
     }
 
@@ -308,6 +341,22 @@ impl ExecutorRouter {
         Self {
             ssh_pool: ConnectionPool::with_defaults(),
             mock_output: Some(output),
+            mock_delay: None,
+        }
+    }
+
+    /// Create a mock router whose `exec()` blocks for the given duration
+    /// before returning.
+    ///
+    /// Used by cancellation tests to prove that a `CancellationToken` racing
+    /// the `exec().await` inside `StandardToolHandler` actually interrupts
+    /// the in-flight command.
+    #[must_use]
+    pub fn mock_with_delay(output: CommandOutput, delay: std::time::Duration) -> Self {
+        Self {
+            ssh_pool: ConnectionPool::with_defaults(),
+            mock_output: Some(output),
+            mock_delay: Some(delay),
         }
     }
 }

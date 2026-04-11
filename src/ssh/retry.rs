@@ -117,9 +117,24 @@ fn rand_simple() -> f64 {
 }
 
 /// Check if an error is retryable
+///
+/// `BridgeError::Cancelled` is explicitly non-retryable: a cancellation
+/// signal from the MCP client via `notifications/cancelled` must stop the
+/// operation immediately. Retrying would defeat the purpose of the cancel
+/// and could spin forever if the client re-sends the same request.
+///
+/// The `Cancelled` arm is documented explicitly even though it returns
+/// `false` like the wildcard — keeping it visible makes the cancellation
+/// contract obvious to future maintainers and lets the test suite assert
+/// on the intent (see `test_not_retryable_cancelled`).
 #[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "Cancelled arm kept explicit for documentation and test coverage"
+)]
 pub fn is_retryable_error(error: &BridgeError) -> bool {
     match error {
+        BridgeError::Cancelled => false,
         BridgeError::SshConnection { .. } | BridgeError::SshTimeout { .. } => true,
         BridgeError::SshExec { reason } => {
             reason.contains("channel") || reason.contains("connection")
@@ -856,6 +871,13 @@ mod tests {
         assert!(is_retryable_error(&BridgeError::SshExec {
             reason: "channel connection reset".to_string(),
         }));
+    }
+
+    #[test]
+    fn test_not_retryable_cancelled() {
+        // Cancelled errors must NEVER retry. Retrying would defeat the
+        // purpose of `notifications/cancelled` and could spin indefinitely.
+        assert!(!is_retryable_error(&BridgeError::Cancelled));
     }
 
     #[test]

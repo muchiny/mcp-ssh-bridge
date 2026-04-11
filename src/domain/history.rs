@@ -131,6 +131,46 @@ impl CommandHistory {
             .collect()
     }
 
+    /// Get entries newer than `since`, most recent first.
+    ///
+    /// Used by the MCP `history://recent?since=1h` resource query to expose a
+    /// time-scoped audit trail to agents.
+    pub fn recent_since(&self, since: DateTime<Utc>, limit: usize) -> Vec<HistoryEntry> {
+        let Ok(entries) = self.entries.lock() else {
+            return Vec::new();
+        };
+
+        entries
+            .iter()
+            .rev()
+            .filter(|e| e.timestamp >= since)
+            .take(limit)
+            .cloned()
+            .collect()
+    }
+
+    /// Get entries for a specific host that are newer than `since`.
+    ///
+    /// Used by the MCP `history://recent?host=X&since=1h` resource query.
+    pub fn for_host_since(
+        &self,
+        host: &str,
+        since: DateTime<Utc>,
+        limit: usize,
+    ) -> Vec<HistoryEntry> {
+        let Ok(entries) = self.entries.lock() else {
+            return Vec::new();
+        };
+
+        entries
+            .iter()
+            .rev()
+            .filter(|e| e.host == host && e.timestamp >= since)
+            .take(limit)
+            .cloned()
+            .collect()
+    }
+
     /// Get the total number of entries
     pub fn len(&self) -> usize {
         self.entries.lock().map(|e| e.len()).unwrap_or(0)
@@ -215,6 +255,45 @@ mod tests {
         assert_eq!(recent[0].command, "cmd4");
         assert_eq!(recent[2].command, "cmd2");
         // cmd1 was evicted
+    }
+
+    #[test]
+    fn test_history_recent_since_filters_older_entries() {
+        let history = CommandHistory::with_defaults();
+        history.record_success("h", "cmd_old", 0, 100);
+        history.record_success("h", "cmd_new", 0, 100);
+
+        // Arbitrary cutoff far in the past — both entries must pass.
+        let far_past = Utc::now() - chrono::Duration::days(365);
+        assert_eq!(history.recent_since(far_past, 10).len(), 2);
+
+        // Cutoff in the future — no entries.
+        let future = Utc::now() + chrono::Duration::days(1);
+        assert!(history.recent_since(future, 10).is_empty());
+    }
+
+    #[test]
+    fn test_history_for_host_since_combines_filters() {
+        let history = CommandHistory::with_defaults();
+        history.record_success("prod", "cmd1", 0, 100);
+        history.record_success("staging", "cmd2", 0, 100);
+        history.record_success("prod", "cmd3", 0, 100);
+
+        let cutoff = Utc::now() - chrono::Duration::hours(1);
+        let prod_entries = history.for_host_since("prod", cutoff, 10);
+        assert_eq!(prod_entries.len(), 2);
+        assert!(prod_entries.iter().all(|e| e.host == "prod"));
+    }
+
+    #[test]
+    fn test_history_for_host_since_respects_limit() {
+        let history = CommandHistory::with_defaults();
+        for i in 0..5 {
+            history.record_success("prod", &format!("cmd{i}"), 0, 100);
+        }
+        let cutoff = Utc::now() - chrono::Duration::hours(1);
+        let truncated = history.for_host_since("prod", cutoff, 2);
+        assert_eq!(truncated.len(), 2);
     }
 
     #[test]

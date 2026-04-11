@@ -53,6 +53,16 @@ pub struct ToolContext {
     pub session_recorder: Option<Arc<crate::security::SessionRecorder>>,
     /// Optional metrics collector for token consumption analytics.
     pub metrics: Option<Arc<crate::metrics::Metrics>>,
+    /// Cancellation token for the in-flight MCP request.
+    ///
+    /// When `Some`, long-running handlers (SSH exec, helm upgrade, ansible
+    /// playbook...) should race the underlying work against
+    /// `token.cancelled()` in a `tokio::select!` so that
+    /// `notifications/cancelled` from the MCP client can interrupt them.
+    ///
+    /// `None` disables cancellation — the default for test contexts and any
+    /// handler invoked outside an MCP request lifecycle.
+    pub cancel_token: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl ToolContext {
@@ -84,6 +94,7 @@ impl ToolContext {
             roots: Vec::new(),
             session_recorder: None,
             metrics: None,
+            cancel_token: None,
         }
     }
 
@@ -281,6 +292,56 @@ pub mod mock {
             roots: Vec::new(),
             session_recorder: None,
             metrics: None,
+            cancel_token: None,
+        }
+    }
+
+    /// Create a test context with a mock executor that blocks before returning.
+    ///
+    /// The mock SSH call sleeps for `delay` before returning `mock_output`.
+    /// Used by cancellation tests to verify that a `CancellationToken`
+    /// propagated via `ToolContext.cancel_token` races ahead of the sleep.
+    #[must_use]
+    #[allow(clippy::implicit_hasher)]
+    pub fn create_test_context_with_blocking_mock_executor(
+        hosts: HashMap<String, HostConfig>,
+        mock_output: crate::ssh::CommandOutput,
+        delay: std::time::Duration,
+    ) -> ToolContext {
+        let config = Config {
+            hosts,
+            ..Config::default()
+        };
+
+        let validator = Arc::new(CommandValidator::new(&SecurityConfig::default()));
+        let sanitizer = Arc::new(Sanitizer::with_defaults());
+        let audit_logger = Arc::new(AuditLogger::disabled());
+        let history = Arc::new(CommandHistory::new(&HistoryConfig::default()));
+
+        let execute_use_case = Arc::new(ExecuteCommandUseCase::new(
+            Arc::clone(&validator),
+            Arc::clone(&sanitizer),
+            Arc::clone(&audit_logger),
+            Arc::clone(&history),
+        ));
+
+        ToolContext {
+            config: Arc::new(config),
+            validator,
+            sanitizer,
+            audit_logger,
+            history,
+            connection_pool: Arc::new(ExecutorRouter::mock_with_delay(mock_output, delay)),
+            execute_use_case,
+            rate_limiter: Arc::new(RateLimiter::new(0)),
+            session_manager: Arc::new(SessionManager::new(SessionConfig::default())),
+            tunnel_manager: Arc::new(TunnelManager::new(20)),
+            output_cache: None,
+            runtime_max_output_chars: None,
+            roots: Vec::new(),
+            session_recorder: None,
+            metrics: None,
+            cancel_token: None,
         }
     }
 
@@ -328,6 +389,7 @@ pub mod mock {
             roots: Vec::new(),
             session_recorder: None,
             metrics: None,
+            cancel_token: None,
         }
     }
 
@@ -362,6 +424,7 @@ pub mod mock {
             roots: Vec::new(),
             session_recorder: None,
             metrics: None,
+            cancel_token: None,
         }
     }
 }

@@ -519,6 +519,40 @@ tool_groups:
     # recording: false         # Disable session recording tools
 
 # =============================================================================
+# OBSERVABILITY (feature = "otel")
+# =============================================================================
+# The bridge always exposes Prometheus-style counters via src/metrics.rs
+# (tool calls, SSH connections, token consumption). With the optional `otel`
+# feature compiled in, it can ALSO export distributed traces to any OTLP/gRPC
+# collector (Jaeger, Tempo, Grafana Agent, OTel Collector...).
+#
+# Spans emitted:
+#   - mcp.tool.execute         fields: tool, host, exit_code, bytes_out,
+#                                      duration_ms
+#   - ssh.connect              fields: host, port, duration_ms
+#   - ssh.connect_via_jump     fields: host, jump, port, duration_ms
+#   - ssh.pool.get             fields: host, has_jump, from_cache, duration_ms
+#
+# Environment variables read at startup (not YAML — kept in env so the same
+# config file works across staging/prod with different collectors):
+#
+#   OTEL_EXPORTER_OTLP_ENDPOINT   OTLP/gRPC endpoint (e.g. http://localhost:4317)
+#                                 When unset, OTLP export is disabled even if
+#                                 the `otel` feature is compiled in.
+#   OTEL_SERVICE_NAME             Service name in spans (default: mcp-ssh-bridge)
+#   RUST_LOG                      tracing-subscriber filter (default: info)
+#
+# Build with:
+#   cargo build --release --features "cli,otel"
+#
+# Quick local smoke test:
+#   docker run -d --name jaeger -p 16686:16686 -p 4317:4317 \
+#     -e COLLECTOR_OTLP_ENABLED=true jaegertracing/all-in-one:latest
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+#     ./target/release/mcp-ssh-bridge tool ssh_status
+#   # → open http://localhost:16686 and search service "mcp-ssh-bridge"
+
+# =============================================================================
 # SSH CONFIG AUTO-DISCOVERY
 # =============================================================================
 # Automatically discover hosts from your ~/.ssh/config file.

@@ -43,14 +43,22 @@ cloud = ["ssm", "azure", "gcp"]
 # Data reduction (jq filtering for tool output)
 jq = ["dep:jaq-core", "dep:jaq-std", "dep:jaq-json"]
 
+# OpenTelemetry tracing/metrics export (OTLP/gRPC) — optional observability layer
+otel = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:tracing-opentelemetry",
+]
+
 # Bundles
-full = ["cli", "mimalloc", "http", "jq"]
+full = ["cli", "mimalloc", "http", "jq", "otel"]
 air-gapped = ["winrm", "telnet"]
 all-protocols = ["winrm", "telnet", "k8s-exec", "serial", "ssm", "azure", "gcp"]
 
 [dependencies]
 # Async runtime (explicit features instead of "full" for smaller binary)
-tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "process", "time", "fs", "io-std", "macros", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "process", "time", "fs", "io-std", "macros", "sync", "signal"] }
 
 # SSH
 russh = "0.58"
@@ -124,6 +132,12 @@ aws-config = { version = "1", features = ["behavior-version-latest"], optional =
 jaq-core = { version = "3", optional = true }
 jaq-std = { version = "3", optional = true }
 jaq-json = { version = "2", features = ["serde"], optional = true }
+
+# OpenTelemetry tracing/metrics (optional, feature = "otel")
+opentelemetry = { version = "0.31", optional = true }
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"], optional = true }
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"], optional = true }
+tracing-opentelemetry = { version = "0.32", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

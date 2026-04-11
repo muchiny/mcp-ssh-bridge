@@ -161,7 +161,21 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
     }
 
     #[allow(clippy::too_many_lines)]
+    #[tracing::instrument(
+        name = "mcp.tool.execute",
+        skip(self, args, ctx),
+        fields(
+            tool = T::NAME,
+            host = tracing::field::Empty,
+            exit_code = tracing::field::Empty,
+            bytes_out = tracing::field::Empty,
+            duration_ms = tracing::field::Empty,
+        )
+    )]
     async fn execute(&self, args: Option<Value>, ctx: &ToolContext) -> Result<ToolCallResult> {
+        // RAII guard records `duration_ms` on the span regardless of exit path.
+        let _timer = crate::telemetry::SpanDurationGuard::start();
+
         // Step 0: Extract universal data reduction params before tool-specific parsing
         let Some(mut v) = args else {
             return Err(BridgeError::McpMissingParam {
@@ -176,6 +190,7 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
 
         // Step 2: Host config lookup
         let host = args.host().to_string();
+        tracing::Span::current().record("host", host.as_str());
         let host_config = ctx
             .config
             .hosts
@@ -257,7 +272,25 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         // other custom handlers preserve the user's native locale.
         let command = format!("LC_ALL=C {command}");
 
-        // Step 11: Execute with retry
+        // Step 11: Execute with retry and cancellation support.
+        //
+        // The `tokio::select!` is *inside* the retry closure so a pending
+        // retry backoff (`sleep` inside `with_retry_if`) does NOT block the
+        // cancel. On each retry, a fresh `select!` races the new exec
+        // against `token.cancelled()`.
+        //
+        // The `biased` directive guarantees the cancel branch is polled
+        // first, giving the cancellation maximum reactivity.
+        //
+        // `is_retryable_error` returns `false` for `BridgeError::Cancelled`
+        // (see `src/ssh/retry.rs`), so once the cancel branch wins the
+        // outer loop bails immediately without retrying.
+        //
+        // russh channels inside `conn.exec()` are dropped when the future
+        // is cancelled. We poison the pooled connection with
+        // `mark_failed()` to prevent reuse of a potentially half-closed
+        // channel on the next request.
+        let cancel_token = ctx.cancel_token.clone();
         let output = with_retry_if(
             &retry_config,
             T::NAME,
@@ -266,7 +299,20 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
                     .connection_pool
                     .get_connection_with_jump(&host, host_config, &limits, jump_host)
                     .await?;
-                match conn.exec(&command, &limits).await {
+
+                let result = if let Some(token) = &cancel_token {
+                    tokio::select! {
+                        biased;
+                        () = token.cancelled() => {
+                            Err(BridgeError::Cancelled)
+                        }
+                        r = conn.exec(&command, &limits) => r,
+                    }
+                } else {
+                    conn.exec(&command, &limits).await
+                };
+
+                match result {
                     Ok(output) => Ok(output),
                     Err(e) => {
                         conn.mark_failed();
@@ -356,6 +402,13 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         } else {
             T::post_process(result, &args, &raw_output, &dr)
         };
+
+        // Record telemetry fields for this successful execution.
+        let span = tracing::Span::current();
+        span.record("exit_code", response.exit_code);
+        #[allow(clippy::cast_possible_truncation)]
+        span.record("bytes_out", post_reduction_chars as u64);
+
         Ok(auto_populate_structured_content(result))
     }
 }
@@ -1109,6 +1162,205 @@ mod tests {
             panic!("Expected text content")
         };
         assert!(text.contains("hello world"));
+    }
+
+    /// Verifies that `StandardToolHandler::execute` emits a span named
+    /// `mcp.tool.execute` with the expected structured fields (`tool`,
+    /// `host`, `exit_code`, `bytes_out`, `duration_ms`). This is the
+    /// integration contract consumed by the `otel` feature — if it breaks,
+    /// Grafana/Jaeger dashboards built on these fields stop working.
+    ///
+    /// Uses `flavor = "current_thread"` so the tracing subscriber installed
+    /// via `set_default` stays thread-local for the whole future.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_execute_emits_mcp_tool_execute_span_with_fields() {
+        use std::sync::{Arc, Mutex};
+        use tracing::instrument::WithSubscriber;
+        use tracing_subscriber::fmt::MakeWriter;
+        use tracing_subscriber::fmt::format::FmtSpan;
+
+        // Shared buffer writer so we can inspect what the subscriber emitted.
+        #[derive(Clone)]
+        struct SharedWriter(Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for SharedWriter {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                if let Ok(mut inner) = self.0.lock() {
+                    inner.extend_from_slice(buf);
+                }
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        impl<'a> MakeWriter<'a> for SharedWriter {
+            type Writer = SharedWriter;
+            fn make_writer(&'a self) -> Self::Writer {
+                self.clone()
+            }
+        }
+
+        let buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+        let writer = SharedWriter(buf.clone());
+
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(writer)
+            .with_ansi(false)
+            .with_target(false)
+            .with_span_events(FmtSpan::CLOSE)
+            .with_max_level(tracing::Level::INFO)
+            .finish();
+
+        // Use `WithSubscriber` to attach the subscriber to the future rather
+        // than the thread. This is robust against parallel tests installing
+        // competing subscribers on other threads — `set_default` is
+        // thread-local and leaks across task migrations in multi-threaded
+        // runtimes, causing flaky parallel runs.
+        let handler = StandardToolHandler::<MockTool>::new();
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("span test"),
+        );
+
+        async {
+            handler
+                .execute(Some(json!({"host": "server1"})), &ctx)
+                .await
+                .expect("handler execute should succeed");
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        let captured = String::from_utf8(
+            buf.lock()
+                .expect("buffer mutex should not be poisoned")
+                .clone(),
+        )
+        .expect("captured output must be valid UTF-8");
+
+        // The span name must appear — proves the instrument attribute is wired.
+        assert!(
+            captured.contains("mcp.tool.execute"),
+            "expected 'mcp.tool.execute' span, got: {captured}"
+        );
+        // Tool name is set at span creation.
+        assert!(
+            captured.contains("tool=\"mock_tool\"") || captured.contains("tool=mock_tool"),
+            "expected tool field = mock_tool, got: {captured}"
+        );
+        // Host is recorded after Step 2.
+        assert!(
+            captured.contains("host=\"server1\"") || captured.contains("host=server1"),
+            "expected host field = server1, got: {captured}"
+        );
+        // Drop guard recorded duration on CLOSE.
+        assert!(
+            captured.contains("duration_ms="),
+            "expected duration_ms field to be populated, got: {captured}"
+        );
+        // exit_code recorded on the success path.
+        assert!(
+            captured.contains("exit_code=0") || captured.contains("exit_code=\"0\""),
+            "expected exit_code=0, got: {captured}"
+        );
+    }
+
+    // ============== Cancellation (commit 6) ==============
+
+    /// End-to-end proof that a `CancellationToken` propagated via
+    /// `ToolContext.cancel_token` races ahead of a blocking `conn.exec()`
+    /// inside the `with_retry_if` closure, yielding `BridgeError::Cancelled`.
+    ///
+    /// The mock executor sleeps 2s; we fire the cancel after 50ms and
+    /// assert the handler returns in well under 2s.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_cancel_token_interrupts_in_flight_exec() {
+        use std::time::Duration;
+        use tokio_util::sync::CancellationToken;
+
+        let handler = StandardToolHandler::<MockTool>::new();
+        let mut ctx = crate::ports::mock::create_test_context_with_blocking_mock_executor(
+            server1_hosts(),
+            mock_output("should never arrive"),
+            Duration::from_secs(2), // mock sleeps 2 seconds
+        );
+
+        let token = CancellationToken::new();
+        ctx.cancel_token = Some(token.clone());
+
+        // Spawn the handler and the canceller concurrently.
+        let cancel_task = tokio::spawn({
+            let token = token.clone();
+            async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                token.cancel();
+            }
+        });
+
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await;
+
+        cancel_task.await.expect("canceller task panicked");
+
+        // The handler must return Err(BridgeError::Cancelled), NOT the
+        // mock output.
+        match result {
+            Err(BridgeError::Cancelled) => {}
+            Err(other) => panic!("expected Cancelled, got: {other:?}"),
+            Ok(ok) => panic!("expected Cancelled error, got success: {ok:?}"),
+        }
+    }
+
+    /// When no cancel token is present (legacy path), the handler must
+    /// still run the blocking mock to completion.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_no_cancel_token_runs_to_completion() {
+        use std::time::Duration;
+
+        let handler = StandardToolHandler::<MockTool>::new();
+        // ctx.cancel_token stays None.
+        let ctx = crate::ports::mock::create_test_context_with_blocking_mock_executor(
+            server1_hosts(),
+            mock_output("finished"),
+            Duration::from_millis(100),
+        );
+
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .expect("execute should succeed without cancel token");
+
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("expected text content");
+        };
+        assert!(text.contains("finished"), "output: {text}");
+    }
+
+    /// When the cancel token is present but never fires, the handler must
+    /// still return the mock output normally.
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_cancel_token_never_fired_completes_normally() {
+        use std::time::Duration;
+        use tokio_util::sync::CancellationToken;
+
+        let handler = StandardToolHandler::<MockTool>::new();
+        let mut ctx = crate::ports::mock::create_test_context_with_blocking_mock_executor(
+            server1_hosts(),
+            mock_output("ok"),
+            Duration::from_millis(50),
+        );
+        ctx.cancel_token = Some(CancellationToken::new());
+
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await
+            .expect("execute should succeed when cancel never fires");
+
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("expected text content");
+        };
+        assert!(text.contains("ok"), "output: {text}");
     }
 
     #[tokio::test]

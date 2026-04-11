@@ -308,6 +308,7 @@ mod tests {
             roots: Vec::new(),
             session_recorder: None,
             metrics: None,
+            cancel_token: None,
         }
     }
 

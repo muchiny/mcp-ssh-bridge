@@ -118,6 +118,21 @@ impl JsonRpcError {
             data: None,
         }
     }
+
+    /// MCP 2025-11-25 request cancellation error.
+    ///
+    /// Emitted when a `notifications/cancelled` fires while a request is
+    /// still in flight. Code `-32800` lives in the implementation-defined
+    /// server error range (-32000 to -32099 for standard JSON-RPC, but MCP
+    /// uses -32800 by convention for cancellations).
+    #[must_use]
+    pub fn cancelled(reason: Option<String>) -> Self {
+        Self {
+            code: -32800,
+            message: reason.unwrap_or_else(|| "Request cancelled by client".to_string()),
+            data: None,
+        }
+    }
 }
 
 // ============================================================================
@@ -959,6 +974,21 @@ mod tests {
     fn test_error_internal_error_code() {
         let error = JsonRpcError::internal_error("Database connection failed");
         assert_eq!(error.code, -32603);
+    }
+
+    #[test]
+    fn test_error_cancelled_code_default_message() {
+        let error = JsonRpcError::cancelled(None);
+        assert_eq!(error.code, -32800);
+        assert_eq!(error.message, "Request cancelled by client");
+        assert!(error.data.is_none());
+    }
+
+    #[test]
+    fn test_error_cancelled_code_custom_reason() {
+        let error = JsonRpcError::cancelled(Some("User pressed ESC".to_string()));
+        assert_eq!(error.code, -32800);
+        assert_eq!(error.message, "User pressed ESC");
     }
 
     // ============== MCP Types Serialization Tests ==============

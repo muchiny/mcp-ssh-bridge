@@ -182,6 +182,7 @@ fn build_ctx(host_config: HostConfig) -> ToolContext {
         roots: Vec::new(),
         session_recorder: None,
         metrics: None,
+        cancel_token: None,
     }
 }
 
@@ -1030,6 +1031,7 @@ async fn test_security_command_denied() {
         roots: Vec::new(),
         session_recorder: None,
         metrics: None,
+        cancel_token: None,
     };
 
     let handler = SshExecHandler;

@@ -128,6 +128,7 @@ fn build_docker_ctx() -> ToolContext {
         roots: Vec::new(),
         session_recorder: None,
         metrics: None,
+        cancel_token: None,
     }
 }
 

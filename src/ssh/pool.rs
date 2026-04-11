@@ -116,6 +116,16 @@ impl ConnectionPool {
     ///
     /// Returns an error if a new connection cannot be established when no pooled
     /// connection is available.
+    #[tracing::instrument(
+        name = "ssh.pool.get",
+        skip(self, host_config, limits, jump_host),
+        fields(
+            host = %host_name,
+            has_jump = jump_host.is_some(),
+            from_cache = tracing::field::Empty,
+            duration_ms = tracing::field::Empty,
+        )
+    )]
     pub async fn get_connection_with_jump(
         &self,
         host_name: &str,
@@ -123,15 +133,19 @@ impl ConnectionPool {
         limits: &LimitsConfig,
         jump_host: Option<(&str, &HostConfig)>,
     ) -> Result<PooledConnectionGuard<'_>> {
+        let _timer = crate::telemetry::SpanDurationGuard::start();
+
         // Try to get an existing connection
         if let Some(conn) = self.try_get_existing(host_name).await {
             debug!(host = %host_name, "Reusing pooled connection");
+            tracing::Span::current().record("from_cache", true);
             return Ok(PooledConnectionGuard {
                 pool: self,
                 host_name: host_name.to_string(),
                 connection: Some(conn),
             });
         }
+        tracing::Span::current().record("from_cache", false);
 
         // Create a new connection (direct or via jump host)
         let client = if let Some((jump_name, jump_config)) = jump_host {

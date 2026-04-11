@@ -53,6 +53,7 @@ fn build_blacklist_ctx(blacklist: Vec<String>) -> ToolContext {
     build_ctx_with_mode(SecurityMode::Permissive, vec![], blacklist)
 }
 
+#[allow(clippy::too_many_lines)]
 fn build_ctx_with_mode(
     mode: SecurityMode,
     whitelist: Vec<String>,
@@ -162,6 +163,7 @@ fn build_ctx_with_mode(
         roots: Vec::new(),
         session_recorder: None,
         metrics: None,
+        cancel_token: None,
     }
 }
 

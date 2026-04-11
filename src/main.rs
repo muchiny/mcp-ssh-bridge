@@ -3,15 +3,17 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::Parser;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
 
 use mcp_ssh_bridge::McpServer;
 use mcp_ssh_bridge::cli::{
-    Cli, Commands, run_config_diff, run_describe_tool, run_download, run_exec, run_history,
-    run_list_tools, run_status, run_tool, run_upload, run_validate,
+    Cli, Commands, DaemonAction, DataReductionFlags, run_config_diff, run_describe_tool,
+    run_download, run_exec, run_history, run_list_tools, run_status, run_tool, run_upload,
+    run_validate,
 };
 use mcp_ssh_bridge::config::{default_config_path, load_config};
+use mcp_ssh_bridge::daemon;
 use mcp_ssh_bridge::error::BridgeError;
+use mcp_ssh_bridge::telemetry::{TelemetryConfig, init_telemetry, shutdown_telemetry};
 
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
@@ -27,16 +29,10 @@ async fn main() -> Result<()> {
         is_mcp_mode = is_mcp_mode || matches!(cli.command, Some(Commands::ServeHttp { .. }));
     }
 
-    // Initialize logging to stderr (stdout is used for MCP protocol in MCP mode)
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .with_writer(std::io::stderr)
-        .with_target(false)
-        // In CLI mode, use a more compact format
-        .with_ansi(!is_mcp_mode)
-        .init();
+    // Initialize telemetry (logging + optional OTLP export via `otel` feature)
+    // Stdout is used for MCP protocol in MCP mode, so logs go to stderr.
+    let telemetry_config = TelemetryConfig::from_env(is_mcp_mode);
+    init_telemetry(&telemetry_config).context("Failed to initialize telemetry")?;
 
     // Get config path
     let config_path = cli.config.unwrap_or_else(default_config_path);
@@ -135,9 +131,21 @@ async fn main() -> Result<()> {
                 }
                 return Ok(());
             }
-            let exit_code = run_tool(config, &tool_name, &args, json_args.as_deref(), cli.json)
-                .await
-                .map_err(map_exit_code)?;
+            let data_reduction = DataReductionFlags {
+                jq: cli.jq.clone(),
+                columns: cli.columns.clone(),
+                limit: cli.limit,
+            };
+            let exit_code = run_tool(
+                config,
+                &tool_name,
+                &args,
+                json_args.as_deref(),
+                cli.json,
+                data_reduction,
+            )
+            .await
+            .map_err(map_exit_code)?;
             if exit_code != 0 {
                 std::process::exit(1);
             }
@@ -194,6 +202,37 @@ async fn main() -> Result<()> {
             )
             .await?;
         }
+        Some(Commands::Daemon { action }) => match action {
+            DaemonAction::Start { socket_path } => {
+                let path = socket_path.unwrap_or_else(daemon::default_socket_path);
+                info!(path = %path.display(), "Starting daemon");
+                daemon::run_daemon(config, &path).await?;
+            }
+            DaemonAction::Stop { socket_path } => {
+                let path = socket_path.unwrap_or_else(daemon::default_socket_path);
+                daemon::stop_daemon(&path)?;
+                println!("Daemon stopped.");
+            }
+            DaemonAction::Status { socket_path } => {
+                let path = socket_path.unwrap_or_else(daemon::default_socket_path);
+                match daemon::daemon_status(&path)? {
+                    daemon::DaemonStatus::NotRunning => {
+                        println!("Daemon is not running.");
+                        println!("Socket path: {}", path.display());
+                    }
+                    daemon::DaemonStatus::Running { pid, socket } => {
+                        println!("Daemon is running.");
+                        println!("  PID:    {pid}");
+                        println!("  Socket: {}", socket.display());
+                    }
+                    daemon::DaemonStatus::Stale { pid } => {
+                        println!("Daemon is stopped (stale PID file).");
+                        println!("  Last PID: {pid}");
+                        println!("  Socket:   {}", path.display());
+                    }
+                }
+            }
+        },
         Some(Commands::Download {
             host,
             remote_path,
@@ -219,6 +258,7 @@ async fn main() -> Result<()> {
         }
     }
 
+    shutdown_telemetry();
     Ok(())
 }
 

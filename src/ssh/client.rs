@@ -201,11 +201,21 @@ impl SshClient {
     /// - Host key verification fails
     /// - Authentication fails (invalid credentials, key, or agent)
     #[must_use = "the SSH client must be used or closed"]
+    #[tracing::instrument(
+        name = "ssh.connect",
+        skip(host, limits),
+        fields(
+            host = %host_name,
+            port = host.port,
+            duration_ms = tracing::field::Empty,
+        )
+    )]
     pub async fn connect(
         host_name: &str,
         host: &HostConfig,
         limits: &LimitsConfig,
     ) -> Result<Self> {
+        let _timer = crate::telemetry::SpanDurationGuard::start();
         let handle = Self::establish_connection(host_name, host, limits).await?;
         Self::authenticate(handle, host_name, host).await
     }
@@ -224,6 +234,16 @@ impl SshClient {
     /// - Connection to target through tunnel fails
     /// - Authentication on target fails
     #[must_use = "the SSH client must be used or closed"]
+    #[tracing::instrument(
+        name = "ssh.connect_via_jump",
+        skip(host, jump_host, limits),
+        fields(
+            host = %host_name,
+            jump = %jump_host_name,
+            port = host.port,
+            duration_ms = tracing::field::Empty,
+        )
+    )]
     pub async fn connect_via_jump(
         host_name: &str,
         host: &HostConfig,
@@ -231,6 +251,7 @@ impl SshClient {
         jump_host: &HostConfig,
         limits: &LimitsConfig,
     ) -> Result<Self> {
+        let _timer = crate::telemetry::SpanDurationGuard::start();
         tracing::info!(
             host = %host_name,
             jump = %jump_host_name,

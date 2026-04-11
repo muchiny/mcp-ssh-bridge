@@ -18,12 +18,22 @@ mcp-ssh-bridge --config /path/to/config.yaml
 
 ## Structure
 
-The configuration file has four main sections:
+The configuration file is organised in these top-level sections:
 
-- **hosts** - SSH host definitions (hostname, port, user, auth, etc.)
-- **security** - Command validation rules (mode, whitelist, blacklist)
-- **limits** - Timeouts, output limits, retry settings
-- **audit** - Audit logging configuration
+- **hosts** — SSH host definitions (hostname, port, user, auth, jump, etc.)
+- **security** — Command validation (mode, whitelist, blacklist, RBAC)
+- **limits** — Timeouts, output limits, retry, rate-limit settings
+- **audit** — Audit logging configuration (path, format, redaction)
+- **sessions** — Persistent tmux session configuration
+- **tool_groups** — Per-group feature flags (disable what you don't need)
+- **ssh_config** — Auto-discovery from `~/.ssh/config`
+- **http** — Optional Streamable HTTP transport + OAuth 2.1 settings
+- **rbac** — Role-based access control
+- **awx** — Optional AWX/Ansible Tower integration
+
+Observability (OpenTelemetry tracing + Prometheus metrics) is configured
+via **environment variables**, not YAML — see the Observability section
+below.
 
 ## Quick Start
 
@@ -152,7 +162,7 @@ hosts:
 
 ## Tool Groups
 
-All 47 tool groups (337 tools) are enabled by default. Disable groups you don't need:
+All 74 tool groups (357 tools) are enabled by default. Disable groups you don't need:
 
 ```yaml
 tool_groups:
@@ -161,6 +171,140 @@ tool_groups:
     terraform: false
     hyperv: false
 ```
+
+Run `mcp-ssh-bridge list-tools --groups-only` to see the current list of
+groups and tool counts for your installed version.
+
+## Observability (feature `otel`)
+
+The bridge always tracks Prometheus-style counters (tool calls, SSH
+connections, token consumption — see `src/metrics.rs`). With the optional
+`otel` feature compiled in, it also exports distributed traces to any
+OTLP/gRPC collector (Jaeger, Tempo, Grafana Agent, OTel Collector…).
+
+Spans emitted:
+
+| Span                   | Fields                                               |
+|------------------------|------------------------------------------------------|
+| `mcp.tool.execute`     | `tool`, `host`, `exit_code`, `bytes_out`, `duration_ms` |
+| `ssh.connect`          | `host`, `port`, `duration_ms`                        |
+| `ssh.connect_via_jump` | `host`, `jump`, `port`, `duration_ms`                |
+| `ssh.pool.get`         | `host`, `has_jump`, `from_cache`, `duration_ms`      |
+
+Environment variables read at startup:
+
+| Variable                      | Default            | Purpose                               |
+|-------------------------------|--------------------|---------------------------------------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | (unset → disabled) | OTLP/gRPC collector URL               |
+| `OTEL_SERVICE_NAME`           | `mcp-ssh-bridge`   | Service name reported in spans        |
+| `RUST_LOG`                    | `info`             | `tracing-subscriber` filter directive |
+
+Build with:
+
+```bash
+cargo build --release --features "cli,otel"
+# or include in the "full" bundle:
+cargo build --release --features full
+```
+
+Local smoke test with Jaeger:
+
+```bash
+docker run -d --name jaeger -p 16686:16686 -p 4317:4317 \
+  -e COLLECTOR_OTLP_ENABLED=true jaegertracing/all-in-one:latest
+
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+  ./target/release/mcp-ssh-bridge tool ssh_status
+
+# → open http://localhost:16686 and search service "mcp-ssh-bridge"
+```
+
+## Daemon mode (shared SSH pool)
+
+Each CLI invocation normally starts a fresh process that builds its own
+SSH connection pool, pays the ~95 ms handshake, runs the command, and
+dies. For workflows that launch many commands in a row against the same
+host, those handshakes add up — measured overhead in Sprint 1 was
+**~120 ms per invocation** on a LAN-direct Raspberry Pi.
+
+A local daemon amortizes that cost by keeping the pool alive between
+invocations. The daemon listens on a Unix socket
+(`$XDG_RUNTIME_DIR/mcp-ssh-bridge.sock` by default, or
+`/tmp/mcp-ssh-bridge-$UID.sock` on systems without XDG runtime). CLI
+commands detect the socket and forward their `tools/call` requests over
+it; if the socket is absent, they transparently fall back to the
+stateless path.
+
+### Usage
+
+```bash
+# Start the daemon in the foreground (blocks until Ctrl+C)
+mcp-ssh-bridge daemon start
+
+# In another terminal: issue tool calls — they route through the daemon
+mcp-ssh-bridge tool ssh_exec host=raspberry command="uptime"
+mcp-ssh-bridge tool ssh_docker_ps host=raspberry
+# The first call pays the handshake; subsequent calls reuse the pool.
+
+# Check daemon status
+mcp-ssh-bridge daemon status
+
+# Stop the daemon (sends SIGTERM)
+mcp-ssh-bridge daemon stop
+```
+
+Override the socket path with `--socket-path` on any `daemon`
+subcommand. Useful for testing or multi-user systems where you need to
+avoid the default `/tmp` fallback.
+
+### What the daemon supports in this release
+
+- `tools/call`, `tools/list`, `resources/read`, `prompts/get`, all
+  standard read/execute methods.
+- Full cancellation via `notifications/cancelled` (thanks to the Sprint
+  2 cancellation work).
+- Structured tracing / OTLP export (requires `--features otel`).
+
+### What the daemon does NOT support yet
+
+- **Server-initiated notifications** (elicitation, sampling, logging).
+  These need per-connection notification channels that the daemon
+  doesn't yet plumb. If your tool requires elicitation, use the
+  stateless path (stop the daemon, run the tool directly).
+- **Batch requests**. JSON-RPC batches are rejected in daemon mode.
+- **Config hot-reload from inside the daemon**. Restart the daemon
+  after editing `config.yaml`.
+
+These limitations are tracked for Sprint 3, which will unify the
+`Transport` trait and bring the daemon to feature parity with stdio
+mode.
+
+### Security notes
+
+- The socket inherits the permissions of `$XDG_RUNTIME_DIR` — on modern
+  Linux, that directory is `0700` and owned by your user, so only you
+  can connect.
+- The daemon uses a PID lock file (`<socket>.pid`) to prevent
+  double-start. If the daemon crashes, the next `daemon start` detects
+  the stale PID and takes over automatically.
+
+## CLI data-reduction flags
+
+Three ergonomic global flags short-circuit the universal data-reduction
+tool parameters so you don't have to type `jq_filter=` / `columns=` /
+`limit=` on every invocation:
+
+```bash
+# jq filter (requires tool output to be JSON)
+mcp-ssh-bridge --json --jq '.items[].name' tool ssh_k8s_get host=k8s resource=pods
+
+# Column selection + row limit on tabular output
+mcp-ssh-bridge --json --columns user,pid,command --limit 10 tool ssh_process_list host=prod
+```
+
+Explicit `key=value` arguments always win — the flags only fill in
+parameters you did NOT set explicitly. So `--limit 20` combined with
+`limit=2` yields `limit=2`.
 
 ## SSH Config Auto-Discovery
 

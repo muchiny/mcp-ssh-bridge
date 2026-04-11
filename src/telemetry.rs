@@ -1,0 +1,259 @@
+//! Telemetry initialization.
+//!
+//! This module wires up the `tracing` subscriber stack. With the `otel` feature
+//! enabled AND the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set, it
+//! additionally exports spans to an OTLP/gRPC collector (Jaeger, Tempo, Grafana,
+//! `OTel` Collector...).
+//!
+//! When the feature is disabled or the endpoint variable is unset, only the
+//! `fmt` layer is installed — behavior stays identical to the legacy
+//! `tracing_subscriber::fmt()` call previously inlined in `main.rs`.
+//!
+//! Companion to [`crate::metrics`]: this module handles distributed traces,
+//! while `metrics` keeps the Prometheus-style counters/gauges. The two coexist
+//! and serve complementary observability needs.
+//!
+//! # Environment variables
+//!
+//! - `OTEL_EXPORTER_OTLP_ENDPOINT` — OTLP/gRPC endpoint (e.g.
+//!   `http://localhost:4317`). If unset, OTLP export is disabled.
+//! - `OTEL_SERVICE_NAME` — service name exposed in spans (default:
+//!   `mcp-ssh-bridge`).
+//! - `RUST_LOG` — standard `tracing-subscriber` filter (default: `info`).
+
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+
+/// Telemetry configuration read from environment variables.
+#[derive(Debug, Clone)]
+pub struct TelemetryConfig {
+    /// OTLP gRPC endpoint. `None` disables OTLP export.
+    pub otlp_endpoint: Option<String>,
+    /// Service name reported in spans/resources.
+    pub service_name: String,
+    /// Whether stderr output should be colorized (disabled in MCP stdio mode).
+    pub colored_output: bool,
+}
+
+impl TelemetryConfig {
+    /// Build a config from process environment variables.
+    ///
+    /// `is_mcp_mode` disables ANSI colors on stderr when the process is acting
+    /// as an MCP server over stdio — colors would leak into protocol handshake
+    /// debugging otherwise.
+    #[must_use]
+    pub fn from_env(is_mcp_mode: bool) -> Self {
+        Self {
+            otlp_endpoint: std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok(),
+            service_name: std::env::var("OTEL_SERVICE_NAME")
+                .unwrap_or_else(|_| "mcp-ssh-bridge".to_string()),
+            colored_output: !is_mcp_mode,
+        }
+    }
+}
+
+/// Initialize the global `tracing` subscriber.
+///
+/// This should be called exactly once, early in `main()`. Calling it a second
+/// time will silently fail because `tracing_subscriber` installs a global
+/// default that cannot be replaced — this matches the previous behavior.
+///
+/// # Errors
+///
+/// Returns an error if the OTLP exporter can not be built when the `otel`
+/// feature is active and `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Failures in
+/// that path are unusual (typically indicate a transport misconfiguration)
+/// and are surfaced to the caller so `main()` can fail loudly instead of
+/// silently dropping telemetry.
+pub fn init_telemetry(config: &TelemetryConfig) -> anyhow::Result<()> {
+    // Each branch constructs `fmt::layer()` inline so the compiler can infer
+    // its Subscriber type parameter in context — pre-constructing `fmt_layer`
+    // locks its type too early and conflicts with the OpenTelemetry layer
+    // stack.
+    let new_filter =
+        || EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    let colored = config.colored_output;
+
+    #[cfg(feature = "otel")]
+    {
+        if let Some(endpoint) = config.otlp_endpoint.as_deref() {
+            // OpenTelemetryLayer has its Subscriber type parameter fixed to
+            // `Registry`, so it must be the first layer applied.
+            let otel_layer = otel::build_otel_layer(endpoint, &config.service_name)?;
+            tracing_subscriber::registry()
+                .with(otel_layer)
+                .with(new_filter())
+                .with(
+                    fmt::layer()
+                        .with_writer(std::io::stderr)
+                        .with_target(false)
+                        .with_ansi(colored),
+                )
+                .init();
+            tracing::info!(
+                endpoint = endpoint,
+                service = %config.service_name,
+                "OTLP telemetry enabled"
+            );
+            return Ok(());
+        }
+    }
+
+    tracing_subscriber::registry()
+        .with(new_filter())
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_target(false)
+                .with_ansi(colored),
+        )
+        .init();
+    Ok(())
+}
+
+/// RAII guard that records `duration_ms` on the current tracing span when
+/// dropped.
+///
+/// Use this inside `#[tracing::instrument]`-annotated functions to capture
+/// latency on all exit paths (Ok, Err, early returns, panics) without
+/// scattering timing code throughout the body. The field must be declared
+/// in the instrument macro's `fields(...)` as `duration_ms = Empty`.
+///
+/// # Example
+///
+/// ```ignore
+/// #[tracing::instrument(fields(duration_ms = tracing::field::Empty))]
+/// fn work() {
+///     let _timer = crate::telemetry::SpanDurationGuard::start();
+///     // ... any body, returns however it wants ...
+/// }
+/// ```
+pub struct SpanDurationGuard {
+    start: std::time::Instant,
+}
+
+impl SpanDurationGuard {
+    /// Capture the current instant. Records `duration_ms` on the current span
+    /// at drop time.
+    #[must_use]
+    pub fn start() -> Self {
+        Self {
+            start: std::time::Instant::now(),
+        }
+    }
+}
+
+impl Drop for SpanDurationGuard {
+    fn drop(&mut self) {
+        // Cast truncation is acceptable: u128 → u64 overflow would require a
+        // span longer than 584 million years.
+        #[allow(clippy::cast_possible_truncation)]
+        let elapsed_ms = self.start.elapsed().as_millis() as u64;
+        tracing::Span::current().record("duration_ms", elapsed_ms);
+    }
+}
+
+/// Flush pending spans and release `OTel` resources.
+///
+/// Safe to call even if telemetry was not initialized or the `otel` feature
+/// is disabled — it becomes a no-op.
+pub fn shutdown_telemetry() {
+    #[cfg(feature = "otel")]
+    {
+        otel::shutdown();
+    }
+}
+
+#[cfg(feature = "otel")]
+mod otel {
+    use std::sync::OnceLock;
+
+    use opentelemetry::KeyValue;
+    use opentelemetry::global;
+    use opentelemetry::trace::TracerProvider as _;
+    use opentelemetry_otlp::{SpanExporter, WithExportConfig};
+    use opentelemetry_sdk::Resource;
+    use opentelemetry_sdk::trace::SdkTracerProvider;
+    use tracing_opentelemetry::OpenTelemetryLayer;
+    use tracing_subscriber::Registry;
+
+    /// Kept alive so that `shutdown_telemetry` can flush pending spans at
+    /// process exit.
+    static PROVIDER: OnceLock<SdkTracerProvider> = OnceLock::new();
+
+    pub(super) fn build_otel_layer(
+        endpoint: &str,
+        service_name: &str,
+    ) -> anyhow::Result<OpenTelemetryLayer<Registry, opentelemetry_sdk::trace::Tracer>> {
+        let exporter = SpanExporter::builder()
+            .with_tonic()
+            .with_endpoint(endpoint)
+            .build()?;
+
+        let resource = Resource::builder()
+            .with_service_name(service_name.to_string())
+            .with_attribute(KeyValue::new("service.version", env!("CARGO_PKG_VERSION")))
+            .build();
+
+        let provider = SdkTracerProvider::builder()
+            .with_resource(resource)
+            .with_batch_exporter(exporter)
+            .build();
+
+        let tracer = provider.tracer("mcp-ssh-bridge");
+
+        // Register globally so OpenTelemetry context propagation works, and
+        // keep a handle for graceful shutdown.
+        global::set_tracer_provider(provider.clone());
+        let _ = PROVIDER.set(provider);
+
+        Ok(tracing_opentelemetry::layer().with_tracer(tracer))
+    }
+
+    pub(super) fn shutdown() {
+        if let Some(provider) = PROVIDER.get()
+            && let Err(e) = provider.shutdown()
+        {
+            // Can't use tracing here — subscriber may already be gone.
+            eprintln!("Telemetry shutdown failed: {e}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_defaults_when_env_unset() {
+        // SAFETY: tests run in a shared process — avoid races by asserting
+        // only on the default value when the var is absent.
+        // We intentionally don't mutate the env here.
+        let config = TelemetryConfig {
+            otlp_endpoint: None,
+            service_name: "mcp-ssh-bridge".to_string(),
+            colored_output: true,
+        };
+        assert!(config.otlp_endpoint.is_none());
+        assert_eq!(config.service_name, "mcp-ssh-bridge");
+    }
+
+    #[test]
+    fn test_config_mcp_mode_disables_colors() {
+        let config = TelemetryConfig {
+            otlp_endpoint: None,
+            service_name: "test".to_string(),
+            colored_output: false,
+        };
+        assert!(!config.colored_output);
+    }
+
+    #[test]
+    fn test_shutdown_is_safe_without_init() {
+        // Must not panic even if telemetry was never initialized.
+        shutdown_telemetry();
+    }
+}

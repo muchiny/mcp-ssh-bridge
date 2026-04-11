@@ -7,7 +7,7 @@ use std::time::Instant;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{RwLock, Semaphore, mpsc};
-use tracing::{debug, error, info, warn};
+use tracing::{Instrument, debug, error, info, warn};
 
 use crate::config::{Config, ConfigWatcher};
 use crate::domain::{ExecuteCommandUseCase, OutputCache, TaskStore, TunnelManager};
@@ -81,6 +81,16 @@ pub struct McpServer {
     client_supports_roots: AtomicBool,
     /// Application metrics for token consumption analytics.
     metrics: Arc<crate::metrics::Metrics>,
+    /// Map of in-flight MCP request IDs to their `CancellationToken`.
+    ///
+    /// Populated at request spawn and drained when the request completes
+    /// (success or error). The `notifications/cancelled` handler looks up
+    /// a request by ID and calls `token.cancel()` to honor MCP 2025-11-25
+    /// `notifications/cancelled`.
+    ///
+    /// `std::sync::Mutex` (not `tokio::sync::Mutex`) because we only hold it
+    /// for hashmap insert/remove — no `.await` inside the critical section.
+    active_requests: Arc<std::sync::Mutex<HashMap<String, tokio_util::sync::CancellationToken>>>,
 }
 
 impl McpServer {
@@ -186,16 +196,74 @@ impl McpServer {
             roots: Arc::new(RwLock::new(Vec::new())),
             client_supports_roots: AtomicBool::new(false),
             metrics: Arc::new(crate::metrics::Metrics::new()),
+            active_requests: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
 
         (server, audit_task)
+    }
+
+    /// Register a new in-flight request and return its `CancellationToken`.
+    ///
+    /// The caller must call [`Self::unregister_request`] when the request
+    /// completes (success or error) to avoid the map growing unbounded.
+    #[must_use]
+    pub(crate) fn register_request(
+        &self,
+        request_id: String,
+    ) -> tokio_util::sync::CancellationToken {
+        let token = tokio_util::sync::CancellationToken::new();
+        if let Ok(mut map) = self.active_requests.lock() {
+            map.insert(request_id, token.clone());
+        }
+        token
+    }
+
+    /// Remove a request from the in-flight map.
+    ///
+    /// No-op if the request was already removed (e.g. cancelled before
+    /// completion). Tolerates a poisoned mutex silently — losing track of
+    /// one request is not worth a panic in a long-running server.
+    pub(crate) fn unregister_request(&self, request_id: &str) {
+        if let Ok(mut map) = self.active_requests.lock() {
+            map.remove(request_id);
+        }
+    }
+
+    /// Cancel an in-flight request by ID.
+    ///
+    /// Returns `true` if a matching request was found and cancelled,
+    /// `false` if the ID is unknown (already completed or never existed).
+    ///
+    /// The map entry is removed atomically with the cancel signal so a
+    /// follow-up `unregister_request` call from the spawned task becomes
+    /// a no-op.
+    pub(crate) fn cancel_request(&self, request_id: &str) -> bool {
+        let token = match self.active_requests.lock() {
+            Ok(mut map) => map.remove(request_id),
+            Err(_) => return false,
+        };
+        if let Some(token) = token {
+            token.cancel();
+            true
+        } else {
+            false
+        }
     }
 
     /// Create a `ToolContext` for tool execution
     ///
     /// This reads a snapshot of the current configuration, ensuring
     /// consistent config values during a single tool execution.
-    async fn create_tool_context(&self) -> ToolContext {
+    /// Build a `ToolContext` for a single request.
+    ///
+    /// Pass `cancel_token = Some(token)` to allow long-running tools to race
+    /// their work against a MCP `notifications/cancelled`. Pass `None` for
+    /// handlers that don't participate in cancellation (resources/list,
+    /// prompts/get, etc.).
+    async fn create_tool_context(
+        &self,
+        cancel_token: Option<tokio_util::sync::CancellationToken>,
+    ) -> ToolContext {
         // Read config snapshot
         let mut config_snapshot = {
             let guard = self.config.read().await;
@@ -223,6 +291,7 @@ impl McpServer {
         ctx.runtime_max_output_chars = Some(Arc::clone(&self.runtime_max_output_chars));
         ctx.roots = self.roots.read().await.to_vec();
         ctx.metrics = Some(Arc::clone(&self.metrics));
+        ctx.cancel_token = cancel_token;
         ctx
     }
 
@@ -404,12 +473,44 @@ impl McpServer {
                     let server = Arc::clone(&self);
                     let tx = tx.clone();
 
-                    // Spawn worker task for this request
-                    tokio::spawn(async move {
-                        let response = server.handle_request(request).await;
-                        let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
-                        drop(permit);
+                    // Register the request in the active_requests map so that
+                    // `notifications/cancelled` can find its CancellationToken.
+                    // Normalize the id to String the same way
+                    // `route_incoming_message` does.
+                    let request_id: Option<String> = request.id.as_ref().map(|v| match v {
+                        Value::String(s) => s.clone(),
+                        other => other.to_string(),
                     });
+                    let cancel_token = request_id
+                        .as_ref()
+                        .map(|id| server.register_request(id.clone()));
+                    let rid_cleanup = request_id;
+
+                    // Spawn worker task for this request.
+                    // `Instrument` attaches request-scoped fields to every
+                    // tracing event emitted by the handler, giving us
+                    // structured observability alongside the cancellation
+                    // plumbing. We use `.instrument()` (not `.entered()`)
+                    // because `EnteredSpan` is not `Send` and can't cross
+                    // await points in a spawned task.
+                    let span = tracing::info_span!(
+                        "mcp.request",
+                        id = ?rid_cleanup,
+                        method = %request.method,
+                    );
+                    tokio::spawn(
+                        async move {
+                            let response = server
+                                .handle_request_with_cancel(request, cancel_token)
+                                .await;
+                            let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
+                            if let Some(rid) = rid_cleanup {
+                                server.unregister_request(&rid);
+                            }
+                            drop(permit);
+                        }
+                        .instrument(span),
+                    );
                 }
                 IncomingMessage::Batch(messages) => {
                     if messages.is_empty() {
@@ -542,7 +643,7 @@ impl McpServer {
             return None;
         }
         if message.method.as_deref() == Some("notifications/cancelled") {
-            Self::handle_cancellation_notification(message.params.as_ref());
+            self.handle_cancellation_notification(message.params.as_ref());
             return None;
         }
 
@@ -592,7 +693,30 @@ impl McpServer {
     }
 
     /// Handle a single JSON-RPC request and return the response.
+    ///
+    /// This is the public stable API — it always calls the dispatch with
+    /// `cancel_token = None`, meaning cancellation is not wired for this
+    /// request. The stdio `run()` loop uses the internal
+    /// [`Self::handle_request_with_cancel`] variant to honor MCP
+    /// `notifications/cancelled`.
     pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
+        self.handle_request_with_cancel(request, None).await
+    }
+
+    /// Dispatch a JSON-RPC request with an optional cancellation token.
+    ///
+    /// The token is propagated to `handle_tools_call` (synchronous path),
+    /// where it reaches the `ToolContext` so long-running handlers can race
+    /// their SSH work against `token.cancelled()`.
+    ///
+    /// Other methods ignore the token either because they are fast
+    /// (tools/list, prompts/get, resources/read) or because they have their
+    /// own cancellation mechanism (tools/call async via `tasks/cancel`).
+    pub(crate) async fn handle_request_with_cancel(
+        &self,
+        request: JsonRpcRequest,
+        cancel_token: Option<tokio_util::sync::CancellationToken>,
+    ) -> JsonRpcResponse {
         let id = request.id.clone();
 
         match request.method.as_str() {
@@ -630,7 +754,10 @@ impl McpServer {
                 JsonRpcResponse::success(id, json!({}))
             }
             "tools/list" => self.handle_tools_list(id, request.params.as_ref()),
-            "tools/call" => self.handle_tools_call(id, request.params).await,
+            "tools/call" => {
+                self.handle_tools_call(id, request.params, cancel_token)
+                    .await
+            }
             "prompts/list" => self.handle_prompts_list(id),
             "prompts/get" => self.handle_prompts_get(id, request.params).await,
             "resources/list" => self.handle_resources_list(id).await,
@@ -841,7 +968,12 @@ impl McpServer {
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn handle_tools_call(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
+    async fn handle_tools_call(
+        &self,
+        id: Option<Value>,
+        params: Option<Value>,
+        cancel_token: Option<tokio_util::sync::CancellationToken>,
+    ) -> JsonRpcResponse {
         let Some(params) = params else {
             return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
         };
@@ -869,7 +1001,10 @@ impl McpServer {
                 Some(ProgressReporter::new(token, tx, Some(3)))
             });
 
-        // Task-augmented request: spawn background worker and return immediately
+        // Task-augmented request: spawn background worker and return immediately.
+        // MCP Tasks have their own cancellation via `tasks/cancel`; we don't
+        // propagate the request-level `cancel_token` here because the task
+        // lives beyond the enclosing request.
         if let Some(task_request) = call_params.task {
             return self
                 .handle_tools_call_async(call_params.name, call_params.arguments, task_request, id)
@@ -881,7 +1016,7 @@ impl McpServer {
             reporter.report(1, Some("Preparing execution..."));
         }
 
-        let ctx = self.create_tool_context().await;
+        let ctx = self.create_tool_context(cancel_token).await;
 
         if let Some(ref reporter) = progress_reporter {
             reporter.report(2, Some(&format!("Executing {}...", call_params.name)));
@@ -970,6 +1105,15 @@ impl McpServer {
                 if let Some(ref reporter) = progress_reporter {
                     reporter.report(3, Some(&format!("Failed: {e}")));
                 }
+
+                // Cancellation gets a proper JSON-RPC error with MCP's
+                // `-32800` "Request Cancelled" code so clients can tell it
+                // apart from a plain tool failure. All other errors stay in
+                // the tool-result envelope for backward compatibility.
+                if matches!(e, crate::error::BridgeError::Cancelled) {
+                    return JsonRpcResponse::error(id, JsonRpcError::cancelled(None));
+                }
+
                 let error_result = ToolCallResult::error(e.to_string());
                 JsonRpcResponse::success_or_serialize_error(id, &error_result)
             }
@@ -1012,7 +1156,10 @@ impl McpServer {
         // Clone dependencies for the background worker
         let task_store = Arc::clone(&self.task_store);
         let notification_tx = Arc::clone(&self.notification_tx);
-        let ctx = self.create_tool_context().await;
+        // Propagate the task's cancel_token into the ToolContext so the
+        // handler can do clean shutdown (e.g. evicting the SSH connection
+        // from the pool) when the task is cancelled via `tasks/cancel`.
+        let ctx = self.create_tool_context(Some(cancel_token.clone())).await;
 
         // Spawn the background worker
         tokio::spawn(async move {
@@ -1096,7 +1243,7 @@ impl McpServer {
 
         info!(prompt = %get_params.name, "Prompt get");
 
-        let ctx = self.create_tool_context().await;
+        let ctx = self.create_tool_context(None).await;
 
         match self
             .prompt_registry
@@ -1115,7 +1262,7 @@ impl McpServer {
     }
 
     async fn handle_resources_list(&self, id: Option<Value>) -> JsonRpcResponse {
-        let ctx = self.create_tool_context().await;
+        let ctx = self.create_tool_context(None).await;
 
         match self.resource_registry.list(&ctx).await {
             Ok(resources) => {
@@ -1150,7 +1297,7 @@ impl McpServer {
 
         info!(uri = %read_params.uri, "Resource read");
 
-        let ctx = self.create_tool_context().await;
+        let ctx = self.create_tool_context(None).await;
 
         match self.resource_registry.read(&read_params.uri, &ctx).await {
             Ok(contents) => {
@@ -1232,10 +1379,51 @@ impl McpServer {
     // Cancellation notification handler
     // =========================================================================
 
-    fn handle_cancellation_notification(params: Option<&Value>) {
-        if let Some(request_id) = params.and_then(|p| p.get("requestId")) {
-            info!(request_id = %request_id, "Received cancellation notification");
-            // Future: cancel running task by request_id
+    /// Handle a `notifications/cancelled` notification from the client.
+    ///
+    /// Looks up the `requestId` in [`Self::active_requests`] and fires the
+    /// associated `CancellationToken`. Long-running tool handlers see the
+    /// fired token and bail out cleanly via their `tokio::select!` branch
+    /// (see [`crate::mcp::standard_tool::StandardToolHandler::execute`]).
+    ///
+    /// Silently ignores:
+    /// - Notifications with no `requestId` (malformed).
+    /// - Notifications for unknown request IDs (already completed, or
+    ///   referring to a task's `taskId` which is the wrong field to use —
+    ///   tasks are cancelled via the separate `tasks/cancel` request).
+    ///
+    /// This follows MCP 2025-11-25 spec guidance:
+    /// *"Invalid cancellation notifications SHOULD be ignored by the
+    ///  receiver."*
+    fn handle_cancellation_notification(&self, params: Option<&Value>) {
+        let Some(request_id_val) = params.and_then(|p| p.get("requestId")) else {
+            debug!("notifications/cancelled with no requestId, ignoring");
+            return;
+        };
+
+        // JSON-RPC ids can be strings or numbers; normalize to String.
+        let request_id: String = match request_id_val {
+            Value::String(s) => s.clone(),
+            other => other.to_string(),
+        };
+
+        // Optional reason for logs.
+        let reason = params
+            .and_then(|p| p.get("reason"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+
+        if self.cancel_request(&request_id) {
+            info!(
+                request_id = %request_id,
+                reason = %reason,
+                "Cancelled in-flight request"
+            );
+        } else {
+            debug!(
+                request_id = %request_id,
+                "Cancellation for unknown or already-completed request"
+            );
         }
     }
 
@@ -1670,7 +1858,7 @@ mod tests {
     async fn test_handle_tools_call_missing_params() {
         let server = create_test_server();
 
-        let response = server.handle_tools_call(Some(json!(1)), None).await;
+        let response = server.handle_tools_call(Some(json!(1)), None, None).await;
 
         assert!(response.error.is_some());
         let error = response.error.unwrap();
@@ -1685,7 +1873,9 @@ mod tests {
             "invalid": "structure"
         });
 
-        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .await;
 
         assert!(response.error.is_some());
         let error = response.error.unwrap();
@@ -1700,7 +1890,9 @@ mod tests {
             "arguments": {}
         });
 
-        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .await;
 
         // Unknown tool returns success with error content (MCP spec)
         assert!(response.error.is_none());
@@ -1765,7 +1957,9 @@ mod tests {
             "arguments": {}
         });
 
-        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .await;
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
@@ -1982,7 +2176,9 @@ mod tests {
             "arguments": null
         });
 
-        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .await;
 
         // Should succeed (null arguments treated as empty)
         assert!(response.error.is_none());
@@ -1996,7 +2192,9 @@ mod tests {
             "arguments": {}
         });
 
-        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .await;
 
         // Empty name should result in tool not found
         assert!(response.error.is_none());
@@ -2279,7 +2477,9 @@ mod tests {
             "arguments": {}
         });
 
-        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .await;
 
         // Synchronous: should return content directly (not CreateTaskResult)
         assert!(response.error.is_none());
@@ -2296,7 +2496,9 @@ mod tests {
             "task": {"ttl": 30000}
         });
 
-        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .await;
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
@@ -2316,7 +2518,9 @@ mod tests {
             "task": {}
         });
 
-        let response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .await;
 
         // Unknown tool should return error content, not CreateTaskResult
         assert!(response.error.is_none());
@@ -2334,7 +2538,7 @@ mod tests {
             "task": {"ttl": 60000}
         });
         let call_response = server
-            .handle_tools_call(Some(json!(1)), Some(call_params))
+            .handle_tools_call(Some(json!(1)), Some(call_params), None)
             .await;
         let task_id = call_response.result.unwrap()["task"]["taskId"]
             .as_str()
@@ -2428,7 +2632,9 @@ mod tests {
             "task": {"ttl": 60000}
         });
 
-        let call_response = server.handle_tools_call(Some(json!(1)), Some(params)).await;
+        let call_response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .await;
         let task_id = call_response.result.unwrap()["task"]["taskId"]
             .as_str()
             .unwrap()
@@ -3160,5 +3366,168 @@ mod tests {
         let exts = server.build_server_extensions().await.unwrap();
         // Zero hosts -> no multi-host extension
         assert!(!exts.contains_key("com.mcp-ssh-bridge/multi-host"));
+    }
+
+    // ============== Request Cancellation (MCP 2025-11-25) ==============
+
+    #[test]
+    fn test_active_requests_starts_empty() {
+        let server = create_test_server();
+        let map = server.active_requests.lock().unwrap();
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn test_register_request_stores_token_in_map() {
+        let server = create_test_server();
+        let token = server.register_request("req-1".to_string());
+
+        assert!(!token.is_cancelled(), "fresh token must not be cancelled");
+        let map = server.active_requests.lock().unwrap();
+        assert_eq!(map.len(), 1);
+        assert!(map.contains_key("req-1"));
+    }
+
+    #[test]
+    fn test_unregister_request_removes_from_map() {
+        let server = create_test_server();
+        let _ = server.register_request("req-2".to_string());
+        server.unregister_request("req-2");
+        let map = server.active_requests.lock().unwrap();
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn test_unregister_unknown_request_is_noop() {
+        let server = create_test_server();
+        // Must not panic when the id is not present.
+        server.unregister_request("never-existed");
+    }
+
+    #[test]
+    fn test_cancel_request_fires_token_and_returns_true() {
+        let server = create_test_server();
+        let token = server.register_request("req-3".to_string());
+
+        let cancelled = server.cancel_request("req-3");
+
+        assert!(cancelled);
+        assert!(
+            token.is_cancelled(),
+            "token must be cancelled after cancel_request"
+        );
+        // Map entry should be removed as part of cancel.
+        let map = server.active_requests.lock().unwrap();
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn test_cancel_unknown_request_returns_false() {
+        let server = create_test_server();
+        assert!(!server.cancel_request("unknown"));
+    }
+
+    #[test]
+    fn test_cancel_request_removes_entry_to_prevent_double_cancel() {
+        let server = create_test_server();
+        let _ = server.register_request("req-4".to_string());
+
+        // First cancel fires and removes.
+        assert!(server.cancel_request("req-4"));
+        // Second cancel finds nothing.
+        assert!(!server.cancel_request("req-4"));
+    }
+
+    /// End-to-end: verifies that `handle_request_with_cancel` propagates
+    /// the token into the `ToolContext` so that `tools/call` sees a
+    /// cancellable context. Uses the public `handle_tools_call` path with
+    /// an unknown tool (which does no async SSH work) to avoid needing a
+    /// mock executor — the test focuses on the wiring, not the cancel
+    /// mechanics (which are covered by `test_cancel_request_*`).
+    #[tokio::test]
+    async fn test_handle_request_with_cancel_tools_call_routes_token() {
+        let server = create_test_server();
+        let token = tokio_util::sync::CancellationToken::new();
+
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!("req-with-token")),
+            method: "tools/call".to_string(),
+            params: Some(json!({
+                "name": "nonexistent_tool_xyz",
+                "arguments": { "host": "no-such-host" }
+            })),
+        };
+
+        // Must not panic, and must produce a response (unknown tool error
+        // or similar). The key assertion is that the wiring compiles and
+        // runs; deeper verification lives in the full integration test
+        // added in commit 6.
+        let response = server
+            .handle_request_with_cancel(request, Some(token))
+            .await;
+        assert!(response.result.is_some() || response.error.is_some());
+    }
+
+    /// Verifies that the public `handle_request` wrapper still works
+    /// without a cancel token — required for HTTP transport and tests.
+    #[tokio::test]
+    async fn test_handle_request_wrapper_passes_none_cancel_token() {
+        let server = create_test_server();
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!("wrap-1")),
+            method: "tools/list".to_string(),
+            params: None,
+        };
+        let response = server.handle_request(request).await;
+        assert!(response.error.is_none());
+    }
+
+    // ============== notifications/cancelled handler ==============
+
+    #[test]
+    fn test_handle_cancellation_notification_fires_token_for_known_id() {
+        let server = create_test_server();
+        let token = server.register_request("req-42".to_string());
+        assert!(!token.is_cancelled());
+
+        let params = json!({ "requestId": "req-42", "reason": "user abort" });
+        server.handle_cancellation_notification(Some(&params));
+
+        assert!(token.is_cancelled(), "token must fire after notification");
+    }
+
+    #[test]
+    fn test_handle_cancellation_notification_ignores_unknown_id() {
+        let server = create_test_server();
+        // No panic, no observable side effect.
+        let params = json!({ "requestId": "never-registered" });
+        server.handle_cancellation_notification(Some(&params));
+    }
+
+    #[test]
+    fn test_handle_cancellation_notification_ignores_missing_request_id() {
+        let server = create_test_server();
+        // Malformed notification (no requestId) must be silently ignored
+        // per MCP spec.
+        let params = json!({ "reason": "nothing specific" });
+        server.handle_cancellation_notification(Some(&params));
+    }
+
+    #[test]
+    fn test_handle_cancellation_notification_accepts_numeric_request_id() {
+        // JSON-RPC allows numeric IDs; the normalization to String must
+        // match what register_request stores for the raw ::Number case.
+        let server = create_test_server();
+        // The spawn path in run() uses `other.to_string()` for non-string
+        // ids, which yields "7" for Value::Number(7). Test that the
+        // notification handler applies the same normalization.
+        let token = server.register_request("7".to_string());
+
+        let params = json!({ "requestId": 7 });
+        server.handle_cancellation_notification(Some(&params));
+
+        assert!(token.is_cancelled());
     }
 }

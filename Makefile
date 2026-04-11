@@ -1,6 +1,6 @@
 # MCP SSH Bridge - Development Makefile
 
-.PHONY: all build release check test lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline careful bench bench-save bench-compare coverage coverage-check e2e-mock e2e-docker e2e-docker-up e2e-docker-down dxt
+.PHONY: all build release check test test-otel test-daemon daemon-start daemon-stop daemon-status lint fmt fmt-check audit deny clean install setup help typos machete outdated quality mutants mutants-db mutants-full security-audit geiger sbom security-tests semver-checks hack release-all release-target docker-build docker-scan deps-check deps-update ci-full release-pipeline careful bench bench-save bench-compare coverage coverage-check e2e-mock e2e-docker e2e-docker-up e2e-docker-down dxt
 
 # Default target
 all: check lint test
@@ -20,6 +20,29 @@ check:
 # Run tests
 test:
 	cargo nextest run 2>/dev/null || cargo test
+
+# Run tests with OpenTelemetry feature enabled
+# Validates the feature-gated telemetry module and OTLP plumbing compiles
+# and that the in-process span capture test still passes when `otel` is on.
+test-otel:
+	cargo test --features "cli,otel"
+
+# Run only the daemon integration suite (fast smoke test)
+test-daemon:
+	cargo test --test daemon_integration
+
+# Start a local daemon for interactive development.
+# Use `make daemon-stop` or Ctrl+C to terminate.
+daemon-start:
+	./target/release/mcp-ssh-bridge daemon start
+
+# Gracefully stop the local daemon.
+daemon-stop:
+	./target/release/mcp-ssh-bridge daemon stop
+
+# Report daemon status.
+daemon-status:
+	./target/release/mcp-ssh-bridge daemon status
 
 # Run clippy linter
 lint:

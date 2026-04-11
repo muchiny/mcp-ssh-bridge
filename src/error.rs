@@ -110,6 +110,15 @@ pub enum BridgeError {
     #[error("Sampling error: {reason}")]
     Sampling { reason: String },
 
+    /// Request was cancelled by the client via `notifications/cancelled`.
+    ///
+    /// Handlers that see this error should NOT be retried — see
+    /// `is_retryable_error` in `src/ssh/retry.rs`. The JSON-RPC response is
+    /// built with error code `-32800` (MCP 2025-11-25 custom range for
+    /// cancellation).
+    #[error("Request cancelled by client")]
+    Cancelled,
+
     // IO errors
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -358,6 +367,20 @@ mod tests {
         assert!(format!("{err}").contains("no such file"));
     }
 
+    // ============== Cancellation ==============
+
+    #[test]
+    fn test_cancelled_display() {
+        let err = BridgeError::Cancelled;
+        assert_eq!(format!("{err}"), "Request cancelled by client");
+    }
+
+    #[test]
+    fn test_cancelled_debug() {
+        let err = BridgeError::Cancelled;
+        assert_eq!(format!("{err:?}"), "Cancelled");
+    }
+
     // ============== From Implementations ==============
 
     #[test]
@@ -474,6 +497,7 @@ mod tests {
             BridgeError::Sampling {
                 reason: "not supported".to_string(),
             },
+            BridgeError::Cancelled,
         ];
 
         for err in variants {

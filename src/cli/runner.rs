@@ -26,6 +26,195 @@ use crate::ssh::{
     with_retry_if,
 };
 
+/// Try to forward a `tools/call` request to a running daemon over its
+/// Unix socket.
+///
+/// Returns:
+/// - `Ok(Some(response))` — daemon accepted and returned a JSON-RPC
+///   response. The caller should print this and skip the in-process
+///   path.
+/// - `Ok(None)` — daemon is absent or refused the connection. Caller
+///   falls back to the stateless in-process path.
+/// - `Err(..)` — unexpected I/O failure during a reachable daemon call.
+///
+/// The function intentionally swallows `NotFound` and `ConnectionRefused`
+/// errors: these indicate no daemon is running, not a fatal problem.
+async fn try_forward_to_daemon(
+    socket_path: &std::path::Path,
+    tool_name: &str,
+    arguments: serde_json::Value,
+) -> Result<Option<serde_json::Value>> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixStream;
+
+    let mut stream = match UnixStream::connect(socket_path).await {
+        Ok(s) => s,
+        Err(e)
+            if matches!(
+                e.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+            ) =>
+        {
+            tracing::debug!(
+                path = %socket_path.display(),
+                error = %e,
+                "No daemon reachable, falling back to stateless path"
+            );
+            return Ok(None);
+        }
+        Err(e) => return Err(BridgeError::Io(e)),
+    };
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments,
+        },
+    });
+
+    let body = serde_json::to_string(&request).map_err(BridgeError::Json)?;
+    stream
+        .write_all(body.as_bytes())
+        .await
+        .map_err(BridgeError::Io)?;
+    stream.write_all(b"\n").await.map_err(BridgeError::Io)?;
+    stream.flush().await.map_err(BridgeError::Io)?;
+
+    // Read exactly one response line.
+    let (reader, _writer) = stream.split();
+    let mut reader = BufReader::new(reader);
+    let mut line = String::new();
+    reader.read_line(&mut line).await.map_err(BridgeError::Io)?;
+
+    let response: serde_json::Value =
+        serde_json::from_str(line.trim()).map_err(BridgeError::Json)?;
+    Ok(Some(response))
+}
+
+/// Print a JSON-RPC response from the daemon in the format the user
+/// expects (JSON or text-pretty). Returns the appropriate exit code.
+fn print_daemon_response(response: &serde_json::Value, json_output: bool) -> Result<i32> {
+    // JSON-RPC error path.
+    if let Some(err) = response.get("error") {
+        if json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(response)
+                    .map_err(|e| BridgeError::Config(e.to_string()))?
+            );
+        } else {
+            eprintln!("Error: {err}");
+        }
+        return Ok(1);
+    }
+
+    let Some(result) = response.get("result") else {
+        return Err(BridgeError::Config(
+            "Daemon response has neither result nor error".to_string(),
+        ));
+    };
+
+    let is_error = result
+        .get("isError")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let exit_code = i32::from(is_error);
+
+    if json_output {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(result).map_err(|e| BridgeError::Config(e.to_string()))?
+        );
+    } else if let Some(content) = result.get("content").and_then(serde_json::Value::as_array) {
+        for item in content {
+            if let Some(text) = item.get("text").and_then(serde_json::Value::as_str) {
+                println!("{text}");
+            } else if let Ok(pretty) = serde_json::to_string_pretty(item) {
+                println!("{pretty}");
+            }
+        }
+    }
+
+    Ok(exit_code)
+}
+
+/// Ergonomic CLI aliases for the universal data-reduction tool parameters.
+///
+/// These flags are syntactic sugar — `--jq '.foo'` is equivalent to passing
+/// `jq_filter='.foo'` as a key=value tool argument. The underlying feature
+/// is already exposed via [`crate::domain::data_reduction`] and
+/// [`crate::mcp::registry::inject_reduction_schema`]; this struct just saves
+/// users from typing the full param name each time.
+///
+/// Explicit `key=value` arguments always win — the flags only fill in fields
+/// that the user did NOT set explicitly.
+#[derive(Debug, Default, Clone)]
+pub struct DataReductionFlags {
+    /// jq expression to apply to JSON output (mapped to `jq_filter`).
+    pub jq: Option<String>,
+    /// Columns to keep in tabular output (mapped to `columns`).
+    pub columns: Option<Vec<String>>,
+    /// Max rows/entries to return (mapped to `limit`).
+    pub limit: Option<usize>,
+}
+
+impl DataReductionFlags {
+    /// Returns `true` if no flag is set — equivalent to
+    /// `DataReductionFlags::default()`.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.jq.is_none() && self.columns.is_none() && self.limit.is_none()
+    }
+}
+
+/// Merge [`DataReductionFlags`] into an existing tool arguments JSON value.
+///
+/// The flags only fill in fields that are NOT already present — explicit
+/// `key=value` CLI arguments or `--json-args` entries win over the ergonomic
+/// flags. This mirrors the policy documented on [`DataReductionFlags`].
+fn merge_data_reduction(
+    mut args: serde_json::Value,
+    flags: &DataReductionFlags,
+) -> serde_json::Value {
+    if flags.is_empty() {
+        return args;
+    }
+    // Ensure we have an object to write into.
+    if !args.is_object() {
+        args = serde_json::Value::Object(serde_json::Map::new());
+    }
+    let map = args.as_object_mut().expect("just ensured object");
+
+    if let Some(expr) = flags.jq.as_deref()
+        && !map.contains_key("jq_filter")
+    {
+        map.insert(
+            "jq_filter".to_string(),
+            serde_json::Value::String(expr.to_string()),
+        );
+    }
+    if let Some(cols) = flags.columns.as_ref()
+        && !map.contains_key("columns")
+    {
+        let as_json = serde_json::Value::Array(
+            cols.iter()
+                .map(|c| serde_json::Value::from(c.clone()))
+                .collect(),
+        );
+        map.insert("columns".to_string(), as_json);
+    }
+    if let Some(n) = flags.limit
+        && !map.contains_key("limit")
+    {
+        map.insert("limit".to_string(), serde_json::Value::from(n));
+    }
+    args
+}
+
 /// List all available MCP tools
 pub async fn run_list_tools(
     config: Arc<Config>,
@@ -891,18 +1080,18 @@ pub async fn run_tool(
     kv_args: &[String],
     json_args: Option<&str>,
     json_output: bool,
+    data_reduction: DataReductionFlags,
 ) -> Result<i32> {
     use crate::mcp::registry::{create_filtered_registry, inject_reduction_schema};
 
     let registry = create_filtered_registry(&config.tool_groups);
-    let ctx = create_context(Arc::clone(&config));
 
     // Build the arguments JSON
     let args: Option<serde_json::Value> = if let Some(raw) = json_args {
         let val: serde_json::Value = serde_json::from_str(raw)
             .map_err(|e| BridgeError::Config(format!("Invalid --json-args: {e}")))?;
-        Some(val)
-    } else if kv_args.is_empty() {
+        Some(merge_data_reduction(val, &data_reduction))
+    } else if kv_args.is_empty() && data_reduction.is_empty() {
         None
     } else {
         // Parse key=value pairs into a JSON object, coercing types via enriched schema
@@ -925,10 +1114,33 @@ pub async fn run_tool(
                 )));
             }
         }
-        Some(serde_json::Value::Object(map))
+        // Inject data-reduction flags only if the user did NOT set the
+        // equivalent key=value explicitly (explicit wins).
+        Some(merge_data_reduction(
+            serde_json::Value::Object(map),
+            &data_reduction,
+        ))
     };
 
-    // Execute the tool
+    // Fast path: if the local daemon is running, forward this tool call
+    // to it over the Unix socket. This reuses the daemon's shared SSH
+    // connection pool and saves the ~95 ms handshake on every invocation
+    // after the first. Falls back to the stateless in-process path on
+    // any forwarding error (daemon absent, refused, timeout, etc.).
+    let daemon_socket = crate::daemon::default_socket_path();
+    if daemon_socket.exists()
+        && let Some(forwarded) = try_forward_to_daemon(
+            &daemon_socket,
+            tool_name,
+            args.clone().unwrap_or(serde_json::Value::Null),
+        )
+        .await?
+    {
+        return print_daemon_response(&forwarded, json_output);
+    }
+
+    // Slow path: stateless in-process execution.
+    let ctx = create_context(Arc::clone(&config));
     let result = registry.execute(tool_name, args, &ctx).await?;
 
     let is_error = result.is_error.unwrap_or(false);
@@ -1099,6 +1311,68 @@ mod tests {
     };
     use crate::mcp::tool_handlers::utils::shell_escape;
     use std::collections::HashMap;
+
+    // ============== DataReductionFlags merge Tests ==============
+
+    #[test]
+    fn test_data_reduction_flags_is_empty_by_default() {
+        let flags = DataReductionFlags::default();
+        assert!(flags.is_empty());
+    }
+
+    #[test]
+    fn test_merge_into_empty_args_creates_object() {
+        let flags = DataReductionFlags {
+            jq: Some(".name".to_string()),
+            columns: None,
+            limit: Some(5),
+        };
+        let merged = merge_data_reduction(serde_json::Value::Null, &flags);
+        let obj = merged.as_object().expect("should become object");
+        assert_eq!(obj["jq_filter"], ".name");
+        assert_eq!(obj["limit"], 5);
+        assert!(!obj.contains_key("columns"));
+    }
+
+    #[test]
+    fn test_merge_preserves_explicit_key_value_wins() {
+        // User already set jq_filter=.custom via key=value; --jq '.flag' must NOT override.
+        let mut m = serde_json::Map::new();
+        m.insert("host".to_string(), serde_json::Value::from("prod"));
+        m.insert("jq_filter".to_string(), serde_json::Value::from(".custom"));
+        let args = serde_json::Value::Object(m);
+
+        let flags = DataReductionFlags {
+            jq: Some(".flag".to_string()),
+            columns: None,
+            limit: None,
+        };
+        let merged = merge_data_reduction(args, &flags);
+        assert_eq!(merged["jq_filter"], ".custom");
+    }
+
+    #[test]
+    fn test_merge_injects_columns_as_array() {
+        let flags = DataReductionFlags {
+            jq: None,
+            columns: Some(vec!["name".to_string(), "status".to_string()]),
+            limit: None,
+        };
+        let merged =
+            merge_data_reduction(serde_json::Value::Object(serde_json::Map::new()), &flags);
+        let arr = merged["columns"].as_array().expect("columns must be array");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0], "name");
+        assert_eq!(arr[1], "status");
+    }
+
+    #[test]
+    fn test_merge_noop_when_flags_empty() {
+        let args = serde_json::json!({"host": "prod"});
+        let flags = DataReductionFlags::default();
+        let merged = merge_data_reduction(args.clone(), &flags);
+        assert_eq!(merged, args);
+    }
 
     // ============== shell_escape Tests ==============
 

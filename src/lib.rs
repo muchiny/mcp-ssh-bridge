@@ -10,6 +10,8 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod config;
+#[cfg(feature = "cli")]
+pub mod daemon;
 pub mod domain;
 pub mod error;
 pub mod mcp;
@@ -17,6 +19,7 @@ pub mod metrics;
 pub mod ports;
 pub mod security;
 pub mod ssh;
+pub mod telemetry;
 
 #[cfg(any(feature = "azure", feature = "gcp"))]
 pub mod cloud_exec;

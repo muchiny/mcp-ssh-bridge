@@ -7,11 +7,11 @@ mod runner;
 
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 pub use runner::{
-    run_config_diff, run_describe_tool, run_download, run_exec, run_history, run_list_tools,
-    run_status, run_tool, run_upload, run_validate,
+    DataReductionFlags, run_config_diff, run_describe_tool, run_download, run_exec, run_history,
+    run_list_tools, run_status, run_tool, run_upload, run_validate,
 };
 
 /// MCP SSH Bridge - Secure SSH access to air-gapped environments
@@ -33,6 +33,10 @@ pub use runner::{
     mcp-ssh-bridge tool ssh_docker_ps host=prod
     mcp-ssh-bridge tool ssh_exec host=prod command=\"ls -la\" --json
     mcp-ssh-bridge tool ssh_k8s_get --json-args '{\"host\":\"k8s\",\"resource\":\"pods\"}'
+
+    # Reduce output with jq / columns / limit (ergonomic flags)
+    mcp-ssh-bridge --json --jq '.containers[].Names' tool ssh_docker_ps host=prod
+    mcp-ssh-bridge --columns name,status --limit 10 tool ssh_docker_ps host=prod
 
     # Progressive tool discovery (token-efficient for AI agents)
     mcp-ssh-bridge list-tools --groups-only
@@ -63,6 +67,22 @@ pub struct Cli {
     /// Output as JSON (applies to all commands)
     #[arg(long, global = true)]
     pub json: bool,
+
+    /// jq expression to apply to tool output (equivalent to `jq_filter=<expr>`).
+    /// Explicit `jq_filter=...` in tool args takes precedence over this flag.
+    /// Example: `--jq '.containers[].Names'`
+    #[arg(long, global = true)]
+    pub jq: Option<String>,
+
+    /// Comma-separated columns to keep in tabular tool output (equivalent to
+    /// `columns=name,status,...`). Explicit `columns=...` in tool args wins.
+    #[arg(long, global = true, value_delimiter = ',')]
+    pub columns: Option<Vec<String>>,
+
+    /// Maximum number of rows/entries to return (equivalent to `limit=N`).
+    /// Explicit `limit=N` in tool args wins.
+    #[arg(long, global = true)]
+    pub limit: Option<usize>,
 
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -202,6 +222,18 @@ pub enum Commands {
     /// Show differences between current and default configuration
     ConfigDiff,
 
+    /// Manage the local daemon that keeps a shared SSH connection pool
+    /// alive across CLI invocations.
+    ///
+    /// When running, the daemon listens on a Unix socket (default:
+    /// $XDG_RUNTIME_DIR/mcp-ssh-bridge.sock). CLI commands detect the
+    /// socket, forward their tool calls to it, and skip the SSH
+    /// handshake on subsequent invocations.
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonAction,
+    },
+
     /// Download a file from remote host via SFTP
     Download {
         /// SSH host alias
@@ -233,6 +265,40 @@ pub enum Commands {
         #[arg(long, short)]
         progress: bool,
     },
+}
+
+/// Sub-actions for the `daemon` command.
+#[derive(Subcommand, Clone, Debug)]
+pub enum DaemonAction {
+    /// Start the daemon in the foreground (blocks until SIGINT).
+    Start {
+        /// Override the socket path. Defaults to
+        /// `$XDG_RUNTIME_DIR/mcp-ssh-bridge.sock` or `/tmp/mcp-ssh-bridge-$UID.sock`.
+        #[arg(long)]
+        socket_path: Option<PathBuf>,
+    },
+    /// Stop a running daemon via SIGTERM.
+    Stop {
+        #[arg(long)]
+        socket_path: Option<PathBuf>,
+    },
+    /// Show whether a daemon is currently running.
+    Status {
+        #[arg(long)]
+        socket_path: Option<PathBuf>,
+    },
+}
+
+/// Output format for daemon status (used by `--output`).
+#[derive(ValueEnum, Clone, Debug, Default)]
+#[allow(
+    dead_code,
+    reason = "reserved for future --output flag on daemon status"
+)]
+pub enum DaemonOutputFormat {
+    #[default]
+    Text,
+    Json,
 }
 
 #[cfg(test)]
@@ -539,5 +605,72 @@ mod tests {
                 .unwrap();
         assert!(cli.json);
         assert!(matches!(cli.command, Some(Commands::Tool { .. })));
+    }
+
+    #[test]
+    fn test_global_jq_flag() {
+        let cli = Cli::try_parse_from([
+            "mcp-ssh-bridge",
+            "--jq",
+            ".containers[].name",
+            "tool",
+            "ssh_docker_ps",
+            "host=prod",
+        ])
+        .unwrap();
+        assert_eq!(cli.jq.as_deref(), Some(".containers[].name"));
+        assert!(matches!(cli.command, Some(Commands::Tool { .. })));
+    }
+
+    #[test]
+    fn test_global_columns_flag_splits_on_comma() {
+        let cli = Cli::try_parse_from([
+            "mcp-ssh-bridge",
+            "--columns",
+            "name,status,image",
+            "tool",
+            "ssh_docker_ps",
+            "host=prod",
+        ])
+        .unwrap();
+        let cols = cli.columns.expect("expected columns to be set");
+        assert_eq!(cols, vec!["name", "status", "image"]);
+    }
+
+    #[test]
+    fn test_global_limit_flag() {
+        let cli = Cli::try_parse_from([
+            "mcp-ssh-bridge",
+            "--limit",
+            "5",
+            "tool",
+            "ssh_docker_ps",
+            "host=prod",
+        ])
+        .unwrap();
+        assert_eq!(cli.limit, Some(5));
+    }
+
+    #[test]
+    fn test_data_reduction_flags_combined() {
+        let cli = Cli::try_parse_from([
+            "mcp-ssh-bridge",
+            "--json",
+            "--jq",
+            ".items[].id",
+            "--columns",
+            "a,b",
+            "--limit",
+            "10",
+            "tool",
+            "ssh_k8s_get",
+            "host=k8s",
+            "resource=pods",
+        ])
+        .unwrap();
+        assert!(cli.json);
+        assert_eq!(cli.jq.as_deref(), Some(".items[].id"));
+        assert_eq!(cli.columns.as_ref().map(Vec::len), Some(2));
+        assert_eq!(cli.limit, Some(10));
     }
 }
