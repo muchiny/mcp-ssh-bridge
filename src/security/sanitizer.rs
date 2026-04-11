@@ -1063,6 +1063,103 @@ Done";
         assert!(output.contains("[REDACTED]"), "Should contain REDACTED");
     }
 
+    /// **Sprint 3 Phase B.6:** custom patterns loaded via `SanitizeConfig`
+    /// must compose cleanly with builtin patterns — *both* fire against
+    /// a single input, in one pass, with custom patterns taking their
+    /// configured replacement label.
+    #[test]
+    fn test_custom_patterns_from_config_compose_with_builtin() {
+        let cfg = SanitizeConfig {
+            enabled: true,
+            custom_patterns: vec![
+                CustomSanitizePattern {
+                    pattern: "MYCORP_[A-Z0-9]{32}".to_string(),
+                    replacement: "[MYCORP_TOKEN]".to_string(),
+                    description: Some("internal token".to_string()),
+                },
+                CustomSanitizePattern {
+                    pattern: r"internal-[0-9a-f]{40}".to_string(),
+                    replacement: "[INTERNAL_HASH]".to_string(),
+                    description: None,
+                },
+            ],
+            ..SanitizeConfig::default()
+        };
+
+        let sanitizer = Sanitizer::from_config(&cfg);
+        let input = "log: MYCORP_ABCDEF0123456789ABCDEF0123456789AB and internal-0123456789abcdef0123456789abcdef01234567 plus AKIAIOSFODNN7EXAMPLE";
+        let output = sanitizer.sanitize(input);
+
+        // Custom pattern 1 was redacted with its label
+        assert!(
+            !output.contains("MYCORP_ABCDEF"),
+            "MYCORP token must be redacted, got: {output}"
+        );
+        assert!(
+            output.contains("[MYCORP_TOKEN]"),
+            "replacement label missing, got: {output}"
+        );
+
+        // Custom pattern 2 was redacted with its label
+        assert!(
+            !output.contains("internal-0123456789"),
+            "internal hash must be redacted, got: {output}"
+        );
+        assert!(
+            output.contains("[INTERNAL_HASH]"),
+            "second custom label missing, got: {output}"
+        );
+
+        // AND builtin AWS pattern still fires on the same input
+        assert!(
+            !output.contains("AKIAIOSFODNN7EXAMPLE"),
+            "builtin AWS pattern must still fire, got: {output}"
+        );
+    }
+
+    /// **Sprint 3 Phase B.6:** an invalid regex in the YAML custom
+    /// patterns list must be logged and skipped, not crash the
+    /// Sanitizer. The rest of the config (builtin + other customs)
+    /// stays functional.
+    ///
+    /// The test input uses `token=` so the Aho-Corasick keyword
+    /// pre-filter fires and the sanitizer actually runs regex matching
+    /// on the line. (Without a keyword the Tier-1 fast path would
+    /// bypass every regex.)
+    #[test]
+    fn test_custom_patterns_invalid_regex_is_skipped_not_fatal() {
+        let cfg = SanitizeConfig {
+            enabled: true,
+            custom_patterns: vec![
+                CustomSanitizePattern {
+                    pattern: r"(?P<unclosed".to_string(), // deliberately broken
+                    replacement: "[NEVER]".to_string(),
+                    description: None,
+                },
+                CustomSanitizePattern {
+                    pattern: r"valid_token_\d+".to_string(),
+                    replacement: "[VALID]".to_string(),
+                    description: None,
+                },
+            ],
+            ..SanitizeConfig::default()
+        };
+
+        // Must not panic — invalid regex is just logged.
+        let sanitizer = Sanitizer::from_config(&cfg);
+
+        let input = "log: token=valid_token_4242 should be redacted";
+        let output = sanitizer.sanitize(input);
+        assert!(
+            output.contains("[VALID]"),
+            "valid pattern should fire, got: {output}"
+        );
+        assert!(
+            !output.contains("valid_token_4242"),
+            "valid pattern should have replaced the match, got: {output}"
+        );
+    }
+
     #[test]
     fn test_no_false_positives() {
         let sanitizer = Sanitizer::with_defaults();
