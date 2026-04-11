@@ -263,6 +263,7 @@ impl McpServer {
     async fn create_tool_context(
         &self,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
+        notification_tx: Option<mpsc::Sender<WriterMessage>>,
     ) -> ToolContext {
         // Read config snapshot
         let mut config_snapshot = {
@@ -292,6 +293,7 @@ impl McpServer {
         ctx.roots = self.roots.read().await.to_vec();
         ctx.metrics = Some(Arc::clone(&self.metrics));
         ctx.cancel_token = cancel_token;
+        ctx.notification_tx = notification_tx;
         ctx
     }
 
@@ -547,10 +549,15 @@ impl McpServer {
                         id = ?rid_cleanup,
                         method = %request.method,
                     );
+                    let session_tx = tx.clone();
                     tokio::spawn(
                         async move {
                             let response = server
-                                .handle_request_with_cancel(request, cancel_token)
+                                .handle_request_with_cancel(
+                                    request,
+                                    cancel_token,
+                                    Some(session_tx),
+                                )
                                 .await;
                             let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
                             if let Some(rid) = rid_cleanup {
@@ -753,14 +760,21 @@ impl McpServer {
     /// [`Self::handle_request_with_cancel`] variant to honor MCP
     /// `notifications/cancelled`.
     pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
-        self.handle_request_with_cancel(request, None).await
+        self.handle_request_with_cancel(request, None, None).await
     }
 
-    /// Dispatch a JSON-RPC request with an optional cancellation token.
+    /// Dispatch a JSON-RPC request with an optional cancellation token
+    /// and an optional per-session notification sender.
     ///
     /// The token is propagated to `handle_tools_call` (synchronous path),
     /// where it reaches the `ToolContext` so long-running handlers can race
     /// their SSH work against `token.cancelled()`.
+    ///
+    /// The `notification_tx` channel lets tool handlers send
+    /// server-initiated messages (elicitation, sampling, progress,
+    /// logging) back to *this specific client session* — which is the
+    /// critical bit for multi-session transports like the daemon Unix
+    /// socket, where a global sender would race across clients.
     ///
     /// Other methods ignore the token either because they are fast
     /// (tools/list, prompts/get, resources/read) or because they have their
@@ -769,6 +783,7 @@ impl McpServer {
         &self,
         request: JsonRpcRequest,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
+        notification_tx: Option<mpsc::Sender<WriterMessage>>,
     ) -> JsonRpcResponse {
         let id = request.id.clone();
 
@@ -778,8 +793,19 @@ impl McpServer {
                 // After handshake, fetch roots if client supports them.
                 // Spawn as background task since we can't block the response.
                 if self.client_supports_roots.load(Ordering::Relaxed) {
-                    let notification_tx = self.notification_tx.read().await.clone();
-                    if let Some(tx) = notification_tx {
+                    // Prefer the per-session tx passed through the request,
+                    // fall back to the global slot for handlers invoked
+                    // outside a session (e.g. unit tests).
+                    let tx_opt = notification_tx.clone().or_else(|| {
+                        // blocking_read is avoided — we're in async context
+                        None
+                    });
+                    let tx_opt = if tx_opt.is_some() {
+                        tx_opt
+                    } else {
+                        self.notification_tx.read().await.clone()
+                    };
+                    if let Some(tx) = tx_opt {
                         let roots = Arc::clone(&self.roots);
                         let pending = Arc::clone(&self.pending_requests);
                         tokio::spawn(async move {
@@ -808,7 +834,7 @@ impl McpServer {
             }
             "tools/list" => self.handle_tools_list(id, request.params.as_ref()),
             "tools/call" => {
-                self.handle_tools_call(id, request.params, cancel_token)
+                self.handle_tools_call(id, request.params, cancel_token, notification_tx)
                     .await
             }
             "prompts/list" => self.handle_prompts_list(id),
@@ -1026,6 +1052,7 @@ impl McpServer {
         id: Option<Value>,
         params: Option<Value>,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
+        notification_tx: Option<mpsc::Sender<WriterMessage>>,
     ) -> JsonRpcResponse {
         let Some(params) = params else {
             return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
@@ -1043,14 +1070,18 @@ impl McpServer {
 
         info!(tool = %call_params.name, "Tool call");
 
-        // Create progress reporter if the client sent a progressToken
+        // Create progress reporter if the client sent a progressToken.
+        // Prefer the per-session `notification_tx`; fall back to the
+        // global slot for legacy call sites (unit tests mostly).
         let progress_reporter = call_params
             .meta
             .as_ref()
             .and_then(|m| m.progress_token.clone())
             .and_then(|token| {
-                let tx_guard = self.notification_tx.try_read().ok()?;
-                let tx = tx_guard.as_ref()?.clone();
+                let tx = notification_tx.clone().or_else(|| {
+                    let tx_guard = self.notification_tx.try_read().ok()?;
+                    tx_guard.as_ref().cloned()
+                })?;
                 Some(ProgressReporter::new(token, tx, Some(3)))
             });
 
@@ -1060,7 +1091,13 @@ impl McpServer {
         // lives beyond the enclosing request.
         if let Some(task_request) = call_params.task {
             return self
-                .handle_tools_call_async(call_params.name, call_params.arguments, task_request, id)
+                .handle_tools_call_async(
+                    call_params.name,
+                    call_params.arguments,
+                    task_request,
+                    id,
+                    notification_tx,
+                )
                 .await;
         }
 
@@ -1069,7 +1106,9 @@ impl McpServer {
             reporter.report(1, Some("Preparing execution..."));
         }
 
-        let ctx = self.create_tool_context(cancel_token).await;
+        let ctx = self
+            .create_tool_context(cancel_token, notification_tx)
+            .await;
 
         if let Some(ref reporter) = progress_reporter {
             reporter.report(2, Some(&format!("Executing {}...", call_params.name)));
@@ -1181,6 +1220,7 @@ impl McpServer {
         arguments: Option<Value>,
         task_request: super::protocol::TaskRequest,
         id: Option<Value>,
+        notification_tx: Option<mpsc::Sender<WriterMessage>>,
     ) -> JsonRpcResponse {
         // Get the handler first to validate the tool exists
         let Some(handler) = self.registry.get(&tool_name) else {
@@ -1208,11 +1248,17 @@ impl McpServer {
 
         // Clone dependencies for the background worker
         let task_store = Arc::clone(&self.task_store);
-        let notification_tx = Arc::clone(&self.notification_tx);
+        // Prefer the per-session tx for the task-completion notification
+        // so it reaches the originating daemon client; fall back to the
+        // legacy global slot for code paths that don't have a session.
+        let task_notification_tx = notification_tx.clone();
+        let global_notification_tx = Arc::clone(&self.notification_tx);
         // Propagate the task's cancel_token into the ToolContext so the
         // handler can do clean shutdown (e.g. evicting the SSH connection
         // from the pool) when the task is cancelled via `tasks/cancel`.
-        let ctx = self.create_tool_context(Some(cancel_token.clone())).await;
+        let ctx = self
+            .create_tool_context(Some(cancel_token.clone()), notification_tx)
+            .await;
 
         // Spawn the background worker
         tokio::spawn(async move {
@@ -1248,13 +1294,19 @@ impl McpServer {
                 }
             };
 
-            // Send status notification (best-effort)
+            // Send status notification (best-effort). Prefer the
+            // per-session tx so the message reaches the originating
+            // client.
             if let Some(info) = info {
-                let tx_guard = notification_tx.read().await;
-                if let Some(tx) = tx_guard.as_ref() {
-                    let _ = tx.try_send(WriterMessage::Notification(
-                        JsonRpcNotification::task_status(&info),
-                    ));
+                let msg =
+                    WriterMessage::Notification(JsonRpcNotification::task_status(&info));
+                if let Some(tx) = task_notification_tx.as_ref() {
+                    let _ = tx.try_send(msg);
+                } else {
+                    let tx_guard = global_notification_tx.read().await;
+                    if let Some(tx) = tx_guard.as_ref() {
+                        let _ = tx.try_send(msg);
+                    }
                 }
             }
         });
@@ -1296,7 +1348,7 @@ impl McpServer {
 
         info!(prompt = %get_params.name, "Prompt get");
 
-        let ctx = self.create_tool_context(None).await;
+        let ctx = self.create_tool_context(None, None).await;
 
         match self
             .prompt_registry
@@ -1315,7 +1367,7 @@ impl McpServer {
     }
 
     async fn handle_resources_list(&self, id: Option<Value>) -> JsonRpcResponse {
-        let ctx = self.create_tool_context(None).await;
+        let ctx = self.create_tool_context(None, None).await;
 
         match self.resource_registry.list(&ctx).await {
             Ok(resources) => {
@@ -1350,7 +1402,7 @@ impl McpServer {
 
         info!(uri = %read_params.uri, "Resource read");
 
-        let ctx = self.create_tool_context(None).await;
+        let ctx = self.create_tool_context(None, None).await;
 
         match self.resource_registry.read(&read_params.uri, &ctx).await {
             Ok(contents) => {
@@ -1911,7 +1963,7 @@ mod tests {
     async fn test_handle_tools_call_missing_params() {
         let server = create_test_server();
 
-        let response = server.handle_tools_call(Some(json!(1)), None, None).await;
+        let response = server.handle_tools_call(Some(json!(1)), None, None, None).await;
 
         assert!(response.error.is_some());
         let error = response.error.unwrap();
@@ -1927,7 +1979,7 @@ mod tests {
         });
 
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
             .await;
 
         assert!(response.error.is_some());
@@ -1944,7 +1996,7 @@ mod tests {
         });
 
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
             .await;
 
         // Unknown tool returns success with error content (MCP spec)
@@ -2011,7 +2063,7 @@ mod tests {
         });
 
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
             .await;
 
         assert!(response.error.is_none());
@@ -2230,7 +2282,7 @@ mod tests {
         });
 
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
             .await;
 
         // Should succeed (null arguments treated as empty)
@@ -2246,7 +2298,7 @@ mod tests {
         });
 
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
             .await;
 
         // Empty name should result in tool not found
@@ -2531,7 +2583,7 @@ mod tests {
         });
 
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
             .await;
 
         // Synchronous: should return content directly (not CreateTaskResult)
@@ -2550,7 +2602,7 @@ mod tests {
         });
 
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
             .await;
 
         assert!(response.error.is_none());
@@ -2572,7 +2624,7 @@ mod tests {
         });
 
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
             .await;
 
         // Unknown tool should return error content, not CreateTaskResult
@@ -2591,7 +2643,7 @@ mod tests {
             "task": {"ttl": 60000}
         });
         let call_response = server
-            .handle_tools_call(Some(json!(1)), Some(call_params), None)
+            .handle_tools_call(Some(json!(1)), Some(call_params), None, None)
             .await;
         let task_id = call_response.result.unwrap()["task"]["taskId"]
             .as_str()
@@ -2686,7 +2738,7 @@ mod tests {
         });
 
         let call_response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
             .await;
         let task_id = call_response.result.unwrap()["task"]["taskId"]
             .as_str()
@@ -3517,7 +3569,7 @@ mod tests {
         // runs; deeper verification lives in the full integration test
         // added in commit 6.
         let response = server
-            .handle_request_with_cancel(request, Some(token))
+            .handle_request_with_cancel(request, Some(token), None)
             .await;
         assert!(response.result.is_some() || response.error.is_some());
     }

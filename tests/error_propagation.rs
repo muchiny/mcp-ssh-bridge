@@ -98,6 +98,7 @@ fn create_tool_context(config: &Config) -> ToolContext {
         session_recorder: None,
         metrics: None,
         cancel_token: None,
+            notification_tx: None,
     }
 }
 

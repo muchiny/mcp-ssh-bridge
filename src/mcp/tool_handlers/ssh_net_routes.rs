@@ -309,6 +309,7 @@ mod tests {
             session_recorder: None,
             metrics: None,
             cancel_token: None,
+            notification_tx: None,
         }
     }
 

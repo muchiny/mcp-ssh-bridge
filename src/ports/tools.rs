@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::Value;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc};
 
 use super::protocol::ToolCallResult;
 use crate::config::Config;
@@ -63,6 +63,21 @@ pub struct ToolContext {
     /// `None` disables cancellation — the default for test contexts and any
     /// handler invoked outside an MCP request lifecycle.
     pub cancel_token: Option<tokio_util::sync::CancellationToken>,
+    /// Per-session writer channel for server-initiated JSON-RPC messages
+    /// (progress, elicitation, sampling, logging notifications).
+    ///
+    /// Tool handlers that need to initiate a server → client interaction
+    /// (e.g. [`crate::mcp::protocol::WriterMessage::Request`] for an
+    /// elicitation, or [`crate::mcp::protocol::WriterMessage::Notification`]
+    /// for a progress update) send on this channel. It is `None` in
+    /// test contexts and for handlers invoked outside a live MCP session.
+    ///
+    /// This replaces the legacy `McpServer::notification_tx` global slot
+    /// with a per-session sender so that multi-session transports (the
+    /// daemon Unix socket) route notifications back to the originating
+    /// connection instead of racing against a shared last-writer-wins
+    /// slot.
+    pub notification_tx: Option<mpsc::Sender<crate::mcp::protocol::WriterMessage>>,
 }
 
 impl ToolContext {
@@ -95,6 +110,7 @@ impl ToolContext {
             session_recorder: None,
             metrics: None,
             cancel_token: None,
+            notification_tx: None,
         }
     }
 
@@ -293,6 +309,7 @@ pub mod mock {
             session_recorder: None,
             metrics: None,
             cancel_token: None,
+            notification_tx: None,
         }
     }
 
@@ -342,6 +359,7 @@ pub mod mock {
             session_recorder: None,
             metrics: None,
             cancel_token: None,
+            notification_tx: None,
         }
     }
 
@@ -390,6 +408,7 @@ pub mod mock {
             session_recorder: None,
             metrics: None,
             cancel_token: None,
+            notification_tx: None,
         }
     }
 
@@ -425,6 +444,7 @@ pub mod mock {
             session_recorder: None,
             metrics: None,
             cancel_token: None,
+            notification_tx: None,
         }
     }
 }
