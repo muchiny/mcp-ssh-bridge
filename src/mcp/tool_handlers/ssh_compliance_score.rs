@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::compliance::ComplianceCommandBuilder;
@@ -26,6 +27,8 @@ pub struct SshComplianceScoreArgs {
 }
 
 impl_common_args!(SshComplianceScoreArgs);
+
+#[mcp_standard_tool(name = "ssh_compliance_score", group = "compliance", annotation = "read_only")]
 
 pub struct ComplianceScoreTool;
 

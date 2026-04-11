@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::sbom::SbomCommandBuilder;
 use crate::error::Result;
@@ -24,6 +25,8 @@ pub struct SshComplianceCheckArgs {
 }
 
 impl_common_args!(SshComplianceCheckArgs);
+
+#[mcp_standard_tool(name = "ssh_compliance_check", group = "security_scan", annotation = "read_only")]
 
 pub struct ComplianceCheckTool;
 

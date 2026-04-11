@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::compliance::ComplianceCommandBuilder;
@@ -32,6 +33,8 @@ pub struct SshCisBenchmarkArgs {
 }
 
 impl_common_args!(SshCisBenchmarkArgs);
+
+#[mcp_standard_tool(name = "ssh_cis_benchmark", group = "compliance", annotation = "read_only")]
 
 pub struct CisBenchmarkTool;
 

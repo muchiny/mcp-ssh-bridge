@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::sbom::SbomCommandBuilder;
 use crate::error::Result;
@@ -23,6 +24,8 @@ pub struct SshSbomGenerateArgs {
 }
 
 impl_common_args!(SshSbomGenerateArgs);
+
+#[mcp_standard_tool(name = "ssh_sbom_generate", group = "security_scan", annotation = "read_only")]
 
 pub struct SbomGenerateTool;
 

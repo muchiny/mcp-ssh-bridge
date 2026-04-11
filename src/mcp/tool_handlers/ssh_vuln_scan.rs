@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::sbom::SbomCommandBuilder;
 use crate::error::Result;
@@ -22,6 +23,8 @@ pub struct SshVulnScanArgs {
 }
 
 impl_common_args!(SshVulnScanArgs);
+
+#[mcp_standard_tool(name = "ssh_vuln_scan", group = "security_scan", annotation = "read_only")]
 
 pub struct VulnScanTool;
 

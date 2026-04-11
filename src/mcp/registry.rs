@@ -1287,14 +1287,8 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshAdGroupMembersHandler,
         SshAdUserInfoHandler,
         SshAdUserListHandler,
-        SshCisBenchmarkHandler,
-        SshCompareStateHandler,
-        SshComplianceCheckHandler,
-        SshComplianceReportHandler,
-        SshComplianceScoreHandler,
         SshConfigGetHandler,
         SshConfigSetHandler,
-        SshDiagnoseHandler,
         SshDiskUsageHandler,
         SshEsxiDatastoreListHandler,
         SshEsxiHostInfoHandler,
@@ -1303,7 +1297,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshEsxiVmInfoHandler,
         SshEsxiVmListHandler,
         SshEsxiVmPowerHandler,
-        SshFail2banStatusHandler,
         SshHypervHostInfoHandler,
         SshHypervSnapshotCreateHandler,
         SshHypervSnapshotListHandler,
@@ -1319,7 +1312,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshIisStartHandler,
         SshIisStatusHandler,
         SshIisStopHandler,
-        SshIncidentTriageHandler,
         SshMetricsHandler,
         SshMetricsMultiHandler,
         SshMongodbStatusHandler,
@@ -1333,8 +1325,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshNetEquipShowRunHandler,
         SshNetEquipShowVersionHandler,
         SshNetEquipShowVlansHandler,
-        SshNetworkCaptureHandler,
-        SshPortScanHandler,
         SshPostgresqlQueryHandler,
         SshPostgresqlStatusHandler,
         SshRecordingListHandler,
@@ -1350,16 +1340,12 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshRegListHandler,
         SshRegQueryHandler,
         SshRegSetHandler,
-        SshSbomGenerateHandler,
         SshSchtaskDisableHandler,
         SshSchtaskEnableHandler,
         SshSchtaskInfoHandler,
         SshSchtaskListHandler,
         SshSchtaskRunHandler,
-        SshSslAuditHandler,
-        SshStigCheckHandler,
         SshTailHandler,
-        SshVulnScanHandler,
         SshWinDiskUsageHandler,
         SshWinEventExportHandler,
         SshWinEventLogsHandler,
@@ -1449,15 +1435,7 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Performance Profiling
         // Container Log Analysis
         // Network Security
-        Arc::new(SshPortScanHandler::new()),
-        Arc::new(SshSslAuditHandler::new()),
-        Arc::new(SshNetworkCaptureHandler::new()),
-        Arc::new(SshFail2banStatusHandler::new()),
         // Compliance
-        Arc::new(SshCisBenchmarkHandler::new()),
-        Arc::new(SshStigCheckHandler::new()),
-        Arc::new(SshComplianceScoreHandler::new()),
-        Arc::new(SshComplianceReportHandler::new()),
         // Cloud
         // Inventory
         // Multi-cloud
@@ -1473,16 +1451,10 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Certificates
         // Nginx
         // Diagnostics
-        Arc::new(SshDiagnoseHandler::new()),
-        Arc::new(SshIncidentTriageHandler::new()),
-        Arc::new(SshCompareStateHandler::new()),
         // Orchestration
         // Drift Detection
         // File Advanced (added to file_ops group)
         // Security Scanning
-        Arc::new(SshSbomGenerateHandler::new()),
-        Arc::new(SshVulnScanHandler::new()),
-        Arc::new(SshComplianceCheckHandler::new()),
         // Runbooks
         // Recording / Compliance
         Arc::new(SshRecordingStartHandler),
