@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Summary — Sprint 3 Phases A + B
+
+**Transport unified** | **Daemon inherits stdio features** | **WinRM + K8sExec pools** | **Multi-host output diffing**
+
+### Added
+
+- **Unified `Transport` trait** with session-based `accept() -> Option<Session>` API in `src/mcp/transport/mod.rs`. One trait drives both stdio and the daemon's Unix socket listener; each session gets its own reader/writer halves that can be moved into independent tokio tasks.
+- **`McpServer::serve<T: Transport>`** — generic accept loop that replaces the stdio-hardcoded `run()`. `run()` now delegates to `serve(StdioTransport::new(), …)`. `run_daemon()` plugs in a new `UnixSocketTransport` and gets every feature the stdio loop has (batch requests, parse_error responses, elicitation/sampling/logging via per-session `notification_tx`, config hot-reload) for free.
+- **`UnixSocketTransport`** — multi-session Transport impl backed by `tokio::net::UnixListener` with a `CancellationToken` for graceful shutdown on SIGINT.
+- **Per-session `notification_tx` in `ToolContext`** — tool handlers running inside a live MCP session now reach the originating client directly via their session's writer channel, instead of racing against a global `McpServer::notification_tx` slot. Multi-session daemon clients no longer step on each other's server-initiated messages.
+- **`WinRmPool`** (`src/winrm/pool.rs`) — caches `reqwest::Client` instances per host for 120 seconds so back-to-back WinRM calls reuse the existing HTTPS connection pool instead of paying a fresh TLS handshake on every invocation.
+- **`K8sExecPool`** (`src/k8s_exec/pool.rs`) — same pattern for `kube::Client`, 300-second idle TTL. Cold cost (kubeconfig walk + auth plugin refresh + TLS stack) is amortized across subsequent calls.
+- **Multi-host output diffing** in `ssh_exec_multi` — new `diff`, `diff_baseline`, `normalize` args add a structured diff section to the response comparing the output of the same command across every host against a baseline. Useful for detecting config drift on a fleet. Backed by a new pure-domain module `src/domain/diff.rs` using the `similar` crate. Large outputs (>100 KB) skip the unified-diff generation and fall back to a hash-based match/differ comparison to keep per-call cost bounded.
+- **Sanitizer YAML custom patterns** — explicit end-to-end tests proving that `SanitizeConfig.custom_patterns` compose with builtin patterns and that invalid regexes in YAML are skipped rather than fatal.
+- **New daemon integration tests**: batch request dispatch + parse_error response for malformed JSON, both proving that behaviors `daemon/connection.rs` used to reject are now inherited from the shared `serve_session` path.
+
+### Changed
+
+- **`McpServer::handle_request_with_cancel`** signature gains a `notification_tx` parameter propagated through `handle_tools_call` and `create_tool_context` so the per-session sender reaches every handler.
+- **`ExecutorRouter`** stores `WinRmPool` + `K8sExecPool` (feature-gated) and delegates `Protocol::WinRm` / `Protocol::K8sExec` routing to them instead of constructing a fresh connection on every call. `cleanup()` and `close_all()` forward to every pool so the shared cleanup tasks clear stale entries.
+
+### Removed
+
+- `src/daemon/connection.rs` — the per-connection handler is now replaced by `McpServer::serve_session`, which already has cancellation plumbing, the request registry, and the full dispatch surface.
+
 ## [1.11.0] - 2026-04-10
 
 ### Summary
