@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
@@ -24,6 +25,8 @@ pub struct SshMysqlQueryArgs {
 }
 
 impl_common_args!(SshMysqlQueryArgs);
+
+#[mcp_standard_tool(name = "ssh_mysql_query", group = "mysql", annotation = "mutating")]
 
 pub struct MysqlQueryTool;
 

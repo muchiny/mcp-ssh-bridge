@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::network_equipment::{EquipmentType, NetworkEquipmentCommandBuilder};
 use crate::error::Result;
@@ -23,6 +24,8 @@ pub struct SshNetEquipShowVlansArgs {
 }
 
 impl_common_args!(SshNetEquipShowVlansArgs);
+
+#[mcp_standard_tool(name = "ssh_net_equip_show_vlans", group = "network_equipment", annotation = "read_only")]
 
 pub struct NetEquipShowVlansTool;
 

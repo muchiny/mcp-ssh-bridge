@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
@@ -21,6 +22,8 @@ pub struct SshMysqlStatusArgs {
 }
 
 impl_common_args!(SshMysqlStatusArgs);
+
+#[mcp_standard_tool(name = "ssh_mysql_status", group = "mysql", annotation = "read_only")]
 
 pub struct MysqlStatusTool;
 

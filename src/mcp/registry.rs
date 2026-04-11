@@ -1290,13 +1290,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshConfigGetHandler,
         SshConfigSetHandler,
         SshDiskUsageHandler,
-        SshEsxiDatastoreListHandler,
-        SshEsxiHostInfoHandler,
-        SshEsxiNetworkListHandler,
-        SshEsxiSnapshotHandler,
-        SshEsxiVmInfoHandler,
-        SshEsxiVmListHandler,
-        SshEsxiVmPowerHandler,
         SshHypervHostInfoHandler,
         SshHypervSnapshotCreateHandler,
         SshHypervSnapshotListHandler,
@@ -1314,27 +1307,11 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshIisStopHandler,
         SshMetricsHandler,
         SshMetricsMultiHandler,
-        SshMongodbStatusHandler,
-        SshMysqlQueryHandler,
-        SshMysqlStatusHandler,
-        SshNetEquipConfigHandler,
-        SshNetEquipSaveHandler,
-        SshNetEquipShowArpHandler,
-        SshNetEquipShowInterfacesHandler,
-        SshNetEquipShowRoutesHandler,
-        SshNetEquipShowRunHandler,
-        SshNetEquipShowVersionHandler,
-        SshNetEquipShowVlansHandler,
-        SshPostgresqlQueryHandler,
-        SshPostgresqlStatusHandler,
         SshRecordingListHandler,
         SshRecordingReplayHandler,
         SshRecordingStartHandler,
         SshRecordingStopHandler,
         SshRecordingVerifyHandler,
-        SshRedisCliHandler,
-        SshRedisInfoHandler,
-        SshRedisKeysHandler,
         SshRegDeleteHandler,
         SshRegExportHandler,
         SshRegListHandler,
@@ -1413,13 +1390,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Docker
         // ssh_docker_ps — registered via #[mcp_standard_tool] inventory.
         // ESXi
-        Arc::new(SshEsxiVmListHandler::new()),
-        Arc::new(SshEsxiVmInfoHandler::new()),
-        Arc::new(SshEsxiVmPowerHandler::new()),
-        Arc::new(SshEsxiSnapshotHandler::new()),
-        Arc::new(SshEsxiHostInfoHandler::new()),
-        Arc::new(SshEsxiDatastoreListHandler::new()),
-        Arc::new(SshEsxiNetworkListHandler::new()),
         // Git
         // Kubernetes (kubectl)
         // Kubernetes (helm)
@@ -1463,19 +1433,11 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshRecordingReplayHandler),
         Arc::new(SshRecordingVerifyHandler),
         // Redis
-        Arc::new(SshRedisInfoHandler::new()),
-        Arc::new(SshRedisCliHandler::new()),
-        Arc::new(SshRedisKeysHandler::new()),
         // PostgreSQL
-        Arc::new(SshPostgresqlQueryHandler::new()),
-        Arc::new(SshPostgresqlStatusHandler::new()),
         // MySQL
-        Arc::new(SshMysqlQueryHandler::new()),
-        Arc::new(SshMysqlStatusHandler::new()),
         // Apache
         // Let's Encrypt
         // MongoDB
-        Arc::new(SshMongodbStatusHandler::new()),
         // Terraform
         // Vault
         // Config
@@ -1488,14 +1450,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Systemd Timers
         // Security Modules
         // Network Equipment
-        Arc::new(SshNetEquipShowRunHandler::new()),
-        Arc::new(SshNetEquipShowInterfacesHandler::new()),
-        Arc::new(SshNetEquipShowRoutesHandler::new()),
-        Arc::new(SshNetEquipShowArpHandler::new()),
-        Arc::new(SshNetEquipShowVersionHandler::new()),
-        Arc::new(SshNetEquipShowVlansHandler::new()),
-        Arc::new(SshNetEquipConfigHandler::new()),
-        Arc::new(SshNetEquipSaveHandler::new()),
         // Podman
         // LDAP
         // Windows Services

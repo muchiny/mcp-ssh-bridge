@@ -6,6 +6,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::esxi::EsxiCommandBuilder;
 use crate::error::Result;
@@ -27,6 +28,8 @@ pub struct SshEsxiNetworkListArgs {
 }
 
 impl_common_args!(SshEsxiNetworkListArgs);
+
+#[mcp_standard_tool(name = "ssh_esxi_network_list", group = "esxi", annotation = "read_only")]
 
 pub struct EsxiNetworkListTool;
 

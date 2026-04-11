@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::redis::RedisCommandBuilder;
 use crate::error::Result;
@@ -25,6 +26,8 @@ pub struct SshRedisKeysArgs {
 }
 
 impl_common_args!(SshRedisKeysArgs);
+
+#[mcp_standard_tool(name = "ssh_redis_keys", group = "redis", annotation = "read_only")]
 
 pub struct RedisKeysTool;
 

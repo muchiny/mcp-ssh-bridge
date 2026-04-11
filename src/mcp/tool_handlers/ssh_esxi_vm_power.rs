@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::esxi::EsxiCommandBuilder;
 use crate::error::Result;
@@ -24,6 +25,8 @@ pub struct SshEsxiVmPowerArgs {
 }
 
 impl_common_args!(SshEsxiVmPowerArgs);
+
+#[mcp_standard_tool(name = "ssh_esxi_vm_power", group = "esxi", annotation = "mutating")]
 
 pub struct EsxiVmPowerTool;
 

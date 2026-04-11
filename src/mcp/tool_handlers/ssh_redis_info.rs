@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::redis::RedisCommandBuilder;
 use crate::error::Result;
@@ -21,6 +22,8 @@ pub struct SshRedisInfoArgs {
 }
 
 impl_common_args!(SshRedisInfoArgs);
+
+#[mcp_standard_tool(name = "ssh_redis_info", group = "redis", annotation = "read_only")]
 
 pub struct RedisInfoTool;
 

@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::esxi::EsxiCommandBuilder;
 use crate::error::Result;
@@ -23,6 +24,8 @@ pub struct SshEsxiVmInfoArgs {
 }
 
 impl_common_args!(SshEsxiVmInfoArgs);
+
+#[mcp_standard_tool(name = "ssh_esxi_vm_info", group = "esxi", annotation = "read_only")]
 
 pub struct EsxiVmInfoTool;
 
