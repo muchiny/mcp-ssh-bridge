@@ -283,15 +283,18 @@ async fn test_docker_file_write_and_read() {
     let test_file = format!("{TEST_DIR}/e2e_test.txt");
     let test_content = "Hello from E2E Docker test!";
 
-    // Write file
+    // Write file. The shell path (content < sftp_write_threshold_bytes,
+    // default 64 KiB) returns the raw stdout of the write command, which
+    // is empty on success — so we don't assert on the response text here.
+    // The read-back below is the actual semantic check that the write
+    // landed on disk.
     let write_handler = SshFileWriteHandler;
-    let text = exec_tool(
+    let _ = exec_tool(
         &write_handler,
         json!({"host": "docker", "path": &test_file, "content": test_content}),
         &ctx,
     )
     .await;
-    assert!(!text.is_empty(), "Write should return confirmation");
 
     // Read it back
     let read_handler = SshFileReadHandler::new();
