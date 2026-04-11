@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::{info, warn};
 
+use crate::mcp_tool;
 use crate::domain::output_truncator::truncate_output_with_cache;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
@@ -40,6 +41,7 @@ struct SshFindArgs {
 }
 
 /// Handler that finds files and directories on a remote host.
+#[mcp_tool(name = "ssh_find", group = "directory", annotation = "read_only")]
 pub struct SshFindHandler;
 
 /// Build the `find` command string from parsed arguments.

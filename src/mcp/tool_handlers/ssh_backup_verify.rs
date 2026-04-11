@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::backup_advanced::BackupAdvancedCommandBuilder;
@@ -25,6 +26,8 @@ pub struct SshBackupVerifyArgs {
 }
 
 impl_common_args!(SshBackupVerifyArgs);
+
+#[mcp_standard_tool(name = "ssh_backup_verify", group = "backup", annotation = "read_only")]
 
 pub struct BackupVerifyTool;
 

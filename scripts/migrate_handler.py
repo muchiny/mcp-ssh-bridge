@@ -62,31 +62,82 @@ def is_already_migrated(file_text: str) -> bool:
 def insert_use_import(text: str, shape: str) -> str:
     """
     Insert `use crate::mcp_tool;` or `use crate::mcp_standard_tool;`
-    before the first `use crate::ports::` line (keeping imports alphabetical
-    is not critical — rustfmt will rearrange).
+    at TOP-LEVEL scope only — never inside a nested `mod tests { … }`
+    which would put the import out of reach of the `#[mcp_tool]`
+    attribute above the struct.
 
-    Idempotent: no-op if the use is already present.
+    Strategy: walk lines from the top of the file. Track brace depth
+    to stay at scope 0. As soon as we see the first `use crate::`
+    line at depth 0, insert the new use before it (keeping imports
+    roughly grouped). If no such line exists, insert after the file
+    header comments / module docs.
+
+    Idempotent: no-op if the import line already exists at any
+    position (even inside a nested mod — that still satisfies Rust).
     """
     macro_name = "mcp_standard_tool" if shape == "standard" else "mcp_tool"
     needed = f"use crate::{macro_name};"
 
-    # Already imported?
-    if needed in text:
-        return text
+    # Short-circuit: already present (at any scope level).
+    for line in text.splitlines():
+        if line.strip() == needed:
+            return text
 
-    # Find the first `use crate::ports::` line; insert `needed\n` above it.
-    m = re.search(r"^(\s*)use crate::ports::", text, re.MULTILINE)
-    if m is None:
-        # Fallback: insert after any existing `use crate::` line.
-        m = re.search(r"^(\s*)use crate::[^\n]+;\s*\n", text, re.MULTILINE)
-        if m is None:
-            raise RuntimeError("cannot find a `use crate::…` anchor for the import")
-        insert_at = m.end()
-        return text[:insert_at] + f"{m.group(1)}{needed}\n" + text[insert_at:]
+    lines = text.splitlines(keepends=True)
+    depth = 0
+    first_top_level_use = None
 
-    indent = m.group(1)
-    insert_at = m.start()
-    return text[:insert_at] + f"{indent}{needed}\n" + text[insert_at:]
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+
+        # Track brace depth on the line BEFORE we classify it, so
+        # `mod tests {` bumps depth before we check its content.
+        # We skip strings — this is a rough approximation but handler
+        # files don't contain brace-heavy string literals at the
+        # top level.
+        line_depth_before = depth
+        for ch in line:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+
+        # Only consider lines that STARTED at depth 0.
+        if line_depth_before != 0:
+            continue
+
+        if stripped.startswith("use crate::"):
+            first_top_level_use = idx
+            break
+
+    if first_top_level_use is not None:
+        lines.insert(first_top_level_use, f"{needed}\n")
+        return "".join(lines)
+
+    # No top-level `use crate::` at all — find the first non-comment,
+    # non-attribute line at depth 0 and insert before it.
+    depth = 0
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        line_depth_before = depth
+        for ch in line:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+        if line_depth_before != 0:
+            continue
+        if (
+            stripped
+            and not stripped.startswith("//")
+            and not stripped.startswith("/*")
+            and not stripped.startswith("*")
+            and not stripped.startswith("#!")
+        ):
+            lines.insert(idx, f"{needed}\n\n")
+            return "".join(lines)
+
+    raise RuntimeError("cannot find an insertion point for the use import")
 
 
 def insert_attribute(

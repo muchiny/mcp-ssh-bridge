@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::{DatabaseCommandBuilder, DatabaseType};
 use crate::error::Result;
@@ -31,6 +32,8 @@ pub struct SshDbRestoreArgs {
 }
 
 impl_common_args!(SshDbRestoreArgs);
+
+#[mcp_standard_tool(name = "ssh_db_restore", group = "database", annotation = "mutating")]
 
 pub struct DbRestoreTool;
 

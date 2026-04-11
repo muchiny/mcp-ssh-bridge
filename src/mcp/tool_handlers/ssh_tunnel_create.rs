@@ -11,6 +11,7 @@ use serde_json::Value;
 use tokio::net::TcpListener;
 use tracing::{debug, info, warn};
 
+use crate::mcp_tool;
 use crate::domain::{TunnelDirection, TunnelInfo};
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
@@ -27,6 +28,7 @@ struct SshTunnelCreateArgs {
 }
 
 /// SSH Tunnel Create tool handler
+#[mcp_tool(name = "ssh_tunnel_create", group = "tunnels", annotation = "mutating")]
 pub struct SshTunnelCreateHandler;
 
 impl SshTunnelCreateHandler {

@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::backup_advanced::BackupAdvancedCommandBuilder;
@@ -28,6 +29,8 @@ pub struct SshBackupSnapshotArgs {
 }
 
 impl_common_args!(SshBackupSnapshotArgs);
+
+#[mcp_standard_tool(name = "ssh_backup_snapshot", group = "backup", annotation = "mutating")]
 
 pub struct BackupSnapshotTool;
 

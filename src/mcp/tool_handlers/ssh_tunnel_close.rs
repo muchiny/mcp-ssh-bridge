@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::info;
 
+use crate::mcp_tool;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
@@ -18,6 +19,7 @@ struct SshTunnelCloseArgs {
 }
 
 /// SSH Tunnel Close tool handler
+#[mcp_tool(name = "ssh_tunnel_close", group = "tunnels", annotation = "destructive")]
 pub struct SshTunnelCloseHandler;
 
 impl SshTunnelCloseHandler {

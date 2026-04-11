@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::info;
 
+use crate::mcp_tool;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
@@ -35,6 +36,7 @@ struct SshUploadArgs {
 }
 
 /// SSH Upload tool handler
+#[mcp_tool(name = "ssh_upload", group = "file_transfer", annotation = "mutating")]
 pub struct SshUploadHandler;
 
 impl SshUploadHandler {

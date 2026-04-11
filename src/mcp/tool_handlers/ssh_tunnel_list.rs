@@ -5,11 +5,13 @@
 use async_trait::async_trait;
 use serde_json::Value;
 
+use crate::mcp_tool;
 use crate::error::Result;
 use crate::mcp::protocol::ToolCallResult;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 /// SSH Tunnel List tool handler
+#[mcp_tool(name = "ssh_tunnel_list", group = "tunnels", annotation = "read_only")]
 pub struct SshTunnelListHandler;
 
 impl SshTunnelListHandler {

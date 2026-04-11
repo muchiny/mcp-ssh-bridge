@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::{info, warn};
 
+use crate::mcp_tool;
 use crate::domain::output_truncator::truncate_output_with_cache;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
@@ -30,6 +31,7 @@ struct SshSessionExecArgs {
 }
 
 /// SSH Session Exec tool handler
+#[mcp_tool(name = "ssh_session_exec", group = "sessions", annotation = "mutating")]
 pub struct SshSessionExecHandler;
 
 impl SshSessionExecHandler {
