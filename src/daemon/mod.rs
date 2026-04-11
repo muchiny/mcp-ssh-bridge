@@ -8,30 +8,35 @@
 //! shared [`McpServer::connection_pool`] keeps SSH handshakes cached
 //! between invocations.
 //!
-//! # Scope (Sprint 2)
+//! # Sprint 3 — Transport unified
 //!
-//! This is a **minimal** daemon:
-//! - Single subscriber per connection (no multicast).
-//! - No server-initiated notifications (elicitation, sampling, logging)
-//!   — those require per-connection notification channels which are
-//!   deferred to Sprint 3 along with the `Transport` trait unification.
-//! - No batch request support in the daemon loop.
-//! - No hot-reload of config from inside the daemon (restart required).
+//! The daemon now plugs a [`UnixSocketTransport`] into the generic
+//! [`McpServer::serve`] accept loop, just like stdio mode plugs in
+//! [`crate::mcp::transport::stdio::StdioTransport`]. Consequences:
 //!
-//! See `.claude/plans/noble-forging-rossum.md` for the full scope
-//! rationale.
+//! - **Elicitation, sampling, and logging** work end-to-end in daemon
+//!   mode because `serve_session` wires a per-session
+//!   `notification_tx` into every `ToolContext`.
+//! - **Batch requests** work because the batch dispatcher is shared
+//!   with stdio.
+//! - **Config hot-reload** works because `ConfigWatcher` is spawned by
+//!   `serve<T>()` and broadcasts `tools/list_changed` notifications
+//!   through the same channel each client session listens on.
+//!
+//! The old per-connection handler that lived in `daemon/connection.rs`
+//! is gone: its job is now done by `McpServer::serve_session`, which
+//! already has the cancellation plumbing, the request registry, and
+//! the full dispatch surface.
 
-mod connection;
 mod pidfile;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use tokio::net::UnixListener;
-
 use crate::config::Config;
-use crate::error::{BridgeError, Result};
+use crate::error::Result;
 use crate::mcp::McpServer;
+use crate::mcp::transport::unix_socket::UnixSocketTransport;
 
 pub use pidfile::{DaemonStatus, PidFile};
 
@@ -74,68 +79,36 @@ pub fn default_socket_path() -> PathBuf {
 /// - The socket path cannot be created (permissions, parent dir missing).
 /// - The underlying `McpServer` fails to start (config load error).
 pub async fn run_daemon(config: Arc<Config>, socket_path: &Path) -> Result<()> {
-    // 1. Acquire PID lock. This fails fast if another daemon is already
+    // 1. Acquire PID lock. Fails fast if another daemon is already
     //    running on the same socket.
     let _pid_file = PidFile::acquire(socket_path)?;
 
-    // 2. Remove any stale socket from a previous crash. `ErrorKind::NotFound`
-    //    is fine — `ErrorKind::PermissionDenied` is not, but we surface it.
-    match std::fs::remove_file(socket_path) {
-        Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => {
-            return Err(BridgeError::Io(e));
-        }
-    }
-
-    // 3. Build the shared McpServer. The audit writer task is spawned if
-    //    the config enables it — otherwise `audit_task` is None.
+    // 2. Build the shared McpServer. The audit writer task is passed
+    //    through to `serve()` so it runs under the same lifecycle as
+    //    every other global worker (cleanup, config watcher).
     let (server, audit_task) = McpServer::new((*config).clone());
-    if let Some(task) = audit_task {
-        tokio::spawn(task.run());
-    }
     let server = Arc::new(server);
 
-    // 4. Bind the Unix socket. Fails cleanly if permissions are wrong.
-    let listener = UnixListener::bind(socket_path).map_err(BridgeError::Io)?;
+    // 3. Bind the Unix socket listener + hook SIGINT to its shutdown
+    //    token so Ctrl+C unwinds the serve loop cleanly.
+    let transport = UnixSocketTransport::bind(socket_path)?;
+    let shutdown_token = transport.shutdown_token();
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        tracing::info!("SIGINT received, daemon shutting down");
+        shutdown_token.cancel();
+    });
+
     tracing::info!(
         path = %socket_path.display(),
         "Daemon listening for CLI connections"
     );
 
-    // 5. Accept loop with graceful shutdown on SIGINT.
-    let shutdown = tokio::signal::ctrl_c();
-    tokio::pin!(shutdown);
+    // 4. Run the unified serve loop. This consumes the transport,
+    //    which removes the socket file on shutdown as part of its
+    //    `shutdown()` implementation.
+    server.serve(transport, audit_task, None).await?;
 
-    loop {
-        tokio::select! {
-            biased;
-            _ = &mut shutdown => {
-                tracing::info!("SIGINT received, daemon shutting down");
-                break;
-            }
-            accept = listener.accept() => {
-                match accept {
-                    Ok((stream, _addr)) => {
-                        let server = Arc::clone(&server);
-                        tokio::spawn(async move {
-                            if let Err(e) = connection::handle(stream, server).await {
-                                tracing::warn!(error = %e, "Connection handler failed");
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        tracing::error!(error = %e, "UnixListener accept failed");
-                        // Brief backoff so a persistent error doesn't busy-spin.
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                    }
-                }
-            }
-        }
-    }
-
-    // 6. Cleanup: remove the socket file. Ignore errors — we're exiting.
-    let _ = std::fs::remove_file(socket_path);
     tracing::info!("Daemon stopped");
     Ok(())
 }
