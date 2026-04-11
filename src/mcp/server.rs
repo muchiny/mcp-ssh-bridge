@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::Instant;
 
 use serde_json::{Value, json};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{RwLock, Semaphore, mpsc};
 use tracing::{Instrument, debug, error, info, warn};
 
@@ -23,6 +22,7 @@ use super::logger::McpLogger;
 use super::pending_requests::{ClientResponse, PendingRequests};
 use super::progress::ProgressReporter;
 use super::protocol::{IncomingMessage, JsonRpcMessage, RootEntry, RootsListResult};
+use super::transport::{Session, Transport, stdio::StdioTransport};
 
 use super::history::CommandHistory;
 use super::prompt_registry::{PromptRegistry, create_default_prompt_registry};
@@ -295,71 +295,101 @@ impl McpServer {
         ctx
     }
 
-    /// Run the server, reading from stdin and writing to stdout
+    /// Run the server over stdio (reading JSON-RPC from stdin, writing
+    /// responses to stdout).
     ///
-    /// This method processes requests concurrently using a worker pool limited
-    /// by `max_concurrent_commands` from the configuration.
+    /// This is a thin wrapper around [`Self::serve`] that plugs in the
+    /// default [`StdioTransport`]. It exists so existing entry points
+    /// (binary `main.rs`, tests) keep working unchanged while the daemon
+    /// path can use [`Self::serve`] with a different transport.
     ///
     /// # Arguments
     ///
-    /// * `audit_task` - Optional background task for async audit logging
-    /// * `config_path` - Optional path to config file for hot-reload support
+    /// * `audit_task` — optional background task for async audit logging.
+    /// * `config_path` — optional path to config file for hot-reload support.
     ///
     /// # Errors
     ///
-    /// Returns an error if reading from stdin or writing to stdout fails.
-    #[allow(clippy::too_many_lines)]
+    /// Propagates any I/O error from the transport or its sessions.
     pub async fn run(
         self: Arc<Self>,
         audit_task: Option<AuditWriterTask>,
         config_path: Option<&Path>,
     ) -> Result<()> {
-        // Spawn audit writer task if enabled
+        let transport = StdioTransport::new();
+        self.serve(transport, audit_task, config_path).await
+    }
+
+    /// Serve MCP requests over an arbitrary [`Transport`].
+    ///
+    /// Generic entry point that drives the accept loop: one `Session`
+    /// per client, one spawned task per session. Cleanup tasks and the
+    /// config watcher are owned by this method (global to the server
+    /// instance, shared across all sessions).
+    ///
+    /// # Arguments
+    ///
+    /// * `transport` — any type implementing [`Transport`]. For stdio
+    ///   this yields a single session and then `None`; for a Unix
+    ///   socket listener it yields one session per client connection.
+    /// * `audit_task` — optional audit writer background task.
+    /// * `config_path` — optional config path for hot-reload watching.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only if the transport itself produces one.
+    /// Per-session I/O errors are logged and close that session
+    /// without aborting the accept loop.
+    pub async fn serve<T: Transport>(
+        self: Arc<Self>,
+        mut transport: T,
+        audit_task: Option<AuditWriterTask>,
+        config_path: Option<&Path>,
+    ) -> Result<()> {
+        // Spawn audit writer task if enabled (global, shared).
         if let Some(task) = audit_task {
             tokio::spawn(task.run());
         }
 
-        let (tx, mut rx) = mpsc::channel::<WriterMessage>(100);
+        // Spawn cleanup tasks (global, shared across sessions).
+        let cleanup_handles = self.spawn_cleanup_tasks();
 
-        // Store the writer channel so background task workers can send notifications
-        *self.notification_tx.write().await = Some(tx.clone());
+        // Start config watcher. The watcher holds a closure that reads
+        // the *current* `notification_tx` from the server each time a
+        // reload fires — this keeps A.2 regression-free for stdio
+        // (single session) and A.3 will make it per-session aware.
+        let _config_watcher = config_path.and_then(|path| self.spawn_config_watcher(path));
 
-        // Create MCP logger for sending structured log notifications to the client
-        let mcp_logger = Arc::new(McpLogger::new(Arc::clone(&self.log_level), tx.clone()));
-        *self.mcp_logger.write().await = Some(Arc::clone(&mcp_logger));
+        info!("MCP SSH Bridge server starting...");
 
-        // Start config watcher for hot-reload if path is provided.
-        // The on_reload callback sends list_changed notifications through the
-        // writer channel so Claude Code can re-fetch tools/prompts/resources.
-        let _config_watcher = config_path.and_then(|path| {
-            let notification_tx = tx.clone();
-            let on_reload: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
-                // Use try_send (non-blocking) since we're called from a sync context.
-                // If the channel is full, the notification is dropped — acceptable.
-                let _ = notification_tx.try_send(WriterMessage::Notification(
-                    JsonRpcNotification::tools_list_changed(),
-                ));
-                let _ = notification_tx.try_send(WriterMessage::Notification(
-                    JsonRpcNotification::resources_list_changed(),
-                ));
+        // Accept loop: one session at a time, spawn a handler per
+        // session so concurrent sessions (daemon mode) run in parallel.
+        while let Some(session) = transport.accept().await {
+            let server = Arc::clone(&self);
+            tokio::spawn(async move {
+                server.serve_session(session).await;
             });
+        }
 
-            ConfigWatcher::with_notifications(
-                path,
-                Arc::clone(&self.config),
-                Some(Arc::clone(&self.validator)),
-                on_reload,
-            )
-            .map_err(|e| {
-                warn!(error = %e, "Failed to start config watcher, hot-reload disabled");
-                e
-            })
-            .ok()
-        });
+        info!("Transport accept loop ended, shutting down");
 
-        // Spawn session cleanup task (runs every 60 seconds)
+        // Shutdown global resources.
+        for h in cleanup_handles {
+            h.abort();
+        }
+        self.tunnel_manager.close_all().await;
+        self.session_manager.close_all().await;
+        transport.shutdown().await;
+
+        Ok(())
+    }
+
+    /// Spawn the three per-server cleanup tasks (session manager, task
+    /// store, output cache) and return their join handles so the serve
+    /// loop can abort them on shutdown.
+    fn spawn_cleanup_tasks(&self) -> Vec<tokio::task::JoinHandle<()>> {
         let cleanup_sm = Arc::clone(&self.session_manager);
-        let cleanup_handle = tokio::spawn(async move {
+        let sm_handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
@@ -367,9 +397,8 @@ impl McpServer {
             }
         });
 
-        // Spawn task store cleanup task (runs every 60 seconds)
         let cleanup_ts = Arc::clone(&self.task_store);
-        let task_cleanup_handle = tokio::spawn(async move {
+        let ts_handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
@@ -377,9 +406,8 @@ impl McpServer {
             }
         });
 
-        // Spawn output cache cleanup task (runs every 60 seconds)
         let cleanup_oc = Arc::clone(&self.output_cache);
-        let output_cache_cleanup_handle = tokio::spawn(async move {
+        let oc_handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
@@ -387,66 +415,90 @@ impl McpServer {
             }
         });
 
-        // Spawn writer task (single writer to stdout).
-        // Handles both JSON-RPC responses and unsolicited notifications.
-        let writer_handle = tokio::spawn(async move {
-            let mut stdout = tokio::io::stdout();
-            while let Some(msg) = rx.recv().await {
-                let json_str = match &msg {
-                    WriterMessage::Response(r) => serde_json::to_string(r),
-                    WriterMessage::Notification(n) => serde_json::to_string(n),
-                    WriterMessage::Request(r) => serde_json::to_string(&r),
-                    WriterMessage::BatchResponse(responses) => serde_json::to_string(responses),
-                };
-                let Ok(json_str) = json_str else {
-                    error!("Failed to serialize message");
-                    continue;
-                };
-                debug!(message = %json_str, "Sending message");
+        vec![sm_handle, ts_handle, oc_handle]
+    }
 
-                if let Err(e) = stdout.write_all(json_str.as_bytes()).await {
-                    error!(error = %e, "Failed to write message");
-                    break;
-                }
-                if let Err(e) = stdout.write_all(b"\n").await {
-                    error!(error = %e, "Failed to write newline");
-                    break;
-                }
-                if let Err(e) = stdout.flush().await {
-                    error!(error = %e, "Failed to flush stdout");
+    /// Start a config file watcher that broadcasts `list_changed`
+    /// notifications on reload.
+    ///
+    /// The watcher reads `self.notification_tx` at callback time rather
+    /// than capturing a specific session's sender, so it continues to
+    /// work as sessions come and go. Last-writer-wins semantics are
+    /// acceptable for stdio (single session) and are replaced by a
+    /// per-session fanout in A.3.
+    fn spawn_config_watcher(&self, path: &Path) -> Option<ConfigWatcher> {
+        let notification_tx_slot = Arc::clone(&self.notification_tx);
+        let on_reload: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+            // `blocking_read` is fine here: the slot is only written
+            // once per session start (held briefly) and the reload
+            // callback runs on a background thread owned by notify.
+            let guard = notification_tx_slot.blocking_read();
+            if let Some(tx) = guard.as_ref() {
+                let _ = tx
+                    .try_send(WriterMessage::Notification(JsonRpcNotification::tools_list_changed()));
+                let _ = tx.try_send(WriterMessage::Notification(
+                    JsonRpcNotification::resources_list_changed(),
+                ));
+            }
+        });
+
+        ConfigWatcher::with_notifications(
+            path,
+            Arc::clone(&self.config),
+            Some(Arc::clone(&self.validator)),
+            on_reload,
+        )
+        .map_err(|e| {
+            warn!(error = %e, "Failed to start config watcher, hot-reload disabled");
+            e
+        })
+        .ok()
+    }
+
+    /// Drive one full client session: spawn a per-session writer task,
+    /// then run the reader loop dispatching JSON-RPC requests.
+    ///
+    /// The writer is moved into its own `tokio::spawn` so it can run
+    /// concurrently with the reader; notifications and responses are
+    /// multiplexed through the `mpsc::Sender<WriterMessage>` that
+    /// [`Self::notification_tx`] caches for this session.
+    #[allow(clippy::too_many_lines)]
+    async fn serve_session(self: Arc<Self>, session: Session) {
+        let (tx, mut rx) = mpsc::channel::<WriterMessage>(100);
+
+        // Store the per-session writer channel globally so config
+        // watcher + background workers can find a live sender. With
+        // stdio this is set once and cleared on exit; with multi-
+        // session transports A.3 will replace this with a per-session
+        // fanout that tracks every live session.
+        *self.notification_tx.write().await = Some(tx.clone());
+
+        // Create / refresh MCP logger (writes `notifications/message`
+        // to the client) now that we have a tx for this session.
+        let mcp_logger = Arc::new(McpLogger::new(Arc::clone(&self.log_level), tx.clone()));
+        *self.mcp_logger.write().await = Some(Arc::clone(&mcp_logger));
+
+        // Writer task: consume the channel, forward every message to
+        // the session's writer half. The writer is moved in here; it
+        // cannot be shared (SessionWriter is Send but not Sync).
+        let mut session_writer = session.writer;
+        let writer_handle = tokio::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                if let Err(e) = session_writer.send(msg).await {
+                    error!(error = %e, "Session writer failed, closing");
                     break;
                 }
             }
         });
 
-        // Reader loop
-        let stdin = tokio::io::stdin();
-        let mut reader = BufReader::new(stdin);
-        let mut line = String::new();
+        // Reader loop: pull parsed messages from the session reader
+        // and dispatch them exactly like the legacy stdin loop.
+        let mut reader = session.reader;
+        info!("MCP session started");
 
-        info!("MCP SSH Bridge server starting...");
-
-        loop {
-            line.clear();
-            let bytes_read = reader.read_line(&mut line).await?;
-
-            if bytes_read == 0 {
-                // EOF - client disconnected
-                info!("Client disconnected, shutting down");
-                break;
-            }
-
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            debug!(request = %trimmed, "Received message");
-
-            // Parse as single message or batch (JSON-RPC 2.0)
-            let incoming = Self::parse_incoming(trimmed);
-            let incoming = match incoming {
-                Ok(msg) => msg,
+        while let Some(msg_result) = reader.recv().await {
+            let incoming = match msg_result {
+                Ok(m) => m,
                 Err(e) => {
                     error!(error = %e, "Failed to parse message");
                     let response = JsonRpcResponse::error(
@@ -473,9 +525,9 @@ impl McpServer {
                     let server = Arc::clone(&self);
                     let tx = tx.clone();
 
-                    // Register the request in the active_requests map so that
-                    // `notifications/cancelled` can find its CancellationToken.
-                    // Normalize the id to String the same way
+                    // Register the request so `notifications/cancelled`
+                    // can find its `CancellationToken`. We normalize
+                    // the id to a String the same way
                     // `route_incoming_message` does.
                     let request_id: Option<String> = request.id.as_ref().map(|v| match v {
                         Value::String(s) => s.clone(),
@@ -486,13 +538,10 @@ impl McpServer {
                         .map(|id| server.register_request(id.clone()));
                     let rid_cleanup = request_id;
 
-                    // Spawn worker task for this request.
-                    // `Instrument` attaches request-scoped fields to every
-                    // tracing event emitted by the handler, giving us
-                    // structured observability alongside the cancellation
-                    // plumbing. We use `.instrument()` (not `.entered()`)
-                    // because `EnteredSpan` is not `Send` and can't cross
-                    // await points in a spawned task.
+                    // Attach request-scoped tracing fields. `.instrument()`
+                    // (not `.entered()`) because `EnteredSpan` is not
+                    // `Send` and can't cross await points in a spawned
+                    // task.
                     let span = tracing::info_span!(
                         "mcp.request",
                         id = ?rid_cleanup,
@@ -577,18 +626,22 @@ impl McpServer {
             }
         }
 
-        // Shutdown: stop cleanup tasks, close all tunnels and sessions
-        cleanup_handle.abort();
-        task_cleanup_handle.abort();
-        output_cache_cleanup_handle.abort();
-        self.tunnel_manager.close_all().await;
-        self.session_manager.close_all().await;
+        info!("Client disconnected, session ending");
 
-        // Signal writer to stop and wait for it
+        // Clear the per-session writer channel from the global slot so
+        // the config watcher stops trying to send into a dead channel.
+        // Only clear if it still points at our tx (another session may
+        // have overwritten it in the meantime).
+        {
+            let mut slot = self.notification_tx.write().await;
+            if slot.as_ref().is_some_and(|cur| cur.same_channel(&tx)) {
+                *slot = None;
+            }
+        }
+
+        // Signal writer to stop and wait for it.
         drop(tx);
         let _ = writer_handle.await;
-
-        Ok(())
     }
 
     /// Parse an incoming line as a single JSON-RPC message or a batch.
