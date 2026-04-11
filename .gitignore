@@ -123,3 +123,4 @@ trivy-results.*
 
 # Benchmark history
 bench-history.json
+scripts/tool_metadata.json

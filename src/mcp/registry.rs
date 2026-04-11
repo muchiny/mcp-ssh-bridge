@@ -323,7 +323,8 @@ pub fn tool_group(tool_name: &str) -> &'static str {
 /// registered via `#[mcp_tool(annotation = "…")]` or
 /// `#[mcp_standard_tool(annotation = "…")]`, which emits an
 /// `inventory::submit!` carrying the annotation kind. Unknown names
-/// fall back to read-only, matching the previous lenient default.
+/// fall through to the empty `ToolAnnotations::default()`, matching
+/// the legacy "match fall-through" behavior.
 #[must_use]
 pub fn tool_annotations(tool_name: &str) -> ToolAnnotations {
     inventory_annotation_map()
