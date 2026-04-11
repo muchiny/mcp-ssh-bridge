@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::podman::PodmanCommandBuilder;
 use crate::error::Result;
@@ -23,6 +24,8 @@ pub struct SshPodmanImagesArgs {
 }
 
 impl_common_args!(SshPodmanImagesArgs);
+
+#[mcp_standard_tool(name = "ssh_podman_images", group = "podman", annotation = "read_only")]
 
 pub struct PodmanImagesTool;
 

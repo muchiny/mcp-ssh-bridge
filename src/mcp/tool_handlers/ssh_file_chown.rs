@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::file_ops::FileOpsCommandBuilder;
 use crate::error::Result;
@@ -27,6 +28,8 @@ pub struct SshFileChownArgs {
 }
 
 impl_common_args!(SshFileChownArgs);
+
+#[mcp_standard_tool(name = "ssh_file_chown", group = "file_ops", annotation = "mutating")]
 
 pub struct FileChownTool;
 

@@ -6,6 +6,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
@@ -31,6 +32,8 @@ pub struct SshDockerNetworkLsArgs {
 }
 
 impl_common_args!(SshDockerNetworkLsArgs);
+
+#[mcp_standard_tool(name = "ssh_docker_network_ls", group = "docker", annotation = "read_only")]
 
 pub struct DockerNetworkLsTool;
 

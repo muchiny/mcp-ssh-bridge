@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::file_advanced::FileAdvancedCommandBuilder;
 use crate::error::Result;
@@ -27,6 +28,8 @@ pub struct SshFileTemplateArgs {
 }
 
 impl_common_args!(SshFileTemplateArgs);
+
+#[mcp_standard_tool(name = "ssh_file_template", group = "file_ops", annotation = "mutating")]
 
 pub struct FileTemplateTool;
 

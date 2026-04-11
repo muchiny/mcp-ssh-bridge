@@ -6,6 +6,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
@@ -31,6 +32,8 @@ pub struct SshDockerVolumeLsArgs {
 }
 
 impl_common_args!(SshDockerVolumeLsArgs);
+
+#[mcp_standard_tool(name = "ssh_docker_volume_ls", group = "docker", annotation = "read_only")]
 
 pub struct DockerVolumeLsTool;
 

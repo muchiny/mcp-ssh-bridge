@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
@@ -33,6 +34,8 @@ pub struct SshDockerLogsArgs {
 }
 
 impl_common_args!(SshDockerLogsArgs);
+
+#[mcp_standard_tool(name = "ssh_docker_logs", group = "docker", annotation = "read_only")]
 
 pub struct DockerLogsTool;
 

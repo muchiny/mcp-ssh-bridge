@@ -6,6 +6,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
@@ -37,6 +38,8 @@ pub struct SshDockerComposeArgs {
 }
 
 impl_common_args!(SshDockerComposeArgs);
+
+#[mcp_standard_tool(name = "ssh_docker_compose", group = "docker", annotation = "mutating")]
 
 pub struct DockerComposeTool;
 

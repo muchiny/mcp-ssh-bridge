@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::podman::PodmanCommandBuilder;
 use crate::error::Result;
@@ -27,6 +28,8 @@ pub struct SshPodmanPsArgs {
 }
 
 impl_common_args!(SshPodmanPsArgs);
+
+#[mcp_standard_tool(name = "ssh_podman_ps", group = "podman", annotation = "read_only")]
 
 pub struct PodmanPsTool;
 

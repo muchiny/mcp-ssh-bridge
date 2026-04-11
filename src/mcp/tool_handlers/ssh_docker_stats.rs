@@ -6,6 +6,7 @@
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
@@ -32,6 +33,8 @@ pub struct SshDockerStatsArgs {
 }
 
 impl_common_args!(SshDockerStatsArgs);
+
+#[mcp_standard_tool(name = "ssh_docker_stats", group = "docker", annotation = "read_only")]
 
 pub struct DockerStatsTool;
 

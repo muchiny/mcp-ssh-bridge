@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::file_ops::FileOpsCommandBuilder;
 use crate::error::Result;
@@ -25,6 +26,8 @@ pub struct SshFileChmodArgs {
 }
 
 impl_common_args!(SshFileChmodArgs);
+
+#[mcp_standard_tool(name = "ssh_file_chmod", group = "file_ops", annotation = "mutating")]
 
 pub struct FileChmodTool;
 

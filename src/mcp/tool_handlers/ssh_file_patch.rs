@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::file_advanced::FileAdvancedCommandBuilder;
 use crate::error::Result;
@@ -25,6 +26,8 @@ pub struct SshFilePatchArgs {
 }
 
 impl_common_args!(SshFilePatchArgs);
+
+#[mcp_standard_tool(name = "ssh_file_patch", group = "file_ops", annotation = "destructive")]
 
 pub struct FilePatchTool;
 

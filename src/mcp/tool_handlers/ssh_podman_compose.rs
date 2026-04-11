@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::podman::PodmanCommandBuilder;
 use crate::error::Result;
@@ -24,6 +25,8 @@ pub struct SshPodmanComposeArgs {
 }
 
 impl_common_args!(SshPodmanComposeArgs);
+
+#[mcp_standard_tool(name = "ssh_podman_compose", group = "podman", annotation = "mutating")]
 
 pub struct PodmanComposeTool;
 

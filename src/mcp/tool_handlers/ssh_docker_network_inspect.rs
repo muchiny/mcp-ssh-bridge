@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
@@ -27,6 +28,8 @@ pub struct SshDockerNetworkInspectArgs {
 }
 
 impl_common_args!(SshDockerNetworkInspectArgs);
+
+#[mcp_standard_tool(name = "ssh_docker_network_inspect", group = "docker", annotation = "read_only")]
 
 pub struct DockerNetworkInspectTool;
 

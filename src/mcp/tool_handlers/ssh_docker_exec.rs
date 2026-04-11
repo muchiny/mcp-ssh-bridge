@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::docker::DockerCommandBuilder;
 use crate::error::Result;
@@ -32,6 +33,8 @@ pub struct SshDockerExecArgs {
 }
 
 impl_common_args!(SshDockerExecArgs);
+
+#[mcp_standard_tool(name = "ssh_docker_exec", group = "docker", annotation = "mutating")]
 
 pub struct DockerExecTool;
 

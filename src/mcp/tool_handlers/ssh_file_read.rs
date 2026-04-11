@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::file_ops::FileOpsCommandBuilder;
 use crate::error::Result;
@@ -26,6 +27,8 @@ pub struct SshFileReadArgs {
 }
 
 impl_common_args!(SshFileReadArgs);
+
+#[mcp_standard_tool(name = "ssh_file_read", group = "file_ops", annotation = "read_only")]
 
 pub struct FileReadTool;
 
