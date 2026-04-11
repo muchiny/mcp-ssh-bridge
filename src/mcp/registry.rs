@@ -1293,14 +1293,10 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshApacheStatusHandler,
         SshApacheVhostsHandler,
         SshAwsCliHandler,
-        SshBenchmarkHandler,
         SshCanaryExecHandler,
         SshCapacityCollectHandler,
         SshCapacityPredictHandler,
         SshCapacityTrendHandler,
-        SshCertCheckHandler,
-        SshCertExpiryHandler,
-        SshCertInfoHandler,
         SshCisBenchmarkHandler,
         SshCloudCostHandler,
         SshCloudMetadataHandler,
@@ -1311,16 +1307,9 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshComplianceScoreHandler,
         SshConfigGetHandler,
         SshConfigSetHandler,
-        SshContainerEventsHandler,
-        SshContainerHealthHistoryHandler,
-        SshContainerLogSearchHandler,
-        SshContainerLogStatsHandler,
         SshDiagnoseHandler,
         SshDiscoverHostsHandler,
         SshDiskUsageHandler,
-        SshEnvDiffHandler,
-        SshEnvDriftHandler,
-        SshEnvSnapshotHandler,
         SshEsxiDatastoreListHandler,
         SshEsxiHostInfoHandler,
         SshEsxiNetworkListHandler,
@@ -1357,17 +1346,9 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshIncidentTimelineHandler,
         SshIncidentTriageHandler,
         SshInventorySyncHandler,
-        SshIoTraceHandler,
         SshKeyAuditHandler,
         SshKeyDistributeHandler,
         SshKeyGenerateHandler,
-        SshLatencyTestHandler,
-        SshLdapAddHandler,
-        SshLdapGroupMembersHandler,
-        SshLdapModifyHandler,
-        SshLdapSearchHandler,
-        SshLdapUserInfoHandler,
-        SshLetsencryptStatusHandler,
         SshLogAggregateHandler,
         SshLogSearchMultiHandler,
         SshLogTailMultiHandler,
@@ -1393,7 +1374,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshNginxStatusHandler,
         SshNginxTestHandler,
         SshNotifyHandler,
-        SshPerfTraceHandler,
         SshPortScanHandler,
         SshPostgresqlQueryHandler,
         SshPostgresqlStatusHandler,
@@ -1536,15 +1516,7 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Cron
         // Cron Analysis
         // Performance Profiling
-        Arc::new(SshPerfTraceHandler::new()),
-        Arc::new(SshIoTraceHandler::new()),
-        Arc::new(SshLatencyTestHandler::new()),
-        Arc::new(SshBenchmarkHandler::new()),
         // Container Log Analysis
-        Arc::new(SshContainerLogSearchHandler::new()),
-        Arc::new(SshContainerLogStatsHandler::new()),
-        Arc::new(SshContainerEventsHandler::new()),
-        Arc::new(SshContainerHealthHistoryHandler::new()),
         // Network Security
         Arc::new(SshPortScanHandler::new()),
         Arc::new(SshSslAuditHandler::new()),
@@ -1602,9 +1574,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshPtyInteractHandler::new()),
         Arc::new(SshPtyResizeHandler::new()),
         // Certificates
-        Arc::new(SshCertCheckHandler::new()),
-        Arc::new(SshCertInfoHandler::new()),
-        Arc::new(SshCertExpiryHandler::new()),
         // Nginx
         Arc::new(SshNginxStatusHandler::new()),
         Arc::new(SshNginxTestHandler::new()),
@@ -1619,9 +1588,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshRollingExecHandler::new()),
         Arc::new(SshFleetDiffHandler::new()),
         // Drift Detection
-        Arc::new(SshEnvSnapshotHandler::new()),
-        Arc::new(SshEnvDiffHandler::new()),
-        Arc::new(SshEnvDriftHandler::new()),
         // File Advanced (added to file_ops group)
         // Security Scanning
         Arc::new(SshSbomGenerateHandler::new()),
@@ -1651,7 +1617,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshApacheStatusHandler::new()),
         Arc::new(SshApacheVhostsHandler::new()),
         // Let's Encrypt
-        Arc::new(SshLetsencryptStatusHandler::new()),
         // MongoDB
         Arc::new(SshMongodbStatusHandler::new()),
         // Terraform
@@ -1685,11 +1650,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshNetEquipSaveHandler::new()),
         // Podman
         // LDAP
-        Arc::new(SshLdapSearchHandler::new()),
-        Arc::new(SshLdapUserInfoHandler::new()),
-        Arc::new(SshLdapGroupMembersHandler::new()),
-        Arc::new(SshLdapAddHandler::new()),
-        Arc::new(SshLdapModifyHandler::new()),
         // Windows Services
         Arc::new(SshWinServiceStatusHandler::new()),
         Arc::new(SshWinServiceStartHandler::new()),

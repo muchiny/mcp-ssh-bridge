@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::ldap::LdapCommandBuilder;
 use crate::error::Result;
@@ -25,6 +26,8 @@ pub struct SshLdapGroupMembersArgs {
 }
 
 impl_common_args!(SshLdapGroupMembersArgs);
+
+#[mcp_standard_tool(name = "ssh_ldap_group_members", group = "ldap", annotation = "read_only")]
 
 pub struct LdapGroupMembersTool;
 

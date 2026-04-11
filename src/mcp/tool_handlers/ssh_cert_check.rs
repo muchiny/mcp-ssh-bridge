@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::certificate::CertificateCommandBuilder;
 use crate::error::Result;
@@ -21,6 +22,8 @@ pub struct SshCertCheckArgs {
 }
 
 impl_common_args!(SshCertCheckArgs);
+
+#[mcp_standard_tool(name = "ssh_cert_check", group = "certificates", annotation = "read_only")]
 
 pub struct CertCheckTool;
 

@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::performance::PerformanceCommandBuilder;
@@ -28,6 +29,8 @@ pub struct SshLatencyTestArgs {
 }
 
 impl_common_args!(SshLatencyTestArgs);
+
+#[mcp_standard_tool(name = "ssh_latency_test", group = "performance", annotation = "read_only")]
 
 pub struct LatencyTestTool;
 

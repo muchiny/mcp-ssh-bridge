@@ -6,6 +6,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::container_logs::ContainerLogCommandBuilder;
 use crate::error::Result;
@@ -28,6 +29,8 @@ pub struct SshContainerLogStatsArgs {
 }
 
 impl_common_args!(SshContainerLogStatsArgs);
+
+#[mcp_standard_tool(name = "ssh_container_log_stats", group = "container_logs", annotation = "read_only")]
 
 pub struct ContainerLogStatsTool;
 
