@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::git::GitCommandBuilder;
 use crate::error::Result;
@@ -26,6 +27,8 @@ pub struct SshGitCheckoutArgs {
 }
 
 impl_common_args!(SshGitCheckoutArgs);
+
+#[mcp_standard_tool(name = "ssh_git_checkout", group = "git", annotation = "mutating")]
 
 pub struct GitCheckoutTool;
 

@@ -1287,8 +1287,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshAdGroupMembersHandler,
         SshAdUserInfoHandler,
         SshAdUserListHandler,
-        SshApacheStatusHandler,
-        SshApacheVhostsHandler,
         SshCisBenchmarkHandler,
         SshCompareStateHandler,
         SshComplianceCheckHandler,
@@ -1306,13 +1304,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshEsxiVmListHandler,
         SshEsxiVmPowerHandler,
         SshFail2banStatusHandler,
-        SshGitBranchHandler,
-        SshGitCheckoutHandler,
-        SshGitCloneHandler,
-        SshGitDiffHandler,
-        SshGitLogHandler,
-        SshGitPullHandler,
-        SshGitStatusHandler,
         SshHypervHostInfoHandler,
         SshHypervSnapshotCreateHandler,
         SshHypervSnapshotListHandler,
@@ -1343,10 +1334,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshNetEquipShowVersionHandler,
         SshNetEquipShowVlansHandler,
         SshNetworkCaptureHandler,
-        SshNginxListSitesHandler,
-        SshNginxReloadHandler,
-        SshNginxStatusHandler,
-        SshNginxTestHandler,
         SshPortScanHandler,
         SshPostgresqlQueryHandler,
         SshPostgresqlStatusHandler,
@@ -1372,15 +1359,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshSslAuditHandler,
         SshStigCheckHandler,
         SshTailHandler,
-        SshTerraformApplyHandler,
-        SshTerraformInitHandler,
-        SshTerraformOutputHandler,
-        SshTerraformPlanHandler,
-        SshTerraformStateHandler,
-        SshVaultListHandler,
-        SshVaultReadHandler,
-        SshVaultStatusHandler,
-        SshVaultWriteHandler,
         SshVulnScanHandler,
         SshWinDiskUsageHandler,
         SshWinEventExportHandler,
@@ -1457,13 +1435,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshEsxiDatastoreListHandler::new()),
         Arc::new(SshEsxiNetworkListHandler::new()),
         // Git
-        Arc::new(SshGitStatusHandler::new()),
-        Arc::new(SshGitLogHandler::new()),
-        Arc::new(SshGitDiffHandler::new()),
-        Arc::new(SshGitPullHandler::new()),
-        Arc::new(SshGitCloneHandler::new()),
-        Arc::new(SshGitBranchHandler::new()),
-        Arc::new(SshGitCheckoutHandler::new()),
         // Kubernetes (kubectl)
         // Kubernetes (helm)
         // Ansible
@@ -1501,10 +1472,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Interactive PTY
         // Certificates
         // Nginx
-        Arc::new(SshNginxStatusHandler::new()),
-        Arc::new(SshNginxTestHandler::new()),
-        Arc::new(SshNginxReloadHandler::new()),
-        Arc::new(SshNginxListSitesHandler::new()),
         // Diagnostics
         Arc::new(SshDiagnoseHandler::new()),
         Arc::new(SshIncidentTriageHandler::new()),
@@ -1534,22 +1501,11 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshMysqlQueryHandler::new()),
         Arc::new(SshMysqlStatusHandler::new()),
         // Apache
-        Arc::new(SshApacheStatusHandler::new()),
-        Arc::new(SshApacheVhostsHandler::new()),
         // Let's Encrypt
         // MongoDB
         Arc::new(SshMongodbStatusHandler::new()),
         // Terraform
-        Arc::new(SshTerraformInitHandler::new()),
-        Arc::new(SshTerraformPlanHandler::new()),
-        Arc::new(SshTerraformApplyHandler::new()),
-        Arc::new(SshTerraformStateHandler::new()),
-        Arc::new(SshTerraformOutputHandler::new()),
         // Vault
-        Arc::new(SshVaultStatusHandler::new()),
-        Arc::new(SshVaultReadHandler::new()),
-        Arc::new(SshVaultListHandler::new()),
-        Arc::new(SshVaultWriteHandler::new()),
         // Config
         Arc::new(SshConfigGetHandler),
         Arc::new(SshConfigSetHandler),

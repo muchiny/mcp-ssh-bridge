@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::{HostConfig, OsType};
 use crate::domain::use_cases::nginx::NginxCommandBuilder;
 use crate::error::Result;
@@ -19,6 +20,8 @@ pub struct SshNginxTestArgs {
 }
 
 impl_common_args!(SshNginxTestArgs);
+
+#[mcp_standard_tool(name = "ssh_nginx_test", group = "nginx", annotation = "read_only")]
 
 pub struct NginxTestTool;
 

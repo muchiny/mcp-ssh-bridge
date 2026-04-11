@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::git::GitCommandBuilder;
 use crate::error::Result;
@@ -30,6 +31,8 @@ pub struct SshGitCloneArgs {
 }
 
 impl_common_args!(SshGitCloneArgs);
+
+#[mcp_standard_tool(name = "ssh_git_clone", group = "git", annotation = "mutating")]
 
 pub struct GitCloneTool;
 

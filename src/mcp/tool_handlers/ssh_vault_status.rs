@@ -1,5 +1,6 @@
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::vault::VaultCommandBuilder;
 use crate::error::Result;
@@ -17,6 +18,8 @@ pub struct SshVaultStatusArgs {
 }
 
 impl_common_args!(SshVaultStatusArgs);
+
+#[mcp_standard_tool(name = "ssh_vault_status", group = "vault", annotation = "read_only")]
 
 pub struct VaultStatusTool;
 

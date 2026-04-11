@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::git::GitCommandBuilder;
 use crate::error::Result;
@@ -29,6 +30,8 @@ pub struct SshGitDiffArgs {
 }
 
 impl_common_args!(SshGitDiffArgs);
+
+#[mcp_standard_tool(name = "ssh_git_diff", group = "git", annotation = "read_only")]
 
 pub struct GitDiffTool;
 

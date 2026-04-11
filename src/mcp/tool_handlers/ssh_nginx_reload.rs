@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::{HostConfig, OsType};
 use crate::domain::use_cases::nginx::NginxCommandBuilder;
 use crate::error::Result;
@@ -19,6 +20,8 @@ pub struct SshNginxReloadArgs {
 }
 
 impl_common_args!(SshNginxReloadArgs);
+
+#[mcp_standard_tool(name = "ssh_nginx_reload", group = "nginx", annotation = "read_only")]
 
 pub struct NginxReloadTool;
 

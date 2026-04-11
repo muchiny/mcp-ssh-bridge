@@ -1,5 +1,6 @@
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::vault::VaultCommandBuilder;
 use crate::error::Result;
@@ -18,6 +19,8 @@ pub struct SshVaultWriteArgs {
 }
 
 impl_common_args!(SshVaultWriteArgs);
+
+#[mcp_standard_tool(name = "ssh_vault_write", group = "vault", annotation = "mutating")]
 
 pub struct VaultWriteTool;
 

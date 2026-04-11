@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::git::GitCommandBuilder;
 use crate::error::Result;
@@ -31,6 +32,8 @@ pub struct SshGitPullArgs {
 }
 
 impl_common_args!(SshGitPullArgs);
+
+#[mcp_standard_tool(name = "ssh_git_pull", group = "git", annotation = "mutating")]
 
 pub struct GitPullTool;
 
