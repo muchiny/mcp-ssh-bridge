@@ -393,6 +393,84 @@ mod tests {
     }
 
     #[test]
+    fn test_large_output_fallback_when_only_baseline_is_large() {
+        // Baseline > threshold, normalized < threshold.
+        // Kills mutants on line 152 (replace `>` with `==` or `>=`) and
+        // the `||` → `&&` mutant on line 153: with L=true, R=false,
+        // `L || R` → large_fallback=true, `L && R` → large_fallback=false.
+        let mut baseline = "a".repeat(LARGE_OUTPUT_THRESHOLD + 1);
+        baseline.push('\n');
+        let other = "short\n".to_string();
+
+        let r = vec![("a".to_string(), baseline, 0), ("b".to_string(), other, 0)];
+        let d = compute_multi_host_diff("a", &r, false).unwrap();
+        assert_eq!(d.summary.divergent, 1);
+        let b = d.hosts.get("b").expect("b present");
+        assert!(!b.matches_baseline);
+        assert!(
+            b.diff.is_none(),
+            "diff must be skipped when baseline is large"
+        );
+        assert!(
+            b.large_output_fallback,
+            "large_output_fallback must be set when baseline exceeds threshold"
+        );
+    }
+
+    #[test]
+    fn test_large_output_fallback_when_only_other_is_large() {
+        // Baseline < threshold, normalized > threshold.
+        // Kills mutants on line 153 (replace `>` with `==` or `>=`).
+        let baseline = "short\n".to_string();
+        let mut other = "b".repeat(LARGE_OUTPUT_THRESHOLD + 1);
+        other.push('\n');
+
+        let r = vec![("a".to_string(), baseline, 0), ("b".to_string(), other, 0)];
+        let d = compute_multi_host_diff("a", &r, false).unwrap();
+        assert_eq!(d.summary.divergent, 1);
+        let b = d.hosts.get("b").expect("b present");
+        assert!(!b.matches_baseline);
+        assert!(
+            b.diff.is_none(),
+            "diff must be skipped when other host is large"
+        );
+        assert!(
+            b.large_output_fallback,
+            "large_output_fallback must be set when normalized output exceeds threshold"
+        );
+    }
+
+    #[test]
+    fn test_exact_threshold_is_not_large() {
+        // Both outputs are EXACTLY at LARGE_OUTPUT_THRESHOLD bytes.
+        // The check is strict `>`, so outputs at the threshold should
+        // still produce a unified diff. This kills mutants that replace
+        // `>` with `>=` on lines 152 and 153 (they would incorrectly
+        // treat threshold-sized outputs as large).
+        let baseline = "a".repeat(LARGE_OUTPUT_THRESHOLD);
+        // Change the last character so the two strings differ but have
+        // the same length.
+        let mut other = baseline.clone();
+        let last = other.len() - 1;
+        other.replace_range(last..=last, "b");
+        assert_eq!(baseline.len(), LARGE_OUTPUT_THRESHOLD);
+        assert_eq!(other.len(), LARGE_OUTPUT_THRESHOLD);
+
+        let r = vec![("a".to_string(), baseline, 0), ("b".to_string(), other, 0)];
+        let d = compute_multi_host_diff("a", &r, false).unwrap();
+        let b = d.hosts.get("b").expect("b present");
+        assert!(!b.matches_baseline);
+        assert!(
+            !b.large_output_fallback,
+            "output at exactly LARGE_OUTPUT_THRESHOLD must NOT be flagged large"
+        );
+        assert!(
+            b.diff.is_some(),
+            "unified diff must be produced when both sides are at threshold"
+        );
+    }
+
+    #[test]
     fn test_baseline_has_no_diff_against_itself() {
         let r = mkresult(&[("only", "line1\n", 0)]);
         let d = compute_multi_host_diff("only", &r, false).unwrap();
