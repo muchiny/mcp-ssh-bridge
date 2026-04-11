@@ -11,9 +11,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::info;
 
-use crate::mcp_tool;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::security::{AuditEvent, CommandResult as AuditCommandResult};
 use crate::ssh::DEFAULT_CHUNK_SIZE;
@@ -88,7 +88,11 @@ const SCHEMA: &str = r#"{
 ///
 /// Writes or uploads multiple files to a remote host in a single SFTP session.
 /// Each file can provide inline `content` or a `local_path` to upload.
-#[mcp_tool(name = "ssh_files_write", group = "file_ops", annotation = "destructive")]
+#[mcp_tool(
+    name = "ssh_files_write",
+    group = "file_ops",
+    annotation = "destructive"
+)]
 pub struct SshFilesWriteHandler;
 
 #[async_trait]

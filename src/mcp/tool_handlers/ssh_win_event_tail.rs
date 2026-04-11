@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_event::{WindowsEventCommandBuilder, validate_log_name};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshWinEventTailArgs {
@@ -23,8 +23,11 @@ pub struct SshWinEventTailArgs {
 
 impl_common_args!(SshWinEventTailArgs);
 
-#[mcp_standard_tool(name = "ssh_win_event_tail", group = "windows_events", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_win_event_tail",
+    group = "windows_events",
+    annotation = "read_only"
+)]
 pub struct WinEventTailTool;
 
 impl StandardTool for WinEventTailTool {

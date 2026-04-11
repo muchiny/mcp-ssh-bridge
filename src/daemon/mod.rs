@@ -5,7 +5,7 @@
 //! `$XDG_RUNTIME_DIR/mcp-ssh-bridge.sock` (fallback:
 //! `/tmp/mcp-ssh-bridge-$UID.sock`). CLI invocations detect the socket,
 //! connect, and forward their `tools/call` requests over JSON-RPC. The
-//! shared [`McpServer::connection_pool`] keeps SSH handshakes cached
+//! shared `McpServer` connection pool keeps SSH handshakes cached
 //! between invocations.
 //!
 //! # Sprint 3 — Transport unified

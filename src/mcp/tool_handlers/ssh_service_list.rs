@@ -5,13 +5,13 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::systemd::SystemdCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -28,7 +28,6 @@ pub struct SshServiceListArgs {
 impl_common_args!(SshServiceListArgs);
 
 #[mcp_standard_tool(name = "ssh_service_list", group = "systemd", annotation = "read_only")]
-
 pub struct ServiceListTool;
 
 impl StandardTool for ServiceListTool {

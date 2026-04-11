@@ -4,10 +4,10 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshApacheVhostsArgs {
@@ -20,7 +20,6 @@ pub struct SshApacheVhostsArgs {
 impl_common_args!(SshApacheVhostsArgs);
 
 #[mcp_standard_tool(name = "ssh_apache_vhosts", group = "apache", annotation = "read_only")]
-
 pub struct ApacheVhostsTool;
 
 impl StandardTool for ApacheVhostsTool {

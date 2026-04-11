@@ -4,10 +4,10 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshLetsencryptStatusArgs {
@@ -19,8 +19,11 @@ pub struct SshLetsencryptStatusArgs {
 
 impl_common_args!(SshLetsencryptStatusArgs);
 
-#[mcp_standard_tool(name = "ssh_letsencrypt_status", group = "letsencrypt", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_letsencrypt_status",
+    group = "letsencrypt",
+    annotation = "read_only"
+)]
 pub struct LetsencryptStatusTool;
 
 impl StandardTool for LetsencryptStatusTool {

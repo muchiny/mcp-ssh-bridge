@@ -7,11 +7,11 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::ansible::AnsibleCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshAnsiblePlaybookArgs {
@@ -53,8 +53,11 @@ pub struct SshAnsiblePlaybookArgs {
 
 impl_common_args!(SshAnsiblePlaybookArgs);
 
-#[mcp_standard_tool(name = "ssh_ansible_playbook", group = "ansible", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_ansible_playbook",
+    group = "ansible",
+    annotation = "mutating"
+)]
 pub struct AnsiblePlaybookTool;
 
 impl StandardTool for AnsiblePlaybookTool {

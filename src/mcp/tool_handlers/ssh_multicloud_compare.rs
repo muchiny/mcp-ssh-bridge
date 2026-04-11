@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::multicloud::MulticloudCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshMulticloudCompareArgs {
@@ -31,8 +31,11 @@ pub struct SshMulticloudCompareArgs {
 
 impl_common_args!(SshMulticloudCompareArgs);
 
-#[mcp_standard_tool(name = "ssh_multicloud_compare", group = "multicloud", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_multicloud_compare",
+    group = "multicloud",
+    annotation = "read_only"
+)]
 pub struct MulticloudCompareTool;
 
 impl StandardTool for MulticloudCompareTool {

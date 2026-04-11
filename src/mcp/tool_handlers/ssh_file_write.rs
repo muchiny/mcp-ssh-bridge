@@ -11,11 +11,11 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::{info, warn};
 
-use crate::mcp_tool;
 use crate::domain::output_truncator::truncate_output_with_cache;
 use crate::domain::use_cases::file_ops::FileOpsCommandBuilder;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::security::{AuditEvent, CommandResult as AuditCommandResult};
 use crate::ssh::{DEFAULT_CHUNK_SIZE, is_retryable_error, with_retry_if};
@@ -80,7 +80,11 @@ const SCHEMA: &str = r#"{
 /// Implements a hybrid strategy:
 /// - Small content (< `sftp_write_threshold_bytes`): fast shell command via connection pool
 /// - Large content (>= threshold): SFTP streaming, bypassing shell `ARG_MAX` limits
-#[mcp_tool(name = "ssh_file_write", group = "file_ops", annotation = "destructive")]
+#[mcp_tool(
+    name = "ssh_file_write",
+    group = "file_ops",
+    annotation = "destructive"
+)]
 pub struct SshFileWriteHandler;
 
 #[async_trait]

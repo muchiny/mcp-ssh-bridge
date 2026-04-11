@@ -11,10 +11,10 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::mcp_tool;
 use crate::domain::runbook::{self, RunbookStep, apply_template};
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 #[derive(Debug, Deserialize)]
@@ -25,7 +25,11 @@ struct Args {
     params: HashMap<String, String>,
 }
 
-#[mcp_tool(name = "ssh_runbook_execute", group = "runbooks", annotation = "destructive")]
+#[mcp_tool(
+    name = "ssh_runbook_execute",
+    group = "runbooks",
+    annotation = "destructive"
+)]
 #[derive(Default)]
 pub struct SshRunbookExecuteHandler;
 

@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::user_management::UserCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshUserDeleteArgs {
@@ -32,8 +32,11 @@ pub struct SshUserDeleteArgs {
 
 impl_common_args!(SshUserDeleteArgs);
 
-#[mcp_standard_tool(name = "ssh_user_delete", group = "user_management", annotation = "destructive")]
-
+#[mcp_standard_tool(
+    name = "ssh_user_delete",
+    group = "user_management",
+    annotation = "destructive"
+)]
 pub struct UserDeleteTool;
 
 impl StandardTool for UserDeleteTool {

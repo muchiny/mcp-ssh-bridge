@@ -5,13 +5,13 @@
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::hyperv::HyperVCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -27,8 +27,11 @@ pub struct SshHypervSwitchListArgs {
 
 impl_common_args!(SshHypervSwitchListArgs);
 
-#[mcp_standard_tool(name = "ssh_hyperv_switch_list", group = "hyperv", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_hyperv_switch_list",
+    group = "hyperv",
+    annotation = "read_only"
+)]
 pub struct HypervSwitchListTool;
 
 impl StandardTool for HypervSwitchListTool {

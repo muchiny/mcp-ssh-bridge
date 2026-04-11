@@ -8,10 +8,10 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use crate::mcp_tool;
 use crate::domain::runbook::{self, Runbook};
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 #[derive(Debug, Deserialize)]
@@ -22,7 +22,11 @@ struct Args {
     yaml_content: Option<String>,
 }
 
-#[mcp_tool(name = "ssh_runbook_validate", group = "runbooks", annotation = "read_only")]
+#[mcp_tool(
+    name = "ssh_runbook_validate",
+    group = "runbooks",
+    annotation = "read_only"
+)]
 #[derive(Default)]
 pub struct SshRunbookValidateHandler;
 

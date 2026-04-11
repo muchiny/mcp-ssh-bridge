@@ -307,8 +307,7 @@ impl ToolHandler for SshExecMultiHandler {
                 .unwrap_or_else(|| args.hosts[0].clone());
             let normalize = args.normalize.unwrap_or(false);
 
-            match crate::domain::diff::compute_multi_host_diff(&baseline, &diff_inputs, normalize)
-            {
+            match crate::domain::diff::compute_multi_host_diff(&baseline, &diff_inputs, normalize) {
                 Ok(d) => Some(d),
                 Err(e) => {
                     warn!(error = %e, "multi-host diff failed, skipping");

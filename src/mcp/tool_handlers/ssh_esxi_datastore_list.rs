@@ -5,12 +5,12 @@
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::esxi::EsxiCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -26,8 +26,11 @@ pub struct SshEsxiDatastoreListArgs {
 
 impl_common_args!(SshEsxiDatastoreListArgs);
 
-#[mcp_standard_tool(name = "ssh_esxi_datastore_list", group = "esxi", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_esxi_datastore_list",
+    group = "esxi",
+    annotation = "read_only"
+)]
 pub struct EsxiDatastoreListTool;
 
 impl StandardTool for EsxiDatastoreListTool {

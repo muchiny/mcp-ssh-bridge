@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::cron::CronCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshCronRemoveArgs {
@@ -30,7 +30,6 @@ pub struct SshCronRemoveArgs {
 impl_common_args!(SshCronRemoveArgs);
 
 #[mcp_standard_tool(name = "ssh_cron_remove", group = "cron", annotation = "destructive")]
-
 pub struct CronRemoveTool;
 
 impl StandardTool for CronRemoveTool {

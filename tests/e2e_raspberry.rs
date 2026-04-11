@@ -183,7 +183,7 @@ fn build_ctx(host_config: HostConfig) -> ToolContext {
         session_recorder: None,
         metrics: None,
         cancel_token: None,
-            notification_tx: None,
+        notification_tx: None,
     }
 }
 
@@ -1033,7 +1033,7 @@ async fn test_security_command_denied() {
         session_recorder: None,
         metrics: None,
         cancel_token: None,
-            notification_tx: None,
+        notification_tx: None,
     };
 
     let handler = SshExecHandler;

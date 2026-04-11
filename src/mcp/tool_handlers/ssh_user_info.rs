@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::user_management::UserCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshUserInfoArgs {
@@ -29,8 +29,11 @@ pub struct SshUserInfoArgs {
 
 impl_common_args!(SshUserInfoArgs);
 
-#[mcp_standard_tool(name = "ssh_user_info", group = "user_management", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_user_info",
+    group = "user_management",
+    annotation = "read_only"
+)]
 pub struct UserInfoTool;
 
 impl StandardTool for UserInfoTool {

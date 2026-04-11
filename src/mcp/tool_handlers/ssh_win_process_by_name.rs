@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_process::WindowsProcessCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshWinProcessByNameArgs {
@@ -22,8 +22,11 @@ pub struct SshWinProcessByNameArgs {
 
 impl_common_args!(SshWinProcessByNameArgs);
 
-#[mcp_standard_tool(name = "ssh_win_process_by_name", group = "windows_process", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_win_process_by_name",
+    group = "windows_process",
+    annotation = "read_only"
+)]
 pub struct WinProcessByNameTool;
 
 impl StandardTool for WinProcessByNameTool {

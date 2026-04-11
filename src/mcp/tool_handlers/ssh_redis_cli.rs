@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::redis::RedisCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshRedisCliArgs {
@@ -24,7 +24,6 @@ pub struct SshRedisCliArgs {
 impl_common_args!(SshRedisCliArgs);
 
 #[mcp_standard_tool(name = "ssh_redis_cli", group = "redis", annotation = "mutating")]
-
 pub struct RedisCliTool;
 
 impl StandardTool for RedisCliTool {

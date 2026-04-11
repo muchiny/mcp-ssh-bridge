@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::journald::JournaldCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshJournalDiskUsageArgs {
@@ -23,8 +23,11 @@ pub struct SshJournalDiskUsageArgs {
 
 impl_common_args!(SshJournalDiskUsageArgs);
 
-#[mcp_standard_tool(name = "ssh_journal_disk_usage", group = "journald", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_journal_disk_usage",
+    group = "journald",
+    annotation = "read_only"
+)]
 pub struct JournalDiskUsageTool;
 
 impl StandardTool for JournalDiskUsageTool {

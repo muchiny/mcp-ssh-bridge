@@ -6,9 +6,9 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::mcp_tool;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 #[derive(Debug, Deserialize)]
@@ -18,7 +18,11 @@ struct Args {
     title: Option<String>,
 }
 
-#[mcp_tool(name = "ssh_recording_start", group = "recording", annotation = "mutating")]
+#[mcp_tool(
+    name = "ssh_recording_start",
+    group = "recording",
+    annotation = "mutating"
+)]
 #[derive(Default)]
 pub struct SshRecordingStartHandler;
 

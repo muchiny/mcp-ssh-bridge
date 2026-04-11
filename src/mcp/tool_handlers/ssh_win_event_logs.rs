@@ -5,7 +5,6 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_event::validate_log_name;
@@ -13,6 +12,7 @@ use crate::domain::use_cases::windows_service::WindowsServiceCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -27,8 +27,11 @@ pub struct SshWinEventLogsArgs {
 
 impl_common_args!(SshWinEventLogsArgs);
 
-#[mcp_standard_tool(name = "ssh_win_event_logs", group = "windows_events", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_win_event_logs",
+    group = "windows_events",
+    annotation = "read_only"
+)]
 pub struct WinEventLogsTool;
 
 impl StandardTool for WinEventLogsTool {

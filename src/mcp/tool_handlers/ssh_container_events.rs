@@ -6,11 +6,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::container_logs::ContainerLogCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshContainerEventsArgs {
@@ -33,8 +33,11 @@ pub struct SshContainerEventsArgs {
 
 impl_common_args!(SshContainerEventsArgs);
 
-#[mcp_standard_tool(name = "ssh_container_events", group = "container_logs", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_container_events",
+    group = "container_logs",
+    annotation = "read_only"
+)]
 pub struct ContainerEventsTool;
 
 impl StandardTool for ContainerEventsTool {

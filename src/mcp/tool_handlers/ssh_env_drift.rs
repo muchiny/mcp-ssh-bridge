@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::drift::DriftCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshEnvDriftArgs {
@@ -24,7 +24,6 @@ pub struct SshEnvDriftArgs {
 impl_common_args!(SshEnvDriftArgs);
 
 #[mcp_standard_tool(name = "ssh_env_drift", group = "drift", annotation = "read_only")]
-
 pub struct EnvDriftTool;
 
 impl StandardTool for EnvDriftTool {

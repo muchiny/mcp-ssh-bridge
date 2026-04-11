@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::certificate::CertificateCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshCertExpiryArgs {
@@ -23,8 +23,11 @@ pub struct SshCertExpiryArgs {
 
 impl_common_args!(SshCertExpiryArgs);
 
-#[mcp_standard_tool(name = "ssh_cert_expiry", group = "certificates", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_cert_expiry",
+    group = "certificates",
+    annotation = "read_only"
+)]
 pub struct CertExpiryTool;
 
 impl StandardTool for CertExpiryTool {

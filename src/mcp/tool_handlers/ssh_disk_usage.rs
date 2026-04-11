@@ -7,11 +7,11 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tracing::{info, warn};
 
-use crate::mcp_tool;
 use crate::domain::output_truncator::truncate_output_with_cache;
 use crate::error::{BridgeError, Result};
 use crate::mcp::apps::table;
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::ssh::{is_retryable_error, with_retry_if};
 
@@ -33,7 +33,11 @@ struct SshDiskUsageArgs {
 }
 
 /// Handler that shows disk usage and filesystem space on a remote host.
-#[mcp_tool(name = "ssh_disk_usage", group = "monitoring", annotation = "read_only")]
+#[mcp_tool(
+    name = "ssh_disk_usage",
+    group = "monitoring",
+    annotation = "read_only"
+)]
 pub struct SshDiskUsageHandler;
 
 #[async_trait]

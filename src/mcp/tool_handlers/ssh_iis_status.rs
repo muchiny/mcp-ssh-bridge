@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::iis::IisCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshIisStatusArgs {
@@ -22,7 +22,6 @@ pub struct SshIisStatusArgs {
 impl_common_args!(SshIisStatusArgs);
 
 #[mcp_standard_tool(name = "ssh_iis_status", group = "iis", annotation = "read_only")]
-
 pub struct IisStatusTool;
 
 impl StandardTool for IisStatusTool {

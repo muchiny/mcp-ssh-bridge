@@ -5,13 +5,17 @@
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::mcp_tool;
 use crate::error::Result;
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 /// SSH Session List tool handler
-#[mcp_tool(name = "ssh_session_list", group = "sessions", annotation = "read_only")]
+#[mcp_tool(
+    name = "ssh_session_list",
+    group = "sessions",
+    annotation = "read_only"
+)]
 pub struct SshSessionListHandler;
 
 impl SshSessionListHandler {

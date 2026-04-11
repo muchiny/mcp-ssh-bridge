@@ -4,7 +4,6 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_service::{
@@ -12,6 +11,7 @@ use crate::domain::use_cases::windows_service::{
 };
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshWinServiceStopArgs {
@@ -24,8 +24,11 @@ pub struct SshWinServiceStopArgs {
 
 impl_common_args!(SshWinServiceStopArgs);
 
-#[mcp_standard_tool(name = "ssh_win_service_stop", group = "windows_services", annotation = "destructive")]
-
+#[mcp_standard_tool(
+    name = "ssh_win_service_stop",
+    group = "windows_services",
+    annotation = "destructive"
+)]
 pub struct WinServiceStopTool;
 
 impl StandardTool for WinServiceStopTool {

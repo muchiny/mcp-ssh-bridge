@@ -5,11 +5,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::drift::DriftCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshEnvSnapshotArgs {
@@ -25,7 +25,6 @@ pub struct SshEnvSnapshotArgs {
 impl_common_args!(SshEnvSnapshotArgs);
 
 #[mcp_standard_tool(name = "ssh_env_snapshot", group = "drift", annotation = "read_only")]
-
 pub struct EnvSnapshotTool;
 
 impl StandardTool for EnvSnapshotTool {

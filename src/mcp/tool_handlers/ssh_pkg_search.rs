@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::package::{PackageCommandBuilder, validate_search_query};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshPkgSearchArgs {
@@ -30,7 +30,6 @@ pub struct SshPkgSearchArgs {
 impl_common_args!(SshPkgSearchArgs);
 
 #[mcp_standard_tool(name = "ssh_pkg_search", group = "package", annotation = "read_only")]
-
 pub struct PkgSearchTool;
 
 impl StandardTool for PkgSearchTool {

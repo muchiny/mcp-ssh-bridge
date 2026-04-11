@@ -1,10 +1,10 @@
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::vault::VaultCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshVaultReadArgs {
@@ -23,7 +23,6 @@ pub struct SshVaultReadArgs {
 impl_common_args!(SshVaultReadArgs);
 
 #[mcp_standard_tool(name = "ssh_vault_read", group = "vault", annotation = "read_only")]
-
 pub struct VaultReadTool;
 
 impl StandardTool for VaultReadTool {

@@ -6,11 +6,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::KubernetesCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshK8sExecArgs {
@@ -33,7 +33,6 @@ pub struct SshK8sExecArgs {
 impl_common_args!(SshK8sExecArgs);
 
 #[mcp_standard_tool(name = "ssh_k8s_exec", group = "kubernetes", annotation = "mutating")]
-
 pub struct K8sExecTool;
 
 impl StandardTool for K8sExecTool {

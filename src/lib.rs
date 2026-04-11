@@ -17,7 +17,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 /// `#[mcp_tool]` proc macro can reference it via a fully-qualified
 /// path (`::mcp_ssh_bridge::inventory::submit!`) without requiring
 /// callers to add `inventory` to their own `Cargo.toml`.
-pub use ::inventory as inventory;
+pub use ::inventory;
 
 /// Re-export the `#[mcp_tool]` and `#[mcp_standard_tool]` attribute
 /// macros so handler files only need

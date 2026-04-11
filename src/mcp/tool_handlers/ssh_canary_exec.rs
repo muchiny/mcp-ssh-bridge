@@ -6,11 +6,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::orchestration::OrchestrationCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshCanaryExecArgs {
@@ -31,8 +31,11 @@ pub struct SshCanaryExecArgs {
 
 impl_common_args!(SshCanaryExecArgs);
 
-#[mcp_standard_tool(name = "ssh_canary_exec", group = "orchestration", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_canary_exec",
+    group = "orchestration",
+    annotation = "mutating"
+)]
 pub struct CanaryExecTool;
 
 impl StandardTool for CanaryExecTool {

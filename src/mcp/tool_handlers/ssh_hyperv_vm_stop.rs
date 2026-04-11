@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::hyperv::{HyperVCommandBuilder, validate_vm_name};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshHypervVmStopArgs {
@@ -26,8 +26,11 @@ pub struct SshHypervVmStopArgs {
 
 impl_common_args!(SshHypervVmStopArgs);
 
-#[mcp_standard_tool(name = "ssh_hyperv_vm_stop", group = "hyperv", annotation = "destructive")]
-
+#[mcp_standard_tool(
+    name = "ssh_hyperv_vm_stop",
+    group = "hyperv",
+    annotation = "destructive"
+)]
 pub struct HypervVmStopTool;
 
 impl StandardTool for HypervVmStopTool {

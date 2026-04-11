@@ -1,12 +1,12 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::vault::VaultCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -25,7 +25,6 @@ pub struct SshVaultListArgs {
 impl_common_args!(SshVaultListArgs);
 
 #[mcp_standard_tool(name = "ssh_vault_list", group = "vault", annotation = "read_only")]
-
 pub struct VaultListTool;
 
 impl StandardTool for VaultListTool {

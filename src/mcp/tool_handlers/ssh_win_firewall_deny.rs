@@ -4,7 +4,6 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_firewall::{
@@ -12,6 +11,7 @@ use crate::domain::use_cases::windows_firewall::{
 };
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshWinFirewallDenyArgs {
@@ -26,8 +26,11 @@ pub struct SshWinFirewallDenyArgs {
 
 impl_common_args!(SshWinFirewallDenyArgs);
 
-#[mcp_standard_tool(name = "ssh_win_firewall_deny", group = "windows_firewall", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_win_firewall_deny",
+    group = "windows_firewall",
+    annotation = "mutating"
+)]
 pub struct WinFirewallDenyTool;
 
 impl StandardTool for WinFirewallDenyTool {

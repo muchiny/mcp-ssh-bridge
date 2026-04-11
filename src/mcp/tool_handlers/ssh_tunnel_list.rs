@@ -5,9 +5,9 @@
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::mcp_tool;
 use crate::error::Result;
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 /// SSH Tunnel List tool handler

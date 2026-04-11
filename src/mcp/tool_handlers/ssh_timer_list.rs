@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::systemd_timers::TimerCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshTimerListArgs {
@@ -25,8 +25,11 @@ pub struct SshTimerListArgs {
 
 impl_common_args!(SshTimerListArgs);
 
-#[mcp_standard_tool(name = "ssh_timer_list", group = "systemd_timers", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_timer_list",
+    group = "systemd_timers",
+    annotation = "read_only"
+)]
 pub struct TimerListTool;
 
 impl StandardTool for TimerListTool {

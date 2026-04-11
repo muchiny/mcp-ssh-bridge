@@ -5,12 +5,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::pty::{PtyCommandBuilder, validate_dimensions, validate_pty_command};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshPtyExecArgs {
@@ -35,7 +35,6 @@ pub struct SshPtyExecArgs {
 impl_common_args!(SshPtyExecArgs);
 
 #[mcp_standard_tool(name = "ssh_pty_exec", group = "pty", annotation = "mutating")]
-
 pub struct PtyExecTool;
 
 impl StandardTool for PtyExecTool {

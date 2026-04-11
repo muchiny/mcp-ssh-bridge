@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::network_equipment::{EquipmentType, NetworkEquipmentCommandBuilder};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshNetEquipConfigArgs {
@@ -26,8 +26,11 @@ pub struct SshNetEquipConfigArgs {
 
 impl_common_args!(SshNetEquipConfigArgs);
 
-#[mcp_standard_tool(name = "ssh_net_equip_config", group = "network_equipment", annotation = "destructive")]
-
+#[mcp_standard_tool(
+    name = "ssh_net_equip_config",
+    group = "network_equipment",
+    annotation = "destructive"
+)]
 pub struct NetEquipConfigTool;
 
 impl StandardTool for NetEquipConfigTool {

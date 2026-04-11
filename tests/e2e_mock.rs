@@ -164,7 +164,7 @@ fn build_ctx_with_mode(
         session_recorder: None,
         metrics: None,
         cancel_token: None,
-            notification_tx: None,
+        notification_tx: None,
     }
 }
 

@@ -11,11 +11,11 @@ use serde_json::Value;
 use tokio::net::TcpListener;
 use tracing::{debug, info, warn};
 
-use crate::mcp_tool;
 use crate::domain::{TunnelDirection, TunnelInfo};
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
 use crate::mcp::tool_handlers::utils::connect_with_jump;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 /// Arguments for `ssh_tunnel_create` tool

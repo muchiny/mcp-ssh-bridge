@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::network::NetworkCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshNetTracerouteArgs {
@@ -30,8 +30,11 @@ pub struct SshNetTracerouteArgs {
 
 impl_common_args!(SshNetTracerouteArgs);
 
-#[mcp_standard_tool(name = "ssh_net_traceroute", group = "network", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_net_traceroute",
+    group = "network",
+    annotation = "read_only"
+)]
 pub struct NetTracerouteTool;
 
 impl StandardTool for NetTracerouteTool {

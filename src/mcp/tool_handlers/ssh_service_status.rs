@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::systemd::{SystemdCommandBuilder, validate_service_name};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshServiceStatusArgs {
@@ -22,8 +22,11 @@ pub struct SshServiceStatusArgs {
 
 impl_common_args!(SshServiceStatusArgs);
 
-#[mcp_standard_tool(name = "ssh_service_status", group = "systemd", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_service_status",
+    group = "systemd",
+    annotation = "read_only"
+)]
 pub struct ServiceStatusTool;
 
 impl StandardTool for ServiceStatusTool {

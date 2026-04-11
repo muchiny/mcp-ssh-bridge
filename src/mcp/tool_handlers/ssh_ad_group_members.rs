@@ -5,7 +5,6 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::active_directory::{
@@ -13,6 +12,7 @@ use crate::domain::use_cases::active_directory::{
 };
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshAdGroupMembersArgs {
@@ -25,8 +25,11 @@ pub struct SshAdGroupMembersArgs {
 
 impl_common_args!(SshAdGroupMembersArgs);
 
-#[mcp_standard_tool(name = "ssh_ad_group_members", group = "active_directory", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_ad_group_members",
+    group = "active_directory",
+    annotation = "read_only"
+)]
 pub struct AdGroupMembersTool;
 
 impl StandardTool for AdGroupMembersTool {

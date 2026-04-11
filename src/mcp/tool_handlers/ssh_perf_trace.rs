@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::performance::PerformanceCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 /// Arguments for the `ssh_perf_trace` tool.
 #[derive(Debug, Deserialize)]
@@ -29,8 +29,11 @@ pub struct SshPerfTraceArgs {
 
 impl_common_args!(SshPerfTraceArgs);
 
-#[mcp_standard_tool(name = "ssh_perf_trace", group = "performance", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_perf_trace",
+    group = "performance",
+    annotation = "read_only"
+)]
 pub struct PerfTraceTool;
 
 impl StandardTool for PerfTraceTool {

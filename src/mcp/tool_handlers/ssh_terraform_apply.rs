@@ -1,10 +1,10 @@
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::terraform::TerraformCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshTerraformApplyArgs {
@@ -22,8 +22,11 @@ pub struct SshTerraformApplyArgs {
 
 impl_common_args!(SshTerraformApplyArgs);
 
-#[mcp_standard_tool(name = "ssh_terraform_apply", group = "terraform", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_terraform_apply",
+    group = "terraform",
+    annotation = "mutating"
+)]
 pub struct TerraformApplyTool;
 
 impl StandardTool for TerraformApplyTool {

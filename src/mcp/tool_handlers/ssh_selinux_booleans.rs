@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::security_modules::SecurityModulesCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshSelinuxBooleansArgs {
@@ -27,8 +27,11 @@ pub struct SshSelinuxBooleansArgs {
 
 impl_common_args!(SshSelinuxBooleansArgs);
 
-#[mcp_standard_tool(name = "ssh_selinux_booleans", group = "security_modules", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_selinux_booleans",
+    group = "security_modules",
+    annotation = "mutating"
+)]
 pub struct SelinuxBooleansTool;
 
 impl StandardTool for SelinuxBooleansTool {

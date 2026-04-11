@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::network_security::NetworkSecurityCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshFail2banStatusArgs {
@@ -31,8 +31,11 @@ pub struct SshFail2banStatusArgs {
 
 impl_common_args!(SshFail2banStatusArgs);
 
-#[mcp_standard_tool(name = "ssh_fail2ban_status", group = "network_security", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_fail2ban_status",
+    group = "network_security",
+    annotation = "read_only"
+)]
 pub struct Fail2banStatusTool;
 
 impl StandardTool for Fail2banStatusTool {

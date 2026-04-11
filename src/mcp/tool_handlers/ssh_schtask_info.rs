@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::scheduled_task::{ScheduledTaskCommandBuilder, validate_task_name};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshSchtaskInfoArgs {
@@ -22,8 +22,11 @@ pub struct SshSchtaskInfoArgs {
 
 impl_common_args!(SshSchtaskInfoArgs);
 
-#[mcp_standard_tool(name = "ssh_schtask_info", group = "scheduled_tasks", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_schtask_info",
+    group = "scheduled_tasks",
+    annotation = "read_only"
+)]
 pub struct SchtaskInfoTool;
 
 impl StandardTool for SchtaskInfoTool {

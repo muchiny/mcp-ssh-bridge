@@ -103,11 +103,7 @@ impl K8sExecConnection {
     /// The host config must still be interpreted the same way as
     /// `connect()` — `hostname` is the pod name or `namespace/pod`,
     /// `user` is the namespace, `description` is the container name.
-    pub fn from_parts(
-        host_name: &str,
-        host_config: &HostConfig,
-        client: Client,
-    ) -> Result<Self> {
+    pub fn from_parts(host_name: &str, host_config: &HostConfig, client: Client) -> Result<Self> {
         // Parse pod reference: "namespace/pod" or just "pod"
         let (namespace, pod_name) = if host_config.hostname.contains('/') {
             let parts: Vec<&str> = host_config.hostname.splitn(2, '/').collect();

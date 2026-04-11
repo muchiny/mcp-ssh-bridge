@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::ldap::LdapCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshLdapAddArgs {
@@ -27,7 +27,6 @@ pub struct SshLdapAddArgs {
 impl_common_args!(SshLdapAddArgs);
 
 #[mcp_standard_tool(name = "ssh_ldap_add", group = "ldap", annotation = "mutating")]
-
 pub struct LdapAddTool;
 
 impl StandardTool for LdapAddTool {

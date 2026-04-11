@@ -5,11 +5,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::{DatabaseCommandBuilder, DatabaseType};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshDbDumpArgs {
@@ -38,7 +38,6 @@ pub struct SshDbDumpArgs {
 impl_common_args!(SshDbDumpArgs);
 
 #[mcp_standard_tool(name = "ssh_db_dump", group = "database", annotation = "mutating")]
-
 pub struct DbDumpTool;
 
 impl StandardTool for DbDumpTool {

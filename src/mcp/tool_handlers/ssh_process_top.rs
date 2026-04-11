@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::process::ProcessCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshProcessTopArgs {
@@ -31,7 +31,6 @@ pub struct SshProcessTopArgs {
 impl_common_args!(SshProcessTopArgs);
 
 #[mcp_standard_tool(name = "ssh_process_top", group = "process", annotation = "read_only")]
-
 pub struct ProcessTopTool;
 
 impl StandardTool for ProcessTopTool {

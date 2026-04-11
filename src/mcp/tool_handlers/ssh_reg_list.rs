@@ -4,7 +4,6 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_registry::{
@@ -12,6 +11,7 @@ use crate::domain::use_cases::windows_registry::{
 };
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshRegListArgs {
@@ -27,8 +27,11 @@ pub struct SshRegListArgs {
 
 impl_common_args!(SshRegListArgs);
 
-#[mcp_standard_tool(name = "ssh_reg_list", group = "windows_registry", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_reg_list",
+    group = "windows_registry",
+    annotation = "read_only"
+)]
 pub struct RegListTool;
 
 impl StandardTool for RegListTool {

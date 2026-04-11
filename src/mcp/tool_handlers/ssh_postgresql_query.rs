@@ -4,10 +4,10 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 use super::utils::shell_escape;
 
@@ -26,8 +26,11 @@ pub struct SshPostgresqlQueryArgs {
 
 impl_common_args!(SshPostgresqlQueryArgs);
 
-#[mcp_standard_tool(name = "ssh_postgresql_query", group = "postgresql", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_postgresql_query",
+    group = "postgresql",
+    annotation = "mutating"
+)]
 pub struct PostgresqlQueryTool;
 
 impl StandardTool for PostgresqlQueryTool {

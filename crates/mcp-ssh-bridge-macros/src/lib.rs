@@ -47,8 +47,7 @@ struct McpToolArgs {
 
 impl syn::parse::Parse for McpToolArgs {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let pairs: Punctuated<MetaNameValue, Token![,]> =
-            Punctuated::parse_terminated(input)?;
+        let pairs: Punctuated<MetaNameValue, Token![,]> = Punctuated::parse_terminated(input)?;
 
         let mut name: Option<String> = None;
         let mut group: Option<String> = None;
@@ -60,12 +59,8 @@ impl syn::parse::Parse for McpToolArgs {
                 .get_ident()
                 .map(ToString::to_string)
                 .unwrap_or_default();
-            let value = extract_string_literal(&pair.value).ok_or_else(|| {
-                syn::Error::new_spanned(
-                    &pair.value,
-                    "expected a string literal",
-                )
-            })?;
+            let value = extract_string_literal(&pair.value)
+                .ok_or_else(|| syn::Error::new_spanned(&pair.value, "expected a string literal"))?;
             match key.as_str() {
                 "name" => name = Some(value),
                 "group" => group = Some(value),

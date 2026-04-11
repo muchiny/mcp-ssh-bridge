@@ -6,12 +6,12 @@
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::HelmCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -35,8 +35,11 @@ pub struct SshHelmHistoryArgs {
 
 impl_common_args!(SshHelmHistoryArgs);
 
-#[mcp_standard_tool(name = "ssh_helm_history", group = "kubernetes", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_helm_history",
+    group = "kubernetes",
+    annotation = "read_only"
+)]
 pub struct HelmHistoryTool;
 
 impl StandardTool for HelmHistoryTool {

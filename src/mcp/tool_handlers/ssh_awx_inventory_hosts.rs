@@ -8,11 +8,11 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::mcp_tool;
 use crate::domain::output_kind::OutputKind;
 use crate::domain::use_cases::awx::{AwxCommandBuilder, HttpMethod};
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 /// Arguments for `ssh_awx_inventory_hosts` tool.
@@ -27,7 +27,11 @@ struct SshAwxInventoryHostsArgs {
 }
 
 /// Handler for the `ssh_awx_inventory_hosts` tool.
-#[mcp_tool(name = "ssh_awx_inventory_hosts", group = "awx", annotation = "read_only")]
+#[mcp_tool(
+    name = "ssh_awx_inventory_hosts",
+    group = "awx",
+    annotation = "read_only"
+)]
 pub struct SshAwxInventoryHostsHandler;
 
 impl Default for SshAwxInventoryHostsHandler {

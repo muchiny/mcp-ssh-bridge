@@ -5,13 +5,13 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::cron_analysis::CronAnalysisCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -37,8 +37,11 @@ pub struct SshCronHistoryArgs {
 
 impl_common_args!(SshCronHistoryArgs);
 
-#[mcp_standard_tool(name = "ssh_cron_history", group = "cron_analysis", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_cron_history",
+    group = "cron_analysis",
+    annotation = "read_only"
+)]
 pub struct CronHistoryTool;
 
 impl StandardTool for CronHistoryTool {

@@ -5,11 +5,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::ansible::AnsibleCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshAnsibleConfigArgs {
@@ -28,8 +28,11 @@ pub struct SshAnsibleConfigArgs {
 
 impl_common_args!(SshAnsibleConfigArgs);
 
-#[mcp_standard_tool(name = "ssh_ansible_config", group = "ansible", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_ansible_config",
+    group = "ansible",
+    annotation = "read_only"
+)]
 pub struct AnsibleConfigTool;
 
 impl StandardTool for AnsibleConfigTool {

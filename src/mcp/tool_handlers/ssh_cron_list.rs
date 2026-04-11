@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::cron::CronCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshCronListArgs {
@@ -30,7 +30,6 @@ pub struct SshCronListArgs {
 impl_common_args!(SshCronListArgs);
 
 #[mcp_standard_tool(name = "ssh_cron_list", group = "cron", annotation = "read_only")]
-
 pub struct CronListTool;
 
 impl StandardTool for CronListTool {

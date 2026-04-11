@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_perf::WindowsPerfCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshWinPerfNetworkArgs {
@@ -21,8 +21,11 @@ pub struct SshWinPerfNetworkArgs {
 
 impl_common_args!(SshWinPerfNetworkArgs);
 
-#[mcp_standard_tool(name = "ssh_win_perf_network", group = "windows_perf", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_win_perf_network",
+    group = "windows_perf",
+    annotation = "read_only"
+)]
 pub struct WinPerfNetworkTool;
 
 impl StandardTool for WinPerfNetworkTool {

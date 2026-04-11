@@ -436,8 +436,9 @@ impl McpServer {
             // callback runs on a background thread owned by notify.
             let guard = notification_tx_slot.blocking_read();
             if let Some(tx) = guard.as_ref() {
-                let _ = tx
-                    .try_send(WriterMessage::Notification(JsonRpcNotification::tools_list_changed()));
+                let _ = tx.try_send(WriterMessage::Notification(
+                    JsonRpcNotification::tools_list_changed(),
+                ));
                 let _ = tx.try_send(WriterMessage::Notification(
                     JsonRpcNotification::resources_list_changed(),
                 ));
@@ -553,11 +554,7 @@ impl McpServer {
                     tokio::spawn(
                         async move {
                             let response = server
-                                .handle_request_with_cancel(
-                                    request,
-                                    cancel_token,
-                                    Some(session_tx),
-                                )
+                                .handle_request_with_cancel(request, cancel_token, Some(session_tx))
                                 .await;
                             let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
                             if let Some(rid) = rid_cleanup {
@@ -757,7 +754,7 @@ impl McpServer {
     /// This is the public stable API — it always calls the dispatch with
     /// `cancel_token = None`, meaning cancellation is not wired for this
     /// request. The stdio `run()` loop uses the internal
-    /// [`Self::handle_request_with_cancel`] variant to honor MCP
+    /// `handle_request_with_cancel` variant to honor MCP
     /// `notifications/cancelled`.
     pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
         self.handle_request_with_cancel(request, None, None).await
@@ -1298,8 +1295,7 @@ impl McpServer {
             // per-session tx so the message reaches the originating
             // client.
             if let Some(info) = info {
-                let msg =
-                    WriterMessage::Notification(JsonRpcNotification::task_status(&info));
+                let msg = WriterMessage::Notification(JsonRpcNotification::task_status(&info));
                 if let Some(tx) = task_notification_tx.as_ref() {
                     let _ = tx.try_send(msg);
                 } else {
@@ -1963,7 +1959,9 @@ mod tests {
     async fn test_handle_tools_call_missing_params() {
         let server = create_test_server();
 
-        let response = server.handle_tools_call(Some(json!(1)), None, None, None).await;
+        let response = server
+            .handle_tools_call(Some(json!(1)), None, None, None)
+            .await;
 
         assert!(response.error.is_some());
         let error = response.error.unwrap();

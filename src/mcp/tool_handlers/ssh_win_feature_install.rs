@@ -4,7 +4,6 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_feature::{
@@ -12,6 +11,7 @@ use crate::domain::use_cases::windows_feature::{
 };
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshWinFeatureInstallArgs {
@@ -26,8 +26,11 @@ pub struct SshWinFeatureInstallArgs {
 
 impl_common_args!(SshWinFeatureInstallArgs);
 
-#[mcp_standard_tool(name = "ssh_win_feature_install", group = "windows_features", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_win_feature_install",
+    group = "windows_features",
+    annotation = "mutating"
+)]
 pub struct WinFeatureInstallTool;
 
 impl StandardTool for WinFeatureInstallTool {

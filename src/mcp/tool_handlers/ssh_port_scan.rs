@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::network_security::{NetworkSecurityCommandBuilder, validate_target};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -35,8 +35,11 @@ pub struct SshPortScanArgs {
 
 impl_common_args!(SshPortScanArgs);
 
-#[mcp_standard_tool(name = "ssh_port_scan", group = "network_security", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_port_scan",
+    group = "network_security",
+    annotation = "read_only"
+)]
 pub struct PortScanTool;
 
 impl StandardTool for PortScanTool {

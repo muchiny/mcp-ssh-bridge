@@ -5,12 +5,12 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::journald::JournaldCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -26,8 +26,11 @@ pub struct SshJournalBootsArgs {
 
 impl_common_args!(SshJournalBootsArgs);
 
-#[mcp_standard_tool(name = "ssh_journal_boots", group = "journald", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_journal_boots",
+    group = "journald",
+    annotation = "read_only"
+)]
 pub struct JournalBootsTool;
 
 impl StandardTool for JournalBootsTool {

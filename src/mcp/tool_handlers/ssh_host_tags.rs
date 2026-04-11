@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::inventory::InventoryCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshHostTagsArgs {
@@ -33,7 +33,6 @@ pub struct SshHostTagsArgs {
 impl_common_args!(SshHostTagsArgs);
 
 #[mcp_standard_tool(name = "ssh_host_tags", group = "inventory", annotation = "mutating")]
-
 pub struct HostTagsTool;
 
 impl StandardTool for HostTagsTool {

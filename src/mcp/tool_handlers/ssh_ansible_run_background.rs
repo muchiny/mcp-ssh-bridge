@@ -7,11 +7,11 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::ansible::AnsibleCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshAnsibleRunBackgroundArgs {
@@ -51,8 +51,11 @@ pub struct SshAnsibleRunBackgroundArgs {
 
 impl_common_args!(SshAnsibleRunBackgroundArgs);
 
-#[mcp_standard_tool(name = "ssh_ansible_run_background", group = "ansible", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_ansible_run_background",
+    group = "ansible",
+    annotation = "mutating"
+)]
 pub struct AnsibleRunBackgroundTool;
 
 impl StandardTool for AnsibleRunBackgroundTool {

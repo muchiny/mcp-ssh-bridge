@@ -6,10 +6,10 @@
 use serde::Deserialize;
 
 use super::utils::shell_escape;
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshBackupCreateArgs {
@@ -29,7 +29,6 @@ pub struct SshBackupCreateArgs {
 impl_common_args!(SshBackupCreateArgs);
 
 #[mcp_standard_tool(name = "ssh_backup_create", group = "backup", annotation = "mutating")]
-
 pub struct BackupCreateTool;
 
 impl StandardTool for BackupCreateTool {

@@ -4,10 +4,10 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshMongodbStatusArgs {
@@ -20,8 +20,11 @@ pub struct SshMongodbStatusArgs {
 
 impl_common_args!(SshMongodbStatusArgs);
 
-#[mcp_standard_tool(name = "ssh_mongodb_status", group = "mongodb", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_mongodb_status",
+    group = "mongodb",
+    annotation = "read_only"
+)]
 pub struct MongodbStatusTool;
 
 impl StandardTool for MongodbStatusTool {

@@ -7,9 +7,9 @@ use std::fmt::Write;
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::mcp_tool;
 use crate::error::Result;
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 /// Handler for `ssh_config_get`

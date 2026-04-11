@@ -126,12 +126,7 @@ impl WinRmPool {
                 if let Some(entry) = w.get_mut(host_name) {
                     entry.last_used = Instant::now();
                 }
-                return WinRmConnection::from_parts(
-                    host_name,
-                    host_config,
-                    client,
-                    config,
-                );
+                return WinRmConnection::from_parts(host_name, host_config, client, config);
             }
         }
 

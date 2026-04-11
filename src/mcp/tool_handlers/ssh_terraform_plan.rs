@@ -1,10 +1,10 @@
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::terraform::TerraformCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshTerraformPlanArgs {
@@ -22,8 +22,11 @@ pub struct SshTerraformPlanArgs {
 
 impl_common_args!(SshTerraformPlanArgs);
 
-#[mcp_standard_tool(name = "ssh_terraform_plan", group = "terraform", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_terraform_plan",
+    group = "terraform",
+    annotation = "read_only"
+)]
 pub struct TerraformPlanTool;
 
 impl StandardTool for TerraformPlanTool {

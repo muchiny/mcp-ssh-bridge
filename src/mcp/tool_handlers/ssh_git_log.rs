@@ -5,11 +5,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::git::GitCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshGitLogArgs {
@@ -38,7 +38,6 @@ pub struct SshGitLogArgs {
 impl_common_args!(SshGitLogArgs);
 
 #[mcp_standard_tool(name = "ssh_git_log", group = "git", annotation = "read_only")]
-
 pub struct GitLogTool;
 
 impl StandardTool for GitLogTool {

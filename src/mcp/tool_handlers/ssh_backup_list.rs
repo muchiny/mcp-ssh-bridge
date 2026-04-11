@@ -7,11 +7,11 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::utils::shell_escape;
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -30,7 +30,6 @@ pub struct SshBackupListArgs {
 impl_common_args!(SshBackupListArgs);
 
 #[mcp_standard_tool(name = "ssh_backup_list", group = "backup", annotation = "read_only")]
-
 pub struct BackupListTool;
 
 impl StandardTool for BackupListTool {

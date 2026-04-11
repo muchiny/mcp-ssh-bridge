@@ -10,9 +10,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::info;
 
-use crate::mcp_tool;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::security::{AuditEvent, CommandResult as AuditCommandResult};
 use crate::ssh::{DEFAULT_CHUNK_SIZE, TransferMode, TransferOptions, TransferProgress};
@@ -36,7 +36,11 @@ struct SshDownloadArgs {
 }
 
 /// SSH Download tool handler
-#[mcp_tool(name = "ssh_download", group = "file_transfer", annotation = "mutating")]
+#[mcp_tool(
+    name = "ssh_download",
+    group = "file_transfer",
+    annotation = "mutating"
+)]
 pub struct SshDownloadHandler;
 
 impl SshDownloadHandler {

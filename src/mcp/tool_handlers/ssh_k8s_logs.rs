@@ -6,11 +6,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::KubernetesCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshK8sLogsArgs {
@@ -41,7 +41,6 @@ pub struct SshK8sLogsArgs {
 impl_common_args!(SshK8sLogsArgs);
 
 #[mcp_standard_tool(name = "ssh_k8s_logs", group = "kubernetes", annotation = "read_only")]
-
 pub struct K8sLogsTool;
 
 impl StandardTool for K8sLogsTool {

@@ -5,11 +5,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::HelmCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshHelmRollbackArgs {
@@ -36,8 +36,11 @@ pub struct SshHelmRollbackArgs {
 
 impl_common_args!(SshHelmRollbackArgs);
 
-#[mcp_standard_tool(name = "ssh_helm_rollback", group = "kubernetes", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_helm_rollback",
+    group = "kubernetes",
+    annotation = "mutating"
+)]
 pub struct HelmRollbackTool;
 
 impl StandardTool for HelmRollbackTool {

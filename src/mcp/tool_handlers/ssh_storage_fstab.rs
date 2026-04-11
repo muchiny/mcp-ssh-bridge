@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::storage::StorageCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshStorageFstabArgs {
@@ -28,8 +28,11 @@ pub struct SshStorageFstabArgs {
 
 impl_common_args!(SshStorageFstabArgs);
 
-#[mcp_standard_tool(name = "ssh_storage_fstab", group = "storage", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_storage_fstab",
+    group = "storage",
+    annotation = "read_only"
+)]
 pub struct StorageFstabTool;
 
 impl StandardTool for StorageFstabTool {

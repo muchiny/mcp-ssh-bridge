@@ -5,11 +5,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::diagnostics::DiagnosticsCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshDiagnoseArgs {
@@ -25,7 +25,6 @@ pub struct SshDiagnoseArgs {
 impl_common_args!(SshDiagnoseArgs);
 
 #[mcp_standard_tool(name = "ssh_diagnose", group = "diagnostics", annotation = "read_only")]
-
 pub struct DiagnoseTool;
 
 impl StandardTool for DiagnoseTool {

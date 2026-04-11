@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::templates::{TemplateCommandBuilder, validate_template_name};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshTemplateShowArgs {
@@ -27,8 +27,11 @@ pub struct SshTemplateShowArgs {
 
 impl_common_args!(SshTemplateShowArgs);
 
-#[mcp_standard_tool(name = "ssh_template_show", group = "templates", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_template_show",
+    group = "templates",
+    annotation = "read_only"
+)]
 pub struct TemplateShowTool;
 
 impl StandardTool for TemplateShowTool {

@@ -101,7 +101,7 @@ pub struct DiffSummary {
 /// * `normalize` — when `true`, strip volatile tokens (timestamps,
 ///   PIDs, UUIDs) before comparing, so hosts that differ only on
 ///   runtime metadata still count as matching. See
-///   [`normalize_volatile`] for the exact rules.
+///   `maybe_normalize` for the exact rules.
 ///
 /// # Errors
 ///
@@ -228,10 +228,8 @@ fn maybe_normalize(output: &str, normalize: bool) -> String {
     // `items_after_statements` when they sit inside the function.
     // Each regex compiles lazily on first use.
     static ISO_TIMESTAMP: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
-        regex::Regex::new(
-            r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?",
-        )
-        .expect("valid ISO timestamp regex")
+        regex::Regex::new(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?")
+            .expect("valid ISO timestamp regex")
     });
     static SYSLOG_TIMESTAMP: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
         regex::Regex::new(r"[A-Z][a-z]{2} {1,2}\d{1,2} \d{2}:\d{2}:\d{2}")
@@ -325,7 +323,10 @@ mod tests {
             ("b", "uptime: 2026-04-11T10:00:05Z\n", 0),
         ]);
         let d = compute_multi_host_diff("a", &r, true).unwrap();
-        assert_eq!(d.summary.matching, 2, "normalization must coalesce the timestamps");
+        assert_eq!(
+            d.summary.matching, 2,
+            "normalization must coalesce the timestamps"
+        );
         assert_eq!(d.summary.divergent, 0);
     }
 
@@ -376,10 +377,7 @@ mod tests {
         let last = other.len() - 2;
         other.replace_range(last..=last, "y");
 
-        let r = vec![
-            ("a".to_string(), baseline, 0),
-            ("b".to_string(), other, 0),
-        ];
+        let r = vec![("a".to_string(), baseline, 0), ("b".to_string(), other, 0)];
         let d = compute_multi_host_diff("a", &r, false).unwrap();
         assert_eq!(d.summary.divergent, 1);
         let b = d.hosts.get("b").expect("b present");
@@ -417,7 +415,13 @@ mod tests {
     fn test_render_unified_diff_adds_signs() {
         let out = render_unified_diff("a\nb\nc\n", "a\nB\nc\n");
         assert!(out.contains("-b"), "deleted line should be prefixed with -");
-        assert!(out.contains("+B"), "inserted line should be prefixed with +");
-        assert!(out.contains(" a"), "unchanged line should be prefixed with space");
+        assert!(
+            out.contains("+B"),
+            "inserted line should be prefixed with +"
+        );
+        assert!(
+            out.contains(" a"),
+            "unchanged line should be prefixed with space"
+        );
     }
 }

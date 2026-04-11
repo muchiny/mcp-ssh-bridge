@@ -5,13 +5,13 @@
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_feature::WindowsFeatureCommandBuilder;
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -24,8 +24,11 @@ pub struct SshWinFeatureListArgs {
 
 impl_common_args!(SshWinFeatureListArgs);
 
-#[mcp_standard_tool(name = "ssh_win_feature_list", group = "windows_features", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_win_feature_list",
+    group = "windows_features",
+    annotation = "read_only"
+)]
 pub struct WinFeatureListTool;
 
 impl StandardTool for WinFeatureListTool {

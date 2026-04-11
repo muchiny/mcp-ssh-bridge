@@ -9,9 +9,9 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::mcp_tool;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::security::recording::SessionRecorder;
 
@@ -22,7 +22,11 @@ struct Args {
     max_events: Option<usize>,
 }
 
-#[mcp_tool(name = "ssh_recording_replay", group = "recording", annotation = "read_only")]
+#[mcp_tool(
+    name = "ssh_recording_replay",
+    group = "recording",
+    annotation = "read_only"
+)]
 #[derive(Default)]
 pub struct SshRecordingReplayHandler;
 

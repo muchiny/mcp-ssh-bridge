@@ -4,12 +4,12 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::inventory::InventoryCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
@@ -34,8 +34,11 @@ pub struct SshDiscoverHostsArgs {
 
 impl_common_args!(SshDiscoverHostsArgs);
 
-#[mcp_standard_tool(name = "ssh_discover_hosts", group = "inventory", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_discover_hosts",
+    group = "inventory",
+    annotation = "read_only"
+)]
 pub struct DiscoverHostsTool;
 
 impl StandardTool for DiscoverHostsTool {

@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::podman::PodmanCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshPodmanLogsArgs {
@@ -31,7 +31,6 @@ pub struct SshPodmanLogsArgs {
 impl_common_args!(SshPodmanLogsArgs);
 
 #[mcp_standard_tool(name = "ssh_podman_logs", group = "podman", annotation = "read_only")]
-
 pub struct PodmanLogsTool;
 
 impl StandardTool for PodmanLogsTool {

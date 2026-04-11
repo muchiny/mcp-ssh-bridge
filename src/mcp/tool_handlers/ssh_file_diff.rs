@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::file_advanced::FileAdvancedCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshFileDiffArgs {
@@ -28,7 +28,6 @@ pub struct SshFileDiffArgs {
 impl_common_args!(SshFileDiffArgs);
 
 #[mcp_standard_tool(name = "ssh_file_diff", group = "file_ops", annotation = "read_only")]
-
 pub struct FileDiffTool;
 
 impl StandardTool for FileDiffTool {

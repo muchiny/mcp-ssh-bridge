@@ -8,11 +8,11 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::HelmCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshHelmUpgradeArgs {
@@ -50,8 +50,11 @@ pub struct SshHelmUpgradeArgs {
 
 impl_common_args!(SshHelmUpgradeArgs);
 
-#[mcp_standard_tool(name = "ssh_helm_upgrade", group = "kubernetes", annotation = "mutating")]
-
+#[mcp_standard_tool(
+    name = "ssh_helm_upgrade",
+    group = "kubernetes",
+    annotation = "mutating"
+)]
 pub struct HelmUpgradeTool;
 
 impl StandardTool for HelmUpgradeTool {

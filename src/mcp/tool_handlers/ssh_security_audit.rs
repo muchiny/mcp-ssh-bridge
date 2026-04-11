@@ -4,11 +4,11 @@
 
 use serde::Deserialize;
 
-use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::domain::use_cases::security_modules::SecurityModulesCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
+use crate::mcp_standard_tool;
 
 #[derive(Debug, Deserialize)]
 pub struct SshSecurityAuditArgs {
@@ -23,8 +23,11 @@ pub struct SshSecurityAuditArgs {
 
 impl_common_args!(SshSecurityAuditArgs);
 
-#[mcp_standard_tool(name = "ssh_security_audit", group = "security_modules", annotation = "read_only")]
-
+#[mcp_standard_tool(
+    name = "ssh_security_audit",
+    group = "security_modules",
+    annotation = "read_only"
+)]
 pub struct SecurityAuditTool;
 
 impl StandardTool for SecurityAuditTool {
