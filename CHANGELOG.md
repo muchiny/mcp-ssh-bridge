@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Summary — Sprint 3 Phases A + B + C (foundation)
+### Summary — Sprint 3 (complete)
 
-**Transport unified** | **Daemon inherits stdio features** | **WinRM + K8sExec pools** | **Multi-host output diffing** | **`#[mcp_tool]` auto-registration foundation**
+**Transport unified** | **Daemon inherits stdio features** | **WinRM + K8sExec pools** | **Multi-host output diffing** | **`#[mcp_tool]` auto-registration — 357/357 handlers migrated**
 
 ### Added
 
@@ -28,20 +28,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`McpServer::handle_request_with_cancel`** signature gains a `notification_tx` parameter propagated through `handle_tools_call` and `create_tool_context` so the per-session sender reaches every handler.
 - **`ExecutorRouter`** stores `WinRmPool` + `K8sExecPool` (feature-gated) and delegates `Protocol::WinRm` / `Protocol::K8sExec` routing to them instead of constructing a fresh connection on every call. `cleanup()` and `close_all()` forward to every pool so the shared cleanup tasks clear stale entries.
 
-- **`crates/mcp-ssh-bridge-macros/`** — new proc-macro crate providing `#[mcp_tool(name, group, annotation)]` and `#[mcp_standard_tool(...)]` attributes for auto-registering handlers via the `inventory` crate. Handlers that opt in no longer need manual entries in `create_filtered_registry`, `tool_group()`, or `tool_annotations()` — the registry lookup functions read an `inventory::iter::<ToolRegistryEntry>()` table first and fall back to the legacy match tables for un-migrated handlers. Migration is incremental and safe.
-- **`#[mcp_standard_tool]`** variant that wraps the annotated marker type in `StandardToolHandler<Marker>::new()` so both handler shapes (direct `impl ToolHandler` *and* `StandardToolHandler<T>` wrapper) reach the inventory via the same pattern.
-- **`ToolRegistryEntry`, `ToolAnnotationKind`** public types in `src/mcp/registry.rs` for the inventory entries.
-- **6 handlers migrated as prototypes**: `ssh_exec`, `ssh_status`, `ssh_history`, `ssh_health`, `ssh_ls` (direct `impl ToolHandler` path) and `ssh_docker_ps` (`StandardToolHandler` wrapper path). All now register via `#[mcp_tool]` / `#[mcp_standard_tool]` and their entries have been removed from the legacy `create_filtered_registry` vec + match tables.
+- **`crates/mcp-ssh-bridge-macros/`** — new proc-macro crate providing `#[mcp_tool(name, group, annotation)]` and `#[mcp_standard_tool(...)]` attributes. Both emit an `inventory::submit!` that populates a static `ToolRegistryEntry` table at compile time; the main crate walks that table to build the registry, map names to groups, and map names to annotation kinds.
+- **`ToolRegistryEntry`, `ToolAnnotationKind`** public types in `src/mcp/registry.rs` backing the inventory entries. Two `OnceLock<HashMap>` caches (`inventory_group_map` / `inventory_annotation_map`) are built on first call and reused for the life of the process.
 
 ### Changed
 
-- **`Cargo.toml`** is now a workspace (`[workspace] members = [".", "crates/mcp-ssh-bridge-macros"]`) and depends on `inventory = "0.3"` + the local macro crate.
+- **`Cargo.toml`** is now a workspace (`[workspace] members = [".", "crates/mcp-ssh-bridge-macros"]`) and depends on `inventory = "0.3"` + the local macro crate + `similar = "2.6"` (multi-host diff).
 - **`src/lib.rs`** adds `extern crate self as mcp_ssh_bridge;` so the proc-macro-generated fully-qualified paths (`::mcp_ssh_bridge::mcp::registry::…`) resolve both when building the main crate and from downstream consumers.
-- **`.claude/rules/tool-handlers.md`** — "Adding a new tool" is now **3 steps** instead of 8. Legacy instructions kept as "fallback for handlers not yet migrated".
+- **All 357 tool handlers migrated to `#[mcp_tool]` / `#[mcp_standard_tool]`.** Each handler file gained a single-line attribute (329 `#[mcp_standard_tool]` markers + 28 `#[mcp_tool]` direct-impl structs). Migration done by a dedicated Python tooling suite (`scripts/extract_tool_metadata.py`, `scripts/migrate_handler.py`, `scripts/validate_baseline.py`) in 18 group-at-a-time waves, each with its own atomic commit and a full `cargo test --lib` + `cargo clippy -D warnings` + baseline-count gate.
+- **`src/mcp/registry.rs`: 4312 → ~2700 lines (-37 %).** The legacy `all_handlers: Vec<Arc<dyn ToolHandler>>` (309 entries + 309 `use` imports), the 340-arm `tool_group()` match table, and the 340-arm `tool_annotations()` match table all collapse into ~4-line inventory lookups. The function that used to require `#[allow(clippy::too_many_lines, clippy::large_stack_arrays)]` annotations is now a trivial 5-line for-loop.
+- **78 static test-count assertions → dynamic.** Assertions like `assert_eq!(registry.len(), 357)` were rewritten to `assert_eq!(registry.len(), all_tools_count())` using two helper functions (`all_tools_count()`, `group_size(group)`) that read the inventory at runtime. Adding a new tool no longer requires touching any test file.
+- **`.migration-baseline.json`** committed at repo root — a frozen snapshot of `(total, groups_count, groups[])` that `scripts/validate_baseline.py` checks against at every migration wave and that any future tool addition must update intentionally via `--force-baseline`.
 
 ### Removed
 
 - `src/daemon/connection.rs` — the per-connection handler is now replaced by `McpServer::serve_session`, which already has cancellation plumbing, the request registry, and the full dispatch surface.
+- **`/sync-counts` skill** (`.claude/skills/sync-counts/`) and every reference to it in `.claude/` docs, rules, settings, and agent memory. The "manually update 78 test count assertions after adding a tool" maintenance chore is dead code since commit D.
+- The "Adding a tool = 8 steps" procedure. The new procedure is **3 steps**: annotate the struct, add the `mod` + `pub use` line, and (only if introducing a new group) update `ToolGroupsConfig`.
 
 ## [1.11.0] - 2026-04-10
 
