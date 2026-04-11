@@ -5,6 +5,7 @@
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::hyperv::{HyperVCommandBuilder, validate_vm_name};
@@ -26,6 +27,8 @@ pub struct SshHypervSnapshotListArgs {
 }
 
 impl_common_args!(SshHypervSnapshotListArgs);
+
+#[mcp_standard_tool(name = "ssh_hyperv_snapshot_list", group = "hyperv", annotation = "read_only")]
 
 pub struct HypervSnapshotListTool;
 

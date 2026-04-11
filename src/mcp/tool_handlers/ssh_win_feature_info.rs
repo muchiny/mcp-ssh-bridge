@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_feature::{
@@ -22,6 +23,8 @@ pub struct SshWinFeatureInfoArgs {
 }
 
 impl_common_args!(SshWinFeatureInfoArgs);
+
+#[mcp_standard_tool(name = "ssh_win_feature_info", group = "windows_features", annotation = "read_only")]
 
 pub struct WinFeatureInfoTool;
 

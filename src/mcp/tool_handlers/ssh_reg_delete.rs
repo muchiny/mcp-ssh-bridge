@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_registry::{
@@ -25,6 +26,8 @@ pub struct SshRegDeleteArgs {
 }
 
 impl_common_args!(SshRegDeleteArgs);
+
+#[mcp_standard_tool(name = "ssh_reg_delete", group = "windows_registry", annotation = "destructive")]
 
 pub struct RegDeleteTool;
 

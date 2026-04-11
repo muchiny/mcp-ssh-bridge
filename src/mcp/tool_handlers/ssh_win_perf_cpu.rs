@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_perf::WindowsPerfCommandBuilder;
@@ -19,6 +20,8 @@ pub struct SshWinPerfCpuArgs {
 }
 
 impl_common_args!(SshWinPerfCpuArgs);
+
+#[mcp_standard_tool(name = "ssh_win_perf_cpu", group = "windows_perf", annotation = "read_only")]
 
 pub struct WinPerfCpuTool;
 

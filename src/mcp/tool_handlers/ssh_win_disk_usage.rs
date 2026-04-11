@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_process::WindowsProcessCommandBuilder;
@@ -19,6 +20,8 @@ pub struct SshWinDiskUsageArgs {
 }
 
 impl_common_args!(SshWinDiskUsageArgs);
+
+#[mcp_standard_tool(name = "ssh_win_disk_usage", group = "windows_perf", annotation = "read_only")]
 
 pub struct WinDiskUsageTool;
 

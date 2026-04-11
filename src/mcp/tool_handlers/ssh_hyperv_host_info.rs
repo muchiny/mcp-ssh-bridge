@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::hyperv::HyperVCommandBuilder;
@@ -22,6 +23,8 @@ pub struct SshHypervHostInfoArgs {
 }
 
 impl_common_args!(SshHypervHostInfoArgs);
+
+#[mcp_standard_tool(name = "ssh_hyperv_host_info", group = "hyperv", annotation = "read_only")]
 
 pub struct HypervHostInfoTool;
 

@@ -1281,36 +1281,13 @@ pub fn create_default_registry() -> ToolRegistry {
 #[allow(clippy::too_many_lines, clippy::large_stack_arrays)]
 pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry {
     use super::tool_handlers::{
-        SshHypervHostInfoHandler,
-        SshHypervSnapshotCreateHandler,
-        SshHypervSnapshotListHandler,
-        SshHypervSwitchListHandler,
-        SshHypervVmInfoHandler,
         // Phase 3: Enterprise Windows
-        SshHypervVmListHandler,
-        SshHypervVmStartHandler,
-        SshHypervVmStopHandler,
-        SshRegDeleteHandler,
-        SshRegExportHandler,
-        SshRegListHandler,
-        SshRegQueryHandler,
-        SshRegSetHandler,
-        SshWinDiskUsageHandler,
-        SshWinFeatureInfoHandler,
-        SshWinFeatureInstallHandler,
-        SshWinFeatureListHandler,
-        SshWinFeatureRemoveHandler,
         SshWinNetAdaptersHandler,
         SshWinNetConnectionsHandler,
         SshWinNetDnsHandler,
         SshWinNetIpHandler,
         SshWinNetPingHandler,
         SshWinNetRoutesHandler,
-        SshWinPerfCpuHandler,
-        SshWinPerfDiskHandler,
-        SshWinPerfMemoryHandler,
-        SshWinPerfNetworkHandler,
-        SshWinPerfOverviewHandler,
         SshWinProcessByNameHandler,
         SshWinProcessInfoHandler,
         SshWinProcessKillHandler,
@@ -1398,31 +1375,9 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // IIS
         // Windows Updates
         // Windows Performance
-        Arc::new(SshWinPerfCpuHandler::new()),
-        Arc::new(SshWinPerfMemoryHandler::new()),
-        Arc::new(SshWinPerfDiskHandler::new()),
-        Arc::new(SshWinPerfNetworkHandler::new()),
-        Arc::new(SshWinPerfOverviewHandler::new()),
         // Hyper-V
-        Arc::new(SshHypervVmListHandler::new()),
-        Arc::new(SshHypervVmInfoHandler::new()),
-        Arc::new(SshHypervVmStartHandler::new()),
-        Arc::new(SshHypervVmStopHandler::new()),
-        Arc::new(SshHypervSnapshotListHandler::new()),
-        Arc::new(SshHypervSnapshotCreateHandler::new()),
-        Arc::new(SshHypervHostInfoHandler::new()),
-        Arc::new(SshHypervSwitchListHandler::new()),
         // Windows Registry
-        Arc::new(SshRegQueryHandler::new()),
-        Arc::new(SshRegSetHandler::new()),
-        Arc::new(SshRegListHandler::new()),
-        Arc::new(SshRegExportHandler::new()),
-        Arc::new(SshRegDeleteHandler::new()),
         // Windows Features
-        Arc::new(SshWinFeatureListHandler::new()),
-        Arc::new(SshWinFeatureInfoHandler::new()),
-        Arc::new(SshWinFeatureInstallHandler::new()),
-        Arc::new(SshWinFeatureRemoveHandler::new()),
         // Windows Network
         Arc::new(SshWinNetAdaptersHandler::new()),
         Arc::new(SshWinNetIpHandler::new()),
@@ -1436,7 +1391,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         Arc::new(SshWinProcessKillHandler::new()),
         Arc::new(SshWinProcessTopHandler::new()),
         Arc::new(SshWinProcessByNameHandler::new()),
-        Arc::new(SshWinDiskUsageHandler::new()),
     ];
 
     for handler in all_handlers {

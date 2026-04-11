@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::hyperv::{HyperVCommandBuilder, validate_vm_name};
@@ -22,6 +23,8 @@ pub struct SshHypervVmStartArgs {
 }
 
 impl_common_args!(SshHypervVmStartArgs);
+
+#[mcp_standard_tool(name = "ssh_hyperv_vm_start", group = "hyperv", annotation = "mutating")]
 
 pub struct HypervVmStartTool;
 

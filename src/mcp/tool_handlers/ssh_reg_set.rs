@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::windows_registry::{
@@ -28,6 +29,8 @@ pub struct SshRegSetArgs {
 }
 
 impl_common_args!(SshRegSetArgs);
+
+#[mcp_standard_tool(name = "ssh_reg_set", group = "windows_registry", annotation = "mutating")]
 
 pub struct RegSetTool;
 

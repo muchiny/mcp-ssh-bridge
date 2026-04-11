@@ -4,6 +4,7 @@
 
 use serde::Deserialize;
 
+use crate::mcp_standard_tool;
 use crate::config::HostConfig;
 use crate::config::OsType;
 use crate::domain::use_cases::hyperv::{
@@ -25,6 +26,8 @@ pub struct SshHypervSnapshotCreateArgs {
 }
 
 impl_common_args!(SshHypervSnapshotCreateArgs);
+
+#[mcp_standard_tool(name = "ssh_hyperv_snapshot_create", group = "hyperv", annotation = "mutating")]
 
 pub struct HypervSnapshotCreateTool;
 
