@@ -17,6 +17,7 @@ use crate::domain::OutputCache;
 use crate::domain::output_truncator::truncate_output_with_cache;
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::ExecutorRouter;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 use crate::security::RateLimiter;
@@ -85,6 +86,7 @@ struct MultiExecResult {
 }
 
 /// SSH Exec Multi tool handler
+#[mcp_tool(name = "ssh_exec_multi", group = "core", annotation = "mutating")]
 pub struct SshExecMultiHandler;
 
 impl SshExecMultiHandler {

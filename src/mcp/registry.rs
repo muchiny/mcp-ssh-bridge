@@ -1378,7 +1378,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshEsxiVmInfoHandler,
         SshEsxiVmListHandler,
         SshEsxiVmPowerHandler,
-        SshExecMultiHandler,
         SshFail2banStatusHandler,
         SshFileChmodHandler,
         SshFileChownHandler,
@@ -1641,7 +1640,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Core
         // ssh_exec, ssh_status, ssh_history, ssh_health — registered via
         // #[mcp_tool] inventory, see src/mcp/tool_handlers/*.rs.
-        Arc::new(SshExecMultiHandler),
         Arc::new(SshOutputFetchHandler),
         // Monitoring
         Arc::new(SshMetricsHandler),
