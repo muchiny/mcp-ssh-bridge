@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use crate::error::{BridgeError, Result};
 use crate::mcp::protocol::ToolCallResult;
+use crate::mcp_tool;
 use crate::ports::{ToolContext, ToolHandler, ToolSchema};
 
 /// Arguments for `ssh_output_fetch` tool
@@ -22,6 +23,7 @@ struct SshOutputFetchArgs {
 }
 
 /// SSH Output Fetch tool handler
+#[mcp_tool(name = "ssh_output_fetch", group = "core", annotation = "read_only")]
 pub struct SshOutputFetchHandler;
 
 impl SshOutputFetchHandler {

@@ -1486,7 +1486,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         SshNginxStatusHandler,
         SshNginxTestHandler,
         SshNotifyHandler,
-        SshOutputFetchHandler,
         SshPerfTraceHandler,
         SshPkgInstallHandler,
         SshPkgListHandler,
@@ -1640,7 +1639,6 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         // Core
         // ssh_exec, ssh_status, ssh_history, ssh_health — registered via
         // #[mcp_tool] inventory, see src/mcp/tool_handlers/*.rs.
-        Arc::new(SshOutputFetchHandler),
         // Monitoring
         Arc::new(SshMetricsHandler),
         Arc::new(SshMetricsMultiHandler),
