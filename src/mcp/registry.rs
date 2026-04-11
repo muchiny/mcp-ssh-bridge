@@ -2,9 +2,20 @@
 //!
 //! This module provides a registry for tool handlers, enabling
 //! dynamic registration and lookup of tools at runtime.
+//!
+//! # Inventory-backed auto-registration (Sprint 3 Phase C)
+//!
+//! Handler files can annotate their struct with
+//! `#[mcp_tool(name, group, annotation)]` to auto-register via the
+//! `inventory` crate. The macro emits an `inventory::submit!` call
+//! producing a [`ToolRegistryEntry`] that [`create_filtered_registry`],
+//! [`tool_group`], and [`tool_annotations`] read as a fallback
+//! *before* consulting the legacy match tables. Handlers that have
+//! not been migrated yet continue to work through the legacy
+//! tables, so migration is incremental and safe.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use serde_json::{Value, json};
 
@@ -14,6 +25,73 @@ use crate::mcp::protocol::{Tool, ToolAnnotations, ToolCallResult, ToolExecution}
 #[cfg(test)]
 use crate::ports::ToolSchema;
 use crate::ports::{ToolContext, ToolHandler};
+
+/// Annotation kind surfaced by a handler.
+///
+/// Maps 1-to-1 to the three factory methods on
+/// [`crate::mcp::protocol::ToolAnnotations`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolAnnotationKind {
+    /// Read-only; can run in parallel, no side effects.
+    ReadOnly,
+    /// Mutating; modifies state on the remote host.
+    Mutating,
+    /// Destructive; irreversible side effects (rm -rf, drop table).
+    Destructive,
+}
+
+impl ToolAnnotationKind {
+    /// Materialize this kind as a full [`ToolAnnotations`] with the
+    /// handler name as the title. Matches what the legacy
+    /// [`tool_annotations`] function returned by hand.
+    #[must_use]
+    pub fn into_annotations(self, tool_name: &str) -> ToolAnnotations {
+        match self {
+            Self::ReadOnly => ToolAnnotations::read_only(tool_name),
+            Self::Mutating => ToolAnnotations::mutating(tool_name),
+            Self::Destructive => ToolAnnotations::destructive(tool_name),
+        }
+    }
+}
+
+/// Registration entry produced by the `#[mcp_tool]` proc macro.
+///
+/// The `factory` function builds a boxed handler on demand; it is a
+/// `fn` pointer so it can be stored in an `inventory` static table.
+pub struct ToolRegistryEntry {
+    pub name: &'static str,
+    pub group: &'static str,
+    pub annotation_kind: ToolAnnotationKind,
+    pub factory: fn() -> Arc<dyn ToolHandler>,
+}
+
+inventory::collect!(ToolRegistryEntry);
+
+/// Global (lazy) cache of `name -> group` for inventory-registered
+/// tools. Built on first call and reused for the life of the process.
+fn inventory_group_map() -> &'static HashMap<&'static str, &'static str> {
+    static MAP: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+    MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        for entry in inventory::iter::<ToolRegistryEntry>() {
+            m.insert(entry.name, entry.group);
+        }
+        m
+    })
+}
+
+/// Global (lazy) cache of `name -> ToolAnnotationKind` for
+/// inventory-registered tools.
+fn inventory_annotation_map() -> &'static HashMap<&'static str, ToolAnnotationKind> {
+    static MAP: OnceLock<HashMap<&'static str, ToolAnnotationKind>> = OnceLock::new();
+    MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        for entry in inventory::iter::<ToolRegistryEntry>() {
+            m.insert(entry.name, entry.annotation_kind);
+        }
+        m
+    })
+}
 
 /// Registry for tool handlers
 ///
@@ -223,6 +301,11 @@ pub fn inject_reduction_schema(schema: &mut Value, kind: crate::domain::output_k
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn tool_group(tool_name: &str) -> &'static str {
+    // Phase C: inventory-backed lookup takes precedence so handlers
+    // annotated with `#[mcp_tool(...)]` skip the legacy match table.
+    if let Some(group) = inventory_group_map().get(tool_name).copied() {
+        return group;
+    }
     match tool_name {
         "ssh_upload" | "ssh_download" | "ssh_sync" => "file_transfer",
         "ssh_session_create" | "ssh_session_exec" | "ssh_session_list" | "ssh_session_close" => {
@@ -517,6 +600,10 @@ pub fn tool_group(tool_name: &str) -> &'static str {
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn tool_annotations(tool_name: &str) -> ToolAnnotations {
+    // Phase C: inventory-backed lookup takes precedence.
+    if let Some(kind) = inventory_annotation_map().get(tool_name).copied() {
+        return kind.into_annotations(tool_name);
+    }
     match tool_name {
         // ================================================================
         // Read-only tools: safe for parallel execution
@@ -1999,6 +2086,27 @@ pub fn create_filtered_registry(tool_groups: &ToolGroupsConfig) -> ToolRegistry 
         if tool_groups.is_group_enabled(group) {
             registry.register(handler);
         }
+    }
+
+    // Sprint 3 Phase C: also pull in any handler that was registered
+    // via `#[mcp_tool]` (inventory) and is NOT already covered by the
+    // legacy `all_handlers` list above. This lets migrated handlers
+    // coexist with the manual list so we can do incremental cut-over
+    // without a single giant-bang migration.
+    //
+    // Each entry's `factory()` produces an `Arc<dyn ToolHandler>`; we
+    // check the legacy registry first to avoid double-registration
+    // for entries that live in both the manual list *and* the
+    // inventory (will happen during migration).
+    for entry in inventory::iter::<ToolRegistryEntry>() {
+        if registry.get(entry.name).is_some() {
+            // Already registered via the legacy path — leave it.
+            continue;
+        }
+        if !tool_groups.is_group_enabled(entry.group) {
+            continue;
+        }
+        registry.register((entry.factory)());
     }
 
     registry

@@ -1,0 +1,177 @@
+//! Proc-macro helpers for `mcp-ssh-bridge` tool handlers.
+//!
+//! The `#[mcp_tool(...)]` attribute macro attaches to a unit struct
+//! (typically the `XxxHandler` or `XxxTool` empty struct that the
+//! handler files already define) and:
+//!
+//! 1. Leaves the original item unchanged — the struct definition is
+//!    emitted verbatim.
+//! 2. Appends a static `inventory::submit!` call that registers a
+//!    `ToolRegistryEntry` carrying the tool's name, group,
+//!    annotation kind, and a factory closure that returns
+//!    `Arc<dyn ToolHandler>` for that handler type.
+//!
+//! The parent crate (`mcp-ssh-bridge`) defines `ToolRegistryEntry`
+//! and `ToolAnnotationKind` and runs `inventory::collect!` so every
+//! `#[mcp_tool]`-annotated type is gathered into a single static
+//! table at compile time. `create_filtered_registry()`,
+//! `tool_group()` and `tool_annotations()` walk that table to build
+//! their lookups instead of the old 340-arm match statements.
+//!
+//! # Example
+//!
+//! ```ignore
+//! use mcp_ssh_bridge_macros::mcp_tool;
+//! use std::sync::Arc;
+//! use mcp_ssh_bridge::ports::ToolHandler;
+//!
+//! #[mcp_tool(name = "ssh_exec", group = "core", annotation = "mutating")]
+//! pub struct SshExecHandler;
+//!
+//! // ... impl ToolHandler for SshExecHandler { ... } stays as-is
+//! ```
+//!
+//! The macro re-emits `pub struct SshExecHandler;` untouched and
+//! appends a registration block to the same file.
+
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{Expr, ExprLit, Lit, MetaNameValue, Token, parse_macro_input, punctuated::Punctuated};
+
+/// Parse arguments of the form `name = "…", group = "…", annotation = "…"`.
+struct McpToolArgs {
+    name: String,
+    group: String,
+    annotation: String,
+}
+
+impl syn::parse::Parse for McpToolArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let pairs: Punctuated<MetaNameValue, Token![,]> =
+            Punctuated::parse_terminated(input)?;
+
+        let mut name: Option<String> = None;
+        let mut group: Option<String> = None;
+        let mut annotation: Option<String> = None;
+
+        for pair in pairs {
+            let key = pair
+                .path
+                .get_ident()
+                .map(ToString::to_string)
+                .unwrap_or_default();
+            let value = extract_string_literal(&pair.value).ok_or_else(|| {
+                syn::Error::new_spanned(
+                    &pair.value,
+                    "expected a string literal",
+                )
+            })?;
+            match key.as_str() {
+                "name" => name = Some(value),
+                "group" => group = Some(value),
+                "annotation" => annotation = Some(value),
+                other => {
+                    return Err(syn::Error::new_spanned(
+                        &pair.path,
+                        format!("unknown #[mcp_tool] argument: {other}"),
+                    ));
+                }
+            }
+        }
+
+        let name = name.ok_or_else(|| {
+            syn::Error::new(proc_macro2::Span::call_site(), "missing `name = \"...\"`")
+        })?;
+        let group = group.ok_or_else(|| {
+            syn::Error::new(proc_macro2::Span::call_site(), "missing `group = \"...\"`")
+        })?;
+        let annotation = annotation.unwrap_or_else(|| "read_only".to_string());
+
+        // Validate annotation kind at compile time so typos are caught
+        // right at the macro site instead of during registry lookup.
+        match annotation.as_str() {
+            "read_only" | "mutating" | "destructive" => {}
+            other => {
+                return Err(syn::Error::new(
+                    proc_macro2::Span::call_site(),
+                    format!(
+                        "invalid annotation `{other}` — expected one of: read_only, mutating, destructive"
+                    ),
+                ));
+            }
+        }
+
+        Ok(Self {
+            name,
+            group,
+            annotation,
+        })
+    }
+}
+
+fn extract_string_literal(expr: &Expr) -> Option<String> {
+    if let Expr::Lit(ExprLit {
+        lit: Lit::Str(s), ..
+    }) = expr
+    {
+        Some(s.value())
+    } else {
+        None
+    }
+}
+
+/// Attach name / group / annotation metadata to a tool handler type.
+///
+/// Generates an `inventory::submit!` registration alongside the
+/// struct so `mcp::registry::create_filtered_registry()` can build
+/// its handler map from a compile-time table.
+#[proc_macro_attribute]
+pub fn mcp_tool(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(attr as McpToolArgs);
+
+    // Parse just enough of the item to extract the type name and
+    // re-emit it verbatim. Using `syn::Item` lets us accept either
+    // `struct S;` or more complex forms; for this project every
+    // handler uses `pub struct XxxHandler;`.
+    let input = parse_macro_input!(item as syn::Item);
+
+    let struct_name = match &input {
+        syn::Item::Struct(s) => s.ident.clone(),
+        _ => {
+            return syn::Error::new_spanned(
+                &input,
+                "#[mcp_tool] can only be applied to a struct",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
+
+    let name_lit = args.name;
+    let group_lit = args.group;
+    let annotation_ident = match args.annotation.as_str() {
+        "read_only" => quote! { ::mcp_ssh_bridge::mcp::registry::ToolAnnotationKind::ReadOnly },
+        "mutating" => quote! { ::mcp_ssh_bridge::mcp::registry::ToolAnnotationKind::Mutating },
+        "destructive" => {
+            quote! { ::mcp_ssh_bridge::mcp::registry::ToolAnnotationKind::Destructive }
+        }
+        // Already validated above; this arm is unreachable but kept
+        // for defensive codegen.
+        _ => unreachable!(),
+    };
+
+    let expanded = quote! {
+        #input
+
+        ::mcp_ssh_bridge::inventory::submit! {
+            ::mcp_ssh_bridge::mcp::registry::ToolRegistryEntry {
+                name: #name_lit,
+                group: #group_lit,
+                annotation_kind: #annotation_ident,
+                factory: || ::std::sync::Arc::new(#struct_name) as ::std::sync::Arc<dyn ::mcp_ssh_bridge::ports::ToolHandler>,
+            }
+        }
+    };
+
+    expanded.into()
+}

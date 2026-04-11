@@ -7,6 +7,16 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+/// Re-export the `inventory` crate so code produced by the
+/// `#[mcp_tool]` proc macro can reference it via a fully-qualified
+/// path (`::mcp_ssh_bridge::inventory::submit!`) without requiring
+/// callers to add `inventory` to their own `Cargo.toml`.
+pub use ::inventory as inventory;
+
+/// Re-export the `#[mcp_tool]` attribute macro so handler files
+/// only need `use mcp_ssh_bridge::mcp_tool;`.
+pub use mcp_ssh_bridge_macros::mcp_tool;
+
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod config;

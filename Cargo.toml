@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "crates/mcp-ssh-bridge-macros"]
+
 [package]
 name = "mcp-ssh-bridge"
 version = "1.11.0"
@@ -139,6 +142,8 @@ opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"], optional = true
 opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"], optional = true }
 tracing-opentelemetry = { version = "0.32", optional = true }
 similar = "2.6"
+inventory = "0.3"
+mcp-ssh-bridge-macros = { version = "0.1.0", path = "crates/mcp-ssh-bridge-macros" }
 
 [dev-dependencies]
 tempfile = "3"
