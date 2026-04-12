@@ -1,8 +1,12 @@
-//! PSRP connection pool — caches [`RunspacePool`] instances per host.
+//! PSRP connection pool — caches `WinrmClient` instances per host.
 //!
-//! Longer TTL than `WinRM` (300 s vs 120 s) because `RunspacePool` is designed
-//! for session reuse and creation is expensive (TLS + auth + PSRP handshake +
-//! runspace initialization).
+//! Longer TTL than `WinRM` (300 s vs 120 s) because the PSRP handshake
+//! (TLS + auth + PSRP session open) is more expensive than plain `WinRM`.
+//!
+//! The pool caches `Arc<WinrmClient>` — the same approach as `WinRmPool`.
+//! Each `PsrpConnection::exec()` creates a scoped `RunspacePool` from
+//! the cached client, avoiding the TLS/auth overhead while working
+//! within Rust's lifetime constraints.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,22 +15,23 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
+use super::PsrpConnection;
 use crate::config::{HostConfig, LimitsConfig};
 use crate::error::Result;
 
-use super::PsrpConnection;
-
-/// Default idle TTL for cached PSRP `RunspacePool` instances.
-///
-/// 300 s is longer than `WinRM`'s 120 s because `RunspacePool` is inherently
-/// stateful and designed for reuse. Creation is expensive (TLS + auth +
-/// PSRP handshake + runspace init), so we keep them around longer.
+/// Default idle TTL for cached `WinrmClient` entries in the PSRP pool.
 const DEFAULT_PSRP_IDLE_TTL: Duration = Duration::from_secs(300);
 
-/// Configuration for the PSRP pool.
+/// A cached entry: one `WinrmClient` + last-used timestamp.
+struct PooledClient {
+    client: Arc<winrm_rs::WinrmClient>,
+    last_used: Instant,
+}
+
+/// Pool configuration.
 #[derive(Debug, Clone, Copy)]
 pub struct PsrpPoolConfig {
-    /// How long an idle `RunspacePool` stays cached before eviction.
+    /// How long an idle client stays cached before eviction.
     pub max_idle: Duration,
 }
 
@@ -38,20 +43,14 @@ impl Default for PsrpPoolConfig {
     }
 }
 
-/// Entry in the pool cache.
-struct PooledRunspace {
-    #[allow(dead_code)] // Will hold actual `RunspacePool` once psrp-rs is wired
-    connection: PsrpConnection,
-    last_used: Instant,
-}
-
-/// Cache of PSRP `RunspacePool` instances keyed by host name.
+/// Cache of `WinrmClient` instances for PSRP hosts, keyed by host name.
 ///
-/// Follows the same pattern as `WinRmPool` and `K8sExecPool`:
-/// `Arc<RwLock<HashMap>>` with fast/cold path lookup.
+/// Follows the same pattern as `WinRmPool`: `Arc<RwLock<HashMap>>` with
+/// fast/cold path lookup. Reuses `crate::winrm::build_winrm_config()`
+/// for the bridge → `winrm-rs` config mapping.
 #[derive(Clone)]
 pub struct PsrpPool {
-    inner: Arc<RwLock<HashMap<String, PooledRunspace>>>,
+    inner: Arc<RwLock<HashMap<String, PooledClient>>>,
     config: PsrpPoolConfig,
 }
 
@@ -71,84 +70,79 @@ impl PsrpPool {
         }
     }
 
-    /// Get or create a PSRP connection for the given host.
+    /// Fetch or create a `PsrpConnection` for `host_name`.
     ///
-    /// **Fast path**: return cached `RunspacePool` if fresh.
-    /// **Cold path**: build `WinrmClient` -> open `WinrmPsrpTransport` ->
-    ///               open `RunspacePool` -> cache -> return.
+    /// **Fast path**: cached `WinrmClient` still fresh — clone Arc, return.
+    /// **Cold path**: `build_winrm_config()` → `WinrmClient::new()` → cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if auth config is invalid or client creation fails.
     pub async fn get_connection(
         &self,
         host_name: &str,
-        _host_config: &HostConfig,
+        host_config: &HostConfig,
         _limits: &LimitsConfig,
     ) -> Result<PsrpConnection> {
-        // Fast path: check cache under read lock
+        // Fast path: cached entry still fresh.
         {
-            let cache = self.inner.read().await;
-            if let Some(entry) = cache.get(host_name)
-                && entry.last_used.elapsed() < self.config.max_idle
+            let guard = self.inner.read().await;
+            if let Some(entry) = guard.get(host_name)
+                && entry.last_used.elapsed() <= self.config.max_idle
             {
-                debug!(host = %host_name, "PSRP pool hit (cached RunspacePool)");
-                return Ok(PsrpConnection::from_parts(host_name));
+                debug!(host = %host_name, "PsrpPool hit — reusing cached WinrmClient");
+                let client = Arc::clone(&entry.client);
+                drop(guard);
+                let mut w = self.inner.write().await;
+                if let Some(entry) = w.get_mut(host_name) {
+                    entry.last_used = Instant::now();
+                }
+                return Ok(PsrpConnection::from_parts(host_name, client));
             }
         }
 
-        // Cold path: build new RunspacePool
-        debug!(host = %host_name, "PSRP pool miss — creating new RunspacePool");
+        // Cold path: build new WinrmClient via build_winrm_config().
+        let (winrm_config, credentials) = crate::winrm::build_winrm_config(host_config)?;
+        let client = Arc::new(winrm_rs::WinrmClient::new(winrm_config, credentials)?);
 
-        // TODO: Wire actual psrp-rs RunspacePool creation:
-        // 1. build_winrm_config(host_config) -> (WinrmConfig, WinrmCredentials)
-        // 2. WinrmClient::new(config, creds)
-        // 3. WinrmPsrpTransport::open(&client, host, creation_fragments)
-        // 4. RunspacePool::open_with_transport(transport)
-
-        let connection = PsrpConnection::from_parts(host_name);
-
-        // Cache the new connection
         {
-            let mut cache = self.inner.write().await;
-            cache.insert(
+            let mut guard = self.inner.write().await;
+            guard.insert(
                 host_name.to_string(),
-                PooledRunspace {
-                    connection: PsrpConnection::from_parts(host_name),
+                PooledClient {
+                    client: Arc::clone(&client),
                     last_used: Instant::now(),
                 },
             );
         }
 
-        Ok(connection)
+        info!(host = %host_name, "PsrpPool miss — created new WinrmClient for PSRP");
+        Ok(PsrpConnection::from_parts(host_name, client))
     }
 
     /// Remove a cached entry (called on connection failure).
     pub async fn evict(&self, host_name: &str) {
-        let mut cache = self.inner.write().await;
-        if cache.remove(host_name).is_some() {
-            debug!(host = %host_name, "Evicted PSRP RunspacePool from cache");
+        let mut guard = self.inner.write().await;
+        if guard.remove(host_name).is_some() {
+            info!(host = %host_name, "PsrpPool evicted failed client");
         }
     }
 
-    /// Evict entries idle longer than `max_idle`.
+    /// Evict entries idle longer than the configured TTL.
     pub async fn cleanup(&self) {
-        let max_idle = self.config.max_idle;
-        let mut cache = self.inner.write().await;
-        cache.retain(|host, entry| {
-            let keep = entry.last_used.elapsed() < max_idle;
-            if !keep {
-                info!(host = %host, "Evicting idle PSRP RunspacePool");
-            }
-            keep
-        });
+        let now = Instant::now();
+        let mut guard = self.inner.write().await;
+        guard.retain(|_, entry| now.duration_since(entry.last_used) <= self.config.max_idle);
     }
 
-    /// Close all cached `RunspacePool` instances.
+    /// Close all cached entries.
     pub async fn close_all(&self) {
-        let mut cache = self.inner.write().await;
-        cache.clear();
-        info!("Closed all PSRP RunspacePool instances");
+        let mut guard = self.inner.write().await;
+        guard.clear();
+        info!("Closed all PSRP pool entries");
     }
 
     /// Number of cached entries (for tests).
-    #[must_use]
     pub async fn size(&self) -> usize {
         self.inner.read().await.len()
     }
@@ -163,6 +157,32 @@ impl Default for PsrpPool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{AuthConfig, HostKeyVerification, OsType, Protocol};
+
+    fn test_host() -> HostConfig {
+        HostConfig {
+            hostname: "10.0.0.1".to_string(),
+            port: 5986,
+            user: "admin".to_string(),
+            auth: AuthConfig::Password {
+                password: zeroize::Zeroizing::new("pass".to_string()),
+            },
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::Windows,
+            shell: None,
+            retry: None,
+            protocol: Protocol::default(),
+            winrm_use_tls: None,
+            winrm_accept_invalid_certs: None,
+            winrm_operation_timeout_secs: None,
+            winrm_max_envelope_size: None,
+        }
+    }
 
     #[test]
     fn test_default_config() {
@@ -171,64 +191,83 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_pool_new_is_empty() {
+    async fn test_pool_default_empty() {
         let pool = PsrpPool::new();
         assert_eq!(pool.size().await, 0);
     }
 
     #[tokio::test]
-    async fn test_close_all_empties_pool() {
+    async fn test_pool_insert_then_lookup() {
         let pool = PsrpPool::new();
-        // Insert a dummy entry
-        {
-            let mut cache = pool.inner.write().await;
-            cache.insert(
-                "test-host".to_string(),
-                PooledRunspace {
-                    connection: PsrpConnection::from_parts("test-host"),
-                    last_used: Instant::now(),
-                },
-            );
-        }
+        let host = test_host();
+        let limits = LimitsConfig::default();
+
+        let _conn1 = pool
+            .get_connection("psrp-host", &host, &limits)
+            .await
+            .expect("get_connection ok");
         assert_eq!(pool.size().await, 1);
+
+        let _conn2 = pool
+            .get_connection("psrp-host", &host, &limits)
+            .await
+            .expect("get_connection ok");
+        assert_eq!(pool.size().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_pool_evict_removes_entry() {
+        let pool = PsrpPool::new();
+        let host = test_host();
+        let limits = LimitsConfig::default();
+
+        let _ = pool
+            .get_connection("psrp-host", &host, &limits)
+            .await
+            .unwrap();
+        assert_eq!(pool.size().await, 1);
+        pool.evict("psrp-host").await;
+        assert_eq!(pool.size().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_pool_expired_entry_is_rebuilt() {
+        let pool = PsrpPool::with_config(PsrpPoolConfig {
+            max_idle: Duration::from_millis(1),
+        });
+        let host = test_host();
+        let limits = LimitsConfig::default();
+
+        let _ = pool.get_connection("h", &host, &limits).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let _ = pool.get_connection("h", &host, &limits).await.unwrap();
+        assert_eq!(pool.size().await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_pool_close_all() {
+        let pool = PsrpPool::new();
+        let host = test_host();
+        let limits = LimitsConfig::default();
+
+        for name in ["a", "b", "c"] {
+            let _ = pool.get_connection(name, &host, &limits).await.unwrap();
+        }
+        assert_eq!(pool.size().await, 3);
         pool.close_all().await;
         assert_eq!(pool.size().await, 0);
     }
 
     #[tokio::test]
-    async fn test_evict_removes_entry() {
-        let pool = PsrpPool::new();
-        {
-            let mut cache = pool.inner.write().await;
-            cache.insert(
-                "host-a".to_string(),
-                PooledRunspace {
-                    connection: PsrpConnection::from_parts("host-a"),
-                    last_used: Instant::now(),
-                },
-            );
-        }
-        assert_eq!(pool.size().await, 1);
-        pool.evict("host-a").await;
-        assert_eq!(pool.size().await, 0);
-    }
-
-    #[tokio::test]
-    async fn test_cleanup_evicts_stale_entries() {
+    async fn test_pool_cleanup_drops_stale() {
         let pool = PsrpPool::with_config(PsrpPoolConfig {
-            max_idle: Duration::from_millis(1),
+            max_idle: Duration::from_millis(10),
         });
-        {
-            let mut cache = pool.inner.write().await;
-            cache.insert(
-                "stale-host".to_string(),
-                PooledRunspace {
-                    connection: PsrpConnection::from_parts("stale-host"),
-                    last_used: Instant::now() - Duration::from_secs(10),
-                },
-            );
-        }
-        assert_eq!(pool.size().await, 1);
+        let host = test_host();
+        let limits = LimitsConfig::default();
+
+        let _ = pool.get_connection("h", &host, &limits).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
         pool.cleanup().await;
         assert_eq!(pool.size().await, 0);
     }
