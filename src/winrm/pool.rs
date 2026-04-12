@@ -1,54 +1,29 @@
-//! `WinRmPool` — reuse `reqwest::Client` instances across calls.
+//! `WinRmPool` — cache `winrm_rs::WinrmClient` instances per host.
 //!
-//! Unlike SSH, `WinRM` is request/response HTTP. There is no
-//! long-lived session on the server side to cache. What's expensive
-//! per-call is the **TLS handshake**: every fresh `reqwest::Client`
-//! starts a new HTTPS connection, paying a ~50-100 ms round-trip plus
-//! CPU for the cipher suite negotiation.
+//! `WinRM` is request/response HTTP with no long-lived session, but
+//! `WinrmClient` internally holds a `reqwest::Client` with TLS state
+//! and auth context (`NTLMv2` session tokens, etc.). Caching the client
+//! avoids repeating TLS handshakes and auth negotiations on every call.
 //!
-//! `reqwest::Client` itself is cheap to `Clone` — it's an
-//! `Arc<Inner>` behind the scenes, and the underlying connection
-//! pool (HTTP/1.1 `keep-alive` + HTTP/2 multiplexing) is shared
-//! between clones. So the pool's real job is to keep a single client
-//! **alive** long enough for subsequent calls to reuse its idle
-//! HTTPS connections instead of dialing a new one.
-//!
-//! Design:
-//!
-//! - One cached `reqwest::Client` per `host_name`, holding the
-//!   per-host TLS settings (SSL accept-invalid-certs vs strict).
-//! - 120-second idle TTL. `WinRM` servers aggressively close idle
-//!   sessions — shorter TTL than SSH (default 1800 s) reflects that.
-//! - `get_connection()` returns a `WinRmConnection` whose HTTP
-//!   client is taken from the pool. `mark_failed()` propagates a
-//!   flag that the pool checks on the next `get_connection()` call
-//!   and evicts if set.
+//! 120 s idle TTL matches `WinRM` server idle timeouts.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use reqwest::Client;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use super::{WinRmConfig, WinRmConnection};
+use super::{WinRmConnection, build_winrm_config};
 use crate::config::{HostConfig, LimitsConfig};
-use crate::error::{BridgeError, Result};
+use crate::error::Result;
 
-/// Default idle TTL for cached `reqwest::Client` entries.
-///
-/// `WinRM` servers typically close idle HTTPS connections after
-/// 120-180 seconds. 120 seconds keeps us comfortably inside the
-/// window while still letting short bursts of back-to-back calls
-/// reuse the same TLS session.
+/// Default idle TTL for cached `WinrmClient` entries.
 const DEFAULT_WINRM_IDLE_TTL: Duration = Duration::from_secs(120);
 
-/// A cached entry: one `reqwest::Client` + its config + last-used stamp.
-#[derive(Clone)]
+/// A cached entry: one `WinrmClient` + last-used timestamp.
 struct PooledClient {
-    client: Client,
-    config: WinRmConfig,
+    client: Arc<winrm_rs::WinrmClient>,
     last_used: Instant,
 }
 
@@ -67,10 +42,10 @@ impl Default for WinRmPoolConfig {
     }
 }
 
-/// Cache of live `reqwest::Client` instances keyed by host name.
+/// Cache of `winrm_rs::WinrmClient` instances keyed by host name.
 ///
-/// The pool is cheap to clone (it's an `Arc` internally) and safe to
-/// share across tasks — all mutation happens under an `RwLock`.
+/// The pool is cheap to clone (`Arc` internally) and safe to share
+/// across tasks — all mutation happens under an `RwLock`.
 #[derive(Clone)]
 pub struct WinRmPool {
     inner: Arc<RwLock<HashMap<String, PooledClient>>>,
@@ -78,7 +53,7 @@ pub struct WinRmPool {
 }
 
 impl WinRmPool {
-    /// Create a new pool with default configuration.
+    /// Create a new pool with default configuration (120 s idle TTL).
     #[must_use]
     pub fn new() -> Self {
         Self::with_config(WinRmPoolConfig::default())
@@ -95,16 +70,16 @@ impl WinRmPool {
 
     /// Fetch or create a `WinRmConnection` for `host_name`.
     ///
-    /// If a live, non-stale `reqwest::Client` already exists for this
-    /// host, clones it and wraps it in a new `WinRmConnection`. The
-    /// connection inherits its `user` / `password` from `host_config`
-    /// at call time, so rotating credentials does not require evicting
-    /// the pool entry.
+    /// **Fast path**: if a cached `WinrmClient` exists and is fresh,
+    /// wraps it in a new `WinRmConnection` (zero network cost).
+    ///
+    /// **Cold path**: calls `build_winrm_config()` to map bridge config
+    /// to `winrm-rs` types, creates a new `WinrmClient`, caches it,
+    /// and returns the connection.
     ///
     /// # Errors
     ///
-    /// Returns an error if authentication is missing, or if building
-    /// a fresh `reqwest::Client` fails on a cold entry.
+    /// Returns an error if auth config is invalid or `WinrmClient` creation fails.
     pub async fn get_connection(
         &self,
         host_name: &str,
@@ -117,49 +92,38 @@ impl WinRmPool {
             if let Some(entry) = guard.get(host_name)
                 && entry.last_used.elapsed() <= self.config.max_idle
             {
-                debug!(host = %host_name, "WinRmPool hit — reusing cached client");
-                let client = entry.client.clone();
-                let config = entry.config.clone();
+                debug!(host = %host_name, "WinRmPool hit — reusing cached WinrmClient");
+                let client = Arc::clone(&entry.client);
                 drop(guard);
-                // Update last_used under the write lock.
+                // Update last_used under write lock.
                 let mut w = self.inner.write().await;
                 if let Some(entry) = w.get_mut(host_name) {
                     entry.last_used = Instant::now();
                 }
-                return WinRmConnection::from_parts(host_name, host_config, client, config);
+                return Ok(WinRmConnection::from_parts(host_name, client));
             }
         }
 
-        // Cold path: build a new entry under the write lock.
-        let config = WinRmConfig::from_host_config(host_config);
-        let client = Client::builder()
-            .danger_accept_invalid_certs(!config.use_ssl)
-            .timeout(Duration::from_secs(30))
-            .pool_idle_timeout(Some(self.config.max_idle))
-            .build()
-            .map_err(|e| BridgeError::SshExec {
-                reason: format!("WinRM HTTP client error: {e}"),
-            })?;
+        // Cold path: build new WinrmClient via build_winrm_config().
+        let (winrm_config, credentials) = build_winrm_config(host_config)?;
+        let client = Arc::new(winrm_rs::WinrmClient::new(winrm_config, credentials)?);
 
         {
             let mut guard = self.inner.write().await;
             guard.insert(
                 host_name.to_string(),
                 PooledClient {
-                    client: client.clone(),
-                    config: config.clone(),
+                    client: Arc::clone(&client),
                     last_used: Instant::now(),
                 },
             );
         }
 
-        info!(host = %host_name, "WinRmPool miss — created new HTTPS client");
-        WinRmConnection::from_parts(host_name, host_config, client, config)
+        info!(host = %host_name, "WinRmPool miss — created new WinrmClient");
+        Ok(WinRmConnection::from_parts(host_name, client))
     }
 
-    /// Drop a cached client for `host_name`. Called from
-    /// `WinRmConnection::mark_failed()` path to evict a broken
-    /// session.
+    /// Drop a cached client for `host_name` (called on connection failure).
     pub async fn evict(&self, host_name: &str) {
         let mut guard = self.inner.write().await;
         if guard.remove(host_name).is_some() {
@@ -215,6 +179,10 @@ mod tests {
             shell: None,
             retry: None,
             protocol: Protocol::WinRm,
+            winrm_use_tls: None,
+            winrm_accept_invalid_certs: None,
+            winrm_operation_timeout_secs: None,
+            winrm_max_envelope_size: None,
         }
     }
 
@@ -230,14 +198,14 @@ mod tests {
         let host = test_host();
         let limits = LimitsConfig::default();
 
-        // First call: cold, builds a client.
+        // First call: cold, builds a WinrmClient.
         let _conn1 = pool
             .get_connection("my-host", &host, &limits)
             .await
             .expect("get_connection ok");
         assert_eq!(pool.size().await, 1);
 
-        // Second call: should reuse the cached client (same size).
+        // Second call: should reuse the cached client.
         let _conn2 = pool
             .get_connection("my-host", &host, &limits)
             .await
@@ -263,10 +231,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_pool_expired_entry_is_rebuilt() {
-        // TTL very short so the first entry is already "old" on the
-        // second call. We cheat by writing the entry with
-        // `last_used - max_idle - 1s` and asserting the second call
-        // rebuilds it.
         let pool = WinRmPool::with_config(WinRmPoolConfig {
             max_idle: Duration::from_millis(1),
         });
@@ -280,9 +244,6 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         let _ = pool.get_connection("h", &host, &limits).await.unwrap();
-        // Still 1 entry, but it was rebuilt (we can't observe the
-        // rebuild directly; this test just asserts no panics + entry
-        // count stays at 1).
         assert_eq!(pool.size().await, 1);
     }
 

@@ -25,6 +25,9 @@ pub struct ExecutorRouter {
     /// `kube::Client` cache for K8s Exec hosts (Sprint 3 Phase B.5).
     #[cfg(feature = "k8s-exec")]
     k8s_exec_pool: crate::k8s_exec::K8sExecPool,
+    /// PSRP `RunspacePool` cache for PSRP hosts.
+    #[cfg(feature = "psrp")]
+    psrp_pool: crate::psrp::pool::PsrpPool,
     /// Mock output for testing — when set, `get_connection_with_jump` returns
     /// a `ConnectionGuard::Mock` that returns this output instead of connecting.
     #[cfg(test)]
@@ -45,6 +48,8 @@ impl ExecutorRouter {
             winrm_pool: crate::winrm::WinRmPool::new(),
             #[cfg(feature = "k8s-exec")]
             k8s_exec_pool: crate::k8s_exec::K8sExecPool::new(),
+            #[cfg(feature = "psrp")]
+            psrp_pool: crate::psrp::pool::PsrpPool::new(),
             #[cfg(test)]
             mock_output: None,
             #[cfg(test)]
@@ -61,6 +66,8 @@ impl ExecutorRouter {
             winrm_pool: crate::winrm::WinRmPool::new(),
             #[cfg(feature = "k8s-exec")]
             k8s_exec_pool: crate::k8s_exec::K8sExecPool::new(),
+            #[cfg(feature = "psrp")]
+            psrp_pool: crate::psrp::pool::PsrpPool::new(),
             #[cfg(test)]
             mock_output: None,
             #[cfg(test)]
@@ -175,6 +182,14 @@ impl ExecutorRouter {
                 .await?;
                 Ok(ConnectionGuard::Gcp(conn))
             }
+            #[cfg(feature = "psrp")]
+            Protocol::Psrp => {
+                let conn = self
+                    .psrp_pool
+                    .get_connection(host_name, host_config, limits)
+                    .await?;
+                Ok(ConnectionGuard::Psrp(conn))
+            }
         }
     }
 
@@ -185,6 +200,8 @@ impl ExecutorRouter {
         self.winrm_pool.cleanup().await;
         #[cfg(feature = "k8s-exec")]
         self.k8s_exec_pool.cleanup().await;
+        #[cfg(feature = "psrp")]
+        self.psrp_pool.cleanup().await;
     }
 
     /// Get statistics for the SSH connection pool.
@@ -205,6 +222,8 @@ impl ExecutorRouter {
         self.winrm_pool.close_all().await;
         #[cfg(feature = "k8s-exec")]
         self.k8s_exec_pool.close_all().await;
+        #[cfg(feature = "psrp")]
+        self.psrp_pool.close_all().await;
     }
 }
 
@@ -241,6 +260,9 @@ pub enum ConnectionGuard<'a> {
     /// GCP OS Command (`gcloud` CLI).
     #[cfg(feature = "gcp")]
     Gcp(crate::cloud_exec::gcp::GcpRunConnection),
+    /// PSRP (`PowerShell` Remoting Protocol over `WinRM` transport).
+    #[cfg(feature = "psrp")]
+    Psrp(crate::psrp::PsrpConnection),
 }
 
 impl ConnectionGuard<'_> {
@@ -272,6 +294,8 @@ impl ConnectionGuard<'_> {
             Self::Azure(conn) => conn.exec(command, limits).await,
             #[cfg(feature = "gcp")]
             Self::Gcp(conn) => conn.exec(command, limits).await,
+            #[cfg(feature = "psrp")]
+            Self::Psrp(conn) => conn.exec(command, limits).await,
         }
     }
 
@@ -295,6 +319,8 @@ impl ConnectionGuard<'_> {
             Self::Azure(conn) => conn.mark_failed(),
             #[cfg(feature = "gcp")]
             Self::Gcp(conn) => conn.mark_failed(),
+            #[cfg(feature = "psrp")]
+            Self::Psrp(conn) => conn.mark_failed(),
         }
     }
 }
@@ -371,6 +397,8 @@ impl ExecutorRouter {
             winrm_pool: crate::winrm::WinRmPool::new(),
             #[cfg(feature = "k8s-exec")]
             k8s_exec_pool: crate::k8s_exec::K8sExecPool::new(),
+            #[cfg(feature = "psrp")]
+            psrp_pool: crate::psrp::pool::PsrpPool::new(),
             mock_output: Some(output),
             mock_delay: None,
         }
@@ -390,6 +418,8 @@ impl ExecutorRouter {
             winrm_pool: crate::winrm::WinRmPool::new(),
             #[cfg(feature = "k8s-exec")]
             k8s_exec_pool: crate::k8s_exec::K8sExecPool::new(),
+            #[cfg(feature = "psrp")]
+            psrp_pool: crate::psrp::pool::PsrpPool::new(),
             mock_output: Some(output),
             mock_delay: Some(delay),
         }

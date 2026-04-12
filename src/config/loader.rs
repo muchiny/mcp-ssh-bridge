@@ -124,6 +124,34 @@ fn validate_config(config: &Config) -> Result<()> {
             });
         }
 
+        // Reject SSH-only auth types for WinRM/PSRP protocols
+        #[cfg(any(feature = "winrm", feature = "psrp"))]
+        validate_protocol_auth_compat(name, host)?;
+
+        // Reject proxy_jump for WinRM/PSRP protocols
+        #[cfg(any(feature = "winrm", feature = "psrp"))]
+        if host.proxy_jump.is_some() && protocol_is_winrm_like(host) {
+            return Err(BridgeError::ConfigInvalid {
+                field: format!("hosts.{name}.proxy_jump"),
+                reason: "proxy_jump (SSH jump hosts) is not supported for WinRM/PSRP \
+                         protocols; use a network-level proxy instead"
+                    .to_string(),
+            });
+        }
+
+        // Warn about Basic auth over plain HTTP (credentials exposed)
+        #[cfg(feature = "winrm")]
+        if protocol_is_winrm_like(host)
+            && matches!(host.auth, super::types::AuthConfig::Password { .. })
+            && !host.winrm_use_tls.unwrap_or(host.port == 5986)
+        {
+            warn!(
+                host = %name,
+                "WinRM Basic auth over plain HTTP exposes credentials in cleartext; \
+                 set winrm_use_tls: true or use NTLM/Kerberos auth"
+            );
+        }
+
         // Validate key path exists and permissions (for key auth)
         if let super::types::AuthConfig::Key { path, .. } = &host.auth {
             let expanded = shellexpand::tilde(path);
@@ -173,6 +201,53 @@ fn validate_config(config: &Config) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Returns `true` when the host protocol is `WinRM` or `PSRP`.
+///
+/// Used to guard validations that only apply to the WS-Management protocol
+/// family, without resorting to `#[cfg]`-gated `matches!` patterns.
+#[cfg(any(feature = "winrm", feature = "psrp"))]
+fn protocol_is_winrm_like(host: &super::types::HostConfig) -> bool {
+    #[allow(unused_mut)]
+    let mut winrm_like = false;
+    #[cfg(feature = "winrm")]
+    {
+        winrm_like |= host.protocol == super::types::Protocol::WinRm;
+    }
+    #[cfg(feature = "psrp")]
+    {
+        winrm_like |= host.protocol == super::types::Protocol::Psrp;
+    }
+    winrm_like
+}
+
+/// Validate that the authentication method is compatible with the selected protocol.
+///
+/// `AuthConfig::Key` and `AuthConfig::Agent` are SSH-only; they cannot be used
+/// with `WinRM` or `PSRP` protocols. Returns `BridgeError::ConfigInvalid` when
+/// an incompatible combination is detected.
+#[cfg(any(feature = "winrm", feature = "psrp"))]
+fn validate_protocol_auth_compat(name: &str, host: &super::types::HostConfig) -> Result<()> {
+    if !protocol_is_winrm_like(host) {
+        return Ok(());
+    }
+
+    match &host.auth {
+        super::types::AuthConfig::Key { .. } => Err(BridgeError::ConfigInvalid {
+            field: format!("hosts.{name}.auth"),
+            reason: "SSH key authentication is not supported for WinRM/PSRP protocols; \
+                     use password, ntlm, certificate, or kerberos auth instead"
+                .to_string(),
+        }),
+        super::types::AuthConfig::Agent => Err(BridgeError::ConfigInvalid {
+            field: format!("hosts.{name}.auth"),
+            reason: "SSH agent authentication is not supported for WinRM/PSRP protocols; \
+                     use password, ntlm, certificate, or kerberos auth instead"
+                .to_string(),
+        }),
+        _ => Ok(()),
+    }
 }
 
 /// Get the default config path

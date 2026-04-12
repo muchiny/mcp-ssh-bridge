@@ -466,6 +466,13 @@ impl SshClient {
                 Self::auth_with_password(handle, host_name, host, password).await
             }
             AuthConfig::Agent => Self::auth_with_agent(handle, host_name, host).await,
+            #[cfg(feature = "winrm")]
+            AuthConfig::Ntlm { .. } | AuthConfig::Certificate { .. } | AuthConfig::Kerberos => {
+                Err(BridgeError::SshAuth {
+                    user: host.user.clone(),
+                    host: format!("{host_name}: WinRM auth types cannot be used with SSH protocol"),
+                })
+            }
         }
     }
 
@@ -602,7 +609,12 @@ impl SshClient {
                 .flatten();
 
             match handle
-                .authenticate_publickey_with(&host.user, public_key.clone(), hash_alg, &mut agent)
+                .authenticate_publickey_with(
+                    &host.user,
+                    public_key.public_key().into_owned(),
+                    hash_alg,
+                    &mut agent,
+                )
                 .await
             {
                 Ok(result) if result.success() => {
@@ -693,7 +705,12 @@ impl SshClient {
                 .flatten();
 
             match handle
-                .authenticate_publickey_with(&host.user, public_key.clone(), hash_alg, &mut agent)
+                .authenticate_publickey_with(
+                    &host.user,
+                    public_key.public_key().into_owned(),
+                    hash_alg,
+                    &mut agent,
+                )
                 .await
             {
                 Ok(result) if result.success() => {

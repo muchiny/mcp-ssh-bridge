@@ -134,6 +134,48 @@ pub enum BridgeError {
 
 pub type Result<T> = std::result::Result<T, BridgeError>;
 
+/// Map `winrm_rs::WinrmError` to `BridgeError`.
+///
+/// - Auth failures → `BridgeError::SshAuth` (`WinRM` has no separate concept;
+///   the SSH variant is reused as a protocol-agnostic auth error).
+/// - Timeout → `BridgeError::SshTimeout`.
+/// - Cancellation → `BridgeError::Cancelled`.
+/// - Everything else → `BridgeError::SshExec`.
+#[cfg(feature = "winrm")]
+impl From<winrm_rs::WinrmError> for BridgeError {
+    fn from(e: winrm_rs::WinrmError) -> Self {
+        match e {
+            winrm_rs::WinrmError::AuthFailed(_) => BridgeError::SshAuth {
+                user: "unknown".to_string(),
+                host: "WinRM".to_string(),
+            },
+            winrm_rs::WinrmError::Timeout(seconds) => BridgeError::SshTimeout { seconds },
+            winrm_rs::WinrmError::Cancelled => BridgeError::Cancelled,
+            other => BridgeError::SshExec {
+                reason: other.to_string(),
+            },
+        }
+    }
+}
+
+/// Map `psrp_rs::PsrpError` to `BridgeError`.
+///
+/// - `PsrpError::Winrm(we)` → delegate to the `WinrmError` mapping.
+/// - `PsrpError::Cancelled` → `BridgeError::Cancelled`.
+/// - Everything else → `BridgeError::SshExec`.
+#[cfg(feature = "psrp")]
+impl From<psrp_rs::PsrpError> for BridgeError {
+    fn from(e: psrp_rs::PsrpError) -> Self {
+        match e {
+            psrp_rs::PsrpError::Winrm(we) => BridgeError::from(we),
+            psrp_rs::PsrpError::Cancelled => BridgeError::Cancelled,
+            other => BridgeError::SshExec {
+                reason: other.to_string(),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

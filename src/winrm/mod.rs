@@ -1,7 +1,7 @@
-//! `WinRM` protocol adapter — Windows Remote Management
+//! `WinRM` protocol adapter — Windows Remote Management.
 //!
-//! Implements remote command execution on Windows hosts via the
-//! WS-Management protocol (SOAP over HTTP/HTTPS, ports 5985/5986).
+//! Wraps `winrm_rs::WinrmClient` for remote command execution on Windows
+//! hosts via WS-Management (SOAP over HTTP/HTTPS, ports 5985/5986).
 //!
 //! Feature-gated behind `winrm`.
 
@@ -9,242 +9,197 @@ pub mod pool;
 
 pub use pool::{WinRmPool, WinRmPoolConfig};
 
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Instant;
 
-use reqwest::Client;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::config::{HostConfig, LimitsConfig};
 use crate::error::{BridgeError, Result};
 use crate::ssh::CommandOutput;
 
-/// `WinRM` transport configuration for a host.
-#[derive(Debug, Clone)]
-pub struct WinRmConfig {
-    /// HTTP or HTTPS endpoint (e.g., `https://192.168.1.200:5986/wsman`)
-    pub endpoint: String,
-    /// Use SSL (port 5986) or plain HTTP (port 5985)
-    pub use_ssl: bool,
-}
-
-impl WinRmConfig {
-    /// Derive `WinRM` endpoint from a standard `HostConfig`.
-    #[must_use]
-    pub fn from_host_config(host: &HostConfig) -> Self {
-        let use_ssl = host.port != 5985;
-        let scheme = if use_ssl { "https" } else { "http" };
-        let port = if host.port == 22 {
-            // Default SSH port means WinRM wasn't explicitly configured;
-            // fall back to HTTPS 5986.
-            5986
-        } else {
-            host.port
-        };
-        Self {
-            endpoint: format!("{scheme}://{}:{port}/wsman", host.hostname),
-            use_ssl,
-        }
-    }
-}
-
-/// An active `WinRM` connection (HTTP client + endpoint).
+/// Build a `winrm_rs::WinrmConfig` + `winrm_rs::WinrmCredentials` from a bridge `HostConfig`.
 ///
-/// Unlike SSH, `WinRM` is stateless HTTP — each `exec()` sends a fresh
-/// SOAP request. The "connection" is really just a configured HTTP client.
+/// This is the canonical mapping from bridge config types to `winrm-rs` types and is
+/// used by both the `WinRmPool` cold path and the PSRP adapter.
+///
+/// # TLS auto-detection
+///
+/// `winrm_use_tls` overrides TLS selection. When absent, TLS is auto-detected from
+/// the port: port 5986 → TLS enabled, anything else → TLS disabled.
+///
+/// # Errors
+///
+/// Returns `BridgeError::ConfigInvalid` when `auth` is `Key` or `Agent` (SSH-only).
+pub fn build_winrm_config(
+    host_config: &HostConfig,
+) -> Result<(winrm_rs::WinrmConfig, winrm_rs::WinrmCredentials)> {
+    let use_tls = host_config
+        .winrm_use_tls
+        .unwrap_or(host_config.port == 5986);
+
+    let mut winrm_cfg = winrm_rs::WinrmConfig {
+        port: host_config.port,
+        use_tls,
+        accept_invalid_certs: host_config.winrm_accept_invalid_certs.unwrap_or(false),
+        operation_timeout_secs: host_config.winrm_operation_timeout_secs.unwrap_or(60),
+        max_envelope_size: host_config.winrm_max_envelope_size.unwrap_or(153_600),
+        ..winrm_rs::WinrmConfig::default()
+    };
+
+    let credentials = match &host_config.auth {
+        crate::config::AuthConfig::Password { password } => {
+            winrm_cfg.auth_method = winrm_rs::AuthMethod::Basic;
+            winrm_rs::WinrmCredentials::new(host_config.user.clone(), password.as_str(), "")
+        }
+        crate::config::AuthConfig::Ntlm { password, domain } => {
+            winrm_cfg.auth_method = winrm_rs::AuthMethod::Ntlm;
+            winrm_rs::WinrmCredentials::new(
+                host_config.user.clone(),
+                password.as_str(),
+                domain.as_deref().unwrap_or(""),
+            )
+        }
+        crate::config::AuthConfig::Certificate {
+            cert_path,
+            key_path,
+        } => {
+            winrm_cfg.auth_method = winrm_rs::AuthMethod::Certificate;
+            winrm_cfg.client_cert_pem = Some(cert_path.clone());
+            winrm_cfg.client_key_pem = Some(key_path.clone());
+            winrm_rs::WinrmCredentials::new(host_config.user.clone(), "", "")
+        }
+        crate::config::AuthConfig::Kerberos => {
+            winrm_cfg.auth_method = winrm_rs::AuthMethod::Kerberos;
+            winrm_rs::WinrmCredentials::new(host_config.user.clone(), "", "")
+        }
+        crate::config::AuthConfig::Key { .. } => {
+            return Err(BridgeError::ConfigInvalid {
+                field: "auth".to_string(),
+                reason: "SSH key authentication is not supported for WinRM; \
+                         use password, ntlm, certificate, or kerberos"
+                    .to_string(),
+            });
+        }
+        crate::config::AuthConfig::Agent => {
+            return Err(BridgeError::ConfigInvalid {
+                field: "auth".to_string(),
+                reason: "SSH agent authentication is not supported for WinRM; \
+                         use password, ntlm, certificate, or kerberos"
+                    .to_string(),
+            });
+        }
+    };
+
+    Ok((winrm_cfg, credentials))
+}
+
+/// An active `WinRM` connection wrapping `winrm_rs::WinrmClient`.
+///
+/// Unlike the previous implementation (hand-rolled SOAP with `cmd.exe /c`),
+/// this adapter delegates to `winrm-rs` for proper WS-Man protocol handling,
+/// `NTLMv2`/Kerberos/Certificate auth, and `PowerShell` execution via
+/// `run_powershell()`.
 pub struct WinRmConnection {
-    client: Client,
-    config: WinRmConfig,
+    client: Arc<winrm_rs::WinrmClient>,
     host_name: String,
-    user: String,
-    password: String,
     failed: bool,
 }
 
 impl WinRmConnection {
-    /// Create a new `WinRM` connection.
+    /// Wrap a cached `WinrmClient` for a specific host.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the HTTP client cannot be built.
-    pub fn new(host_name: &str, host_config: &HostConfig, _limits: &LimitsConfig) -> Result<Self> {
-        let config = WinRmConfig::from_host_config(host_config);
-
-        let password = match &host_config.auth {
-            crate::config::AuthConfig::Password { password } => password.to_string(),
-            _ => {
-                return Err(BridgeError::Config(format!(
-                    "WinRM host '{host_name}' requires password authentication"
-                )));
-            }
-        };
-
-        let client = Client::builder()
-            .danger_accept_invalid_certs(!config.use_ssl)
-            .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| BridgeError::SshExec {
-                reason: format!("WinRM HTTP client error: {e}"),
-            })?;
-
-        info!(host = %host_name, endpoint = %config.endpoint, "WinRM connection created");
-
-        Ok(Self {
+    /// Used by `WinRmPool::get_connection()` to hand out connections
+    /// backed by a pooled client without rebuilding the HTTP/TLS stack.
+    #[must_use]
+    pub fn from_parts(host_name: &str, client: Arc<winrm_rs::WinrmClient>) -> Self {
+        Self {
             client,
-            config,
             host_name: host_name.to_string(),
-            user: host_config.user.clone(),
-            password,
             failed: false,
-        })
+        }
     }
 
-    /// Build a `WinRmConnection` from a pooled `reqwest::Client`.
+    /// Execute a `PowerShell` command via `WinRM`.
     ///
-    /// Used by `WinRmPool::get_connection()` to reuse an existing
-    /// HTTPS connection pool instead of dialing a new one. The
-    /// caller provides a client that was built with the correct TLS
-    /// settings for the target host, plus the derived `WinRmConfig`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if `host_config` does not use password
-    /// authentication.
-    pub fn from_parts(
-        host_name: &str,
-        host_config: &HostConfig,
-        client: Client,
-        config: WinRmConfig,
-    ) -> Result<Self> {
-        let password = match &host_config.auth {
-            crate::config::AuthConfig::Password { password } => password.to_string(),
-            _ => {
-                return Err(BridgeError::Config(format!(
-                    "WinRM host '{host_name}' requires password authentication"
-                )));
-            }
-        };
-
-        Ok(Self {
-            client,
-            config,
-            host_name: host_name.to_string(),
-            user: host_config.user.clone(),
-            password,
-            failed: false,
-        })
-    }
-
-    /// Execute a command via `WinRM` SOAP/WS-Man.
+    /// Uses `WinrmClient::run_powershell()` which encodes the script as
+    /// UTF-16LE base64 and runs it via `powershell.exe -EncodedCommand`.
+    /// This correctly handles all `PowerShell` syntax — unlike the previous
+    /// `cmd.exe /c` approach that broke on PS-specific commands.
     ///
     /// # Errors
     ///
-    /// Returns an error if the HTTP request fails or the response is malformed.
+    /// Returns an error if the `WinRM` request fails (auth, timeout, SOAP fault).
     pub async fn exec(&mut self, command: &str, _limits: &LimitsConfig) -> Result<CommandOutput> {
         let start = Instant::now();
-
-        let soap_body = build_winrm_command_envelope(&self.config.endpoint, command);
 
         debug!(
             host = %self.host_name,
             command = %command,
-            "Executing WinRM command"
+            "Executing WinRM PowerShell command"
         );
 
-        let response = self
-            .client
-            .post(&self.config.endpoint)
-            .basic_auth(&self.user, Some(&self.password))
-            .header("Content-Type", "application/soap+xml;charset=UTF-8")
-            .body(soap_body)
-            .send()
-            .await
-            .map_err(|e| BridgeError::SshExec {
-                reason: format!("WinRM request failed: {e}"),
-            })?;
-
-        let status = response.status();
-        let body = response.text().await.map_err(|e| BridgeError::SshExec {
-            reason: format!("WinRM response read error: {e}"),
-        })?;
+        let output = self.client.run_powershell(&self.host_name, command).await?;
 
         #[allow(clippy::cast_possible_truncation)]
         let duration_ms = start.elapsed().as_millis() as u64;
 
-        if !status.is_success() {
-            return Ok(CommandOutput {
-                stdout: String::new(),
-                stderr: format!("WinRM HTTP {status}: {body}"),
-                exit_code: 1,
-                duration_ms,
-            });
-        }
-
-        // Parse SOAP response to extract stdout/stderr/exit_code
-        let (stdout, stderr, exit_code) = parse_winrm_response(&body);
-
         Ok(CommandOutput {
-            stdout,
-            stderr,
-            exit_code,
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            exit_code: u32::try_from(output.exit_code).unwrap_or(1),
             duration_ms,
         })
     }
 
-    /// Mark this connection as failed.
+    /// Execute with cancellation token propagation.
+    ///
+    /// When a `CancellationToken` is provided (from MCP `notifications/cancelled`),
+    /// uses `WinrmClient::run_powershell_with_cancel()` so the operation can be
+    /// interrupted mid-flight.
+    pub async fn exec_with_cancel(
+        &mut self,
+        command: &str,
+        limits: &LimitsConfig,
+        token: Option<tokio_util::sync::CancellationToken>,
+    ) -> Result<CommandOutput> {
+        let Some(token) = token else {
+            return self.exec(command, limits).await;
+        };
+
+        let start = Instant::now();
+
+        debug!(
+            host = %self.host_name,
+            command = %command,
+            "Executing WinRM PowerShell command (with cancel)"
+        );
+
+        let output = self
+            .client
+            .run_powershell_with_cancel(&self.host_name, command, token)
+            .await?;
+
+        #[allow(clippy::cast_possible_truncation)]
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        Ok(CommandOutput {
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            exit_code: u32::try_from(output.exit_code).unwrap_or(1),
+            duration_ms,
+        })
+    }
+
+    /// Mark this connection as failed (triggers pool eviction on next lookup).
     pub fn mark_failed(&mut self) {
         self.failed = true;
     }
-}
 
-/// Build a WS-Man SOAP envelope for command execution.
-fn build_winrm_command_envelope(endpoint: &str, command: &str) -> String {
-    // Simplified WinRM SOAP envelope for `cmd.exe /c <command>`
-    format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-            xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing"
-            xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd">
-  <s:Header>
-    <wsa:To>{endpoint}</wsa:To>
-    <wsa:Action>http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Command</wsa:Action>
-    <wsman:ResourceURI>http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd</wsman:ResourceURI>
-  </s:Header>
-  <s:Body>
-    <CommandLine xmlns="http://schemas.microsoft.com/wbem/wsman/1/windows/shell">
-      <Command>cmd.exe /c {command}</Command>
-    </CommandLine>
-  </s:Body>
-</s:Envelope>"#
-    )
-}
-
-/// Parse a `WinRM` SOAP response to extract stdout, stderr, and exit code.
-fn parse_winrm_response(body: &str) -> (String, String, u32) {
-    // Simplified parsing — extract text content from known SOAP elements.
-    // A production implementation would use quick-xml for proper parsing.
-    let stdout = extract_xml_value(body, "Stream Name=\"stdout\"")
-        .or_else(|| extract_xml_value(body, "stdout"))
-        .unwrap_or_default();
-    let stderr = extract_xml_value(body, "Stream Name=\"stderr\"")
-        .or_else(|| extract_xml_value(body, "stderr"))
-        .unwrap_or_default();
-    let exit_code = extract_xml_value(body, "ExitCode")
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(0);
-    (stdout, stderr, exit_code)
-}
-
-/// Simple XML value extraction (no full parser needed for known structure).
-fn extract_xml_value(xml: &str, tag_hint: &str) -> Option<String> {
-    let start = xml.find(tag_hint)?;
-    let after_tag = &xml[start..];
-    let content_start = after_tag.find('>')? + 1;
-    let content_end = after_tag[content_start..].find('<')?;
-    let value = &after_tag[content_start..content_start + content_end];
-    if value.is_empty() {
-        None
-    } else {
-        Some(value.to_string())
+    /// Host name for logging/eviction.
+    #[must_use]
+    pub fn host_name(&self) -> &str {
+        &self.host_name
     }
 }
 
@@ -252,9 +207,8 @@ fn extract_xml_value(xml: &str, tag_hint: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_winrm_config_from_host_config_https() {
-        let host = HostConfig {
+    fn test_host_config() -> HostConfig {
+        HostConfig {
             hostname: "10.0.0.1".to_string(),
             port: 5986,
             user: "admin".to_string(),
@@ -271,290 +225,135 @@ mod tests {
             shell: None,
             retry: None,
             protocol: crate::config::Protocol::default(),
-        };
-        let config = WinRmConfig::from_host_config(&host);
-        assert_eq!(config.endpoint, "https://10.0.0.1:5986/wsman");
-        assert!(config.use_ssl);
-    }
-
-    #[test]
-    fn test_winrm_config_from_host_config_http() {
-        let host = HostConfig {
-            hostname: "10.0.0.1".to_string(),
-            port: 5985,
-            user: "admin".to_string(),
-            auth: crate::config::AuthConfig::Password {
-                password: zeroize::Zeroizing::new("pass".to_string()),
-            },
-            description: None,
-            host_key_verification: crate::config::HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: crate::config::OsType::Windows,
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        };
-        let config = WinRmConfig::from_host_config(&host);
-        assert_eq!(config.endpoint, "http://10.0.0.1:5985/wsman");
-        assert!(!config.use_ssl);
-    }
-
-    #[test]
-    fn test_build_soap_envelope() {
-        let envelope = build_winrm_command_envelope("https://host:5986/wsman", "whoami");
-        assert!(envelope.contains("whoami"));
-        assert!(envelope.contains("wsman"));
-    }
-
-    #[test]
-    fn test_parse_winrm_response_with_exit_code() {
-        let body = "<ExitCode>42</ExitCode>";
-        let (_, _, exit_code) = parse_winrm_response(body);
-        assert_eq!(exit_code, 42);
-    }
-
-    #[test]
-    fn test_extract_xml_value() {
-        let xml = "<foo>bar</foo>";
-        assert_eq!(extract_xml_value(xml, "foo"), Some("bar".to_string()));
-    }
-
-    #[test]
-    fn test_extract_xml_value_empty() {
-        let xml = "<foo></foo>";
-        assert_eq!(extract_xml_value(xml, "foo"), None);
-    }
-
-    #[test]
-    fn test_extract_xml_value_missing() {
-        let xml = "<baz>qux</baz>";
-        assert_eq!(extract_xml_value(xml, "foo"), None);
-    }
-
-    #[test]
-    fn test_parse_winrm_response_stdout_stderr() {
-        let body = r#"<Stream Name="stdout">Hello World</Stream><Stream Name="stderr">Error msg</Stream><ExitCode>1</ExitCode>"#;
-        let (stdout, stderr, exit_code) = parse_winrm_response(body);
-        assert_eq!(stdout, "Hello World");
-        assert_eq!(stderr, "Error msg");
-        assert_eq!(exit_code, 1);
-    }
-
-    #[test]
-    fn test_parse_winrm_response_empty_body() {
-        let (stdout, stderr, exit_code) = parse_winrm_response("");
-        assert!(stdout.is_empty());
-        assert!(stderr.is_empty());
-        assert_eq!(exit_code, 0);
-    }
-
-    #[test]
-    fn test_parse_winrm_response_only_stdout() {
-        let body = r#"<Stream Name="stdout">output data</Stream>"#;
-        let (stdout, stderr, exit_code) = parse_winrm_response(body);
-        assert_eq!(stdout, "output data");
-        assert!(stderr.is_empty());
-        assert_eq!(exit_code, 0);
-    }
-
-    #[test]
-    fn test_winrm_config_from_host_config_ssh_port_fallback() {
-        let host = HostConfig {
-            hostname: "10.0.0.2".to_string(),
-            port: 22,
-            user: "admin".to_string(),
-            auth: crate::config::AuthConfig::Password {
-                password: zeroize::Zeroizing::new("pass".to_string()),
-            },
-            description: None,
-            host_key_verification: crate::config::HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: crate::config::OsType::Windows,
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        };
-        let config = WinRmConfig::from_host_config(&host);
-        assert_eq!(config.endpoint, "https://10.0.0.2:5986/wsman");
-        assert!(config.use_ssl);
-    }
-
-    #[test]
-    fn test_parse_winrm_response_fallback_stdout_tag() {
-        let body = "<stdout>fallback output</stdout><ExitCode>0</ExitCode>";
-        let (stdout, _, exit_code) = parse_winrm_response(body);
-        assert_eq!(stdout, "fallback output");
-        assert_eq!(exit_code, 0);
-    }
-
-    #[test]
-    fn test_parse_winrm_response_invalid_exit_code() {
-        let body = "<ExitCode>not_a_number</ExitCode>";
-        let (_, _, exit_code) = parse_winrm_response(body);
-        assert_eq!(exit_code, 0); // defaults to 0
-    }
-
-    #[test]
-    fn test_parse_winrm_response_fallback_stderr_tag() {
-        let body = "<stderr>error text</stderr>";
-        let (stdout, stderr, _) = parse_winrm_response(body);
-        assert!(stdout.is_empty());
-        assert_eq!(stderr, "error text");
-    }
-
-    #[test]
-    fn test_extract_xml_value_nested() {
-        let xml = "<outer><inner>value</inner></outer>";
-        assert_eq!(extract_xml_value(xml, "inner"), Some("value".to_string()));
-    }
-
-    #[test]
-    fn test_build_soap_envelope_structure() {
-        let envelope = build_winrm_command_envelope("https://host:5986/wsman", "ipconfig");
-        assert!(envelope.contains("xmlns:s="));
-        assert!(envelope.contains("xmlns:wsa="));
-        assert!(envelope.contains("xmlns:wsman="));
-        assert!(envelope.contains("wsa:Action"));
-        assert!(envelope.contains("wsman:ResourceURI"));
-        assert!(envelope.contains("cmd.exe /c ipconfig"));
-    }
-
-    #[test]
-    fn test_build_soap_envelope_contains_command() {
-        let envelope = build_winrm_command_envelope("https://host:5986/wsman", "Get-Process");
-        assert!(envelope.contains("Get-Process"));
-        assert!(envelope.contains("Envelope"));
-        assert!(envelope.contains("wsman"));
-    }
-
-    #[test]
-    fn test_mark_failed() {
-        let host = HostConfig {
-            hostname: "10.0.0.1".to_string(),
-            port: 5986,
-            user: "admin".to_string(),
-            auth: crate::config::AuthConfig::Password {
-                password: zeroize::Zeroizing::new("pass".to_string()),
-            },
-            description: None,
-            host_key_verification: crate::config::HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: crate::config::OsType::Windows,
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        };
-        let limits = LimitsConfig::default();
-        let mut conn = WinRmConnection::new("test-host", &host, &limits).unwrap();
-        assert!(!conn.failed);
-        conn.mark_failed();
-        assert!(conn.failed);
-    }
-
-    #[test]
-    fn test_new_config_fields() {
-        let host = HostConfig {
-            hostname: "10.0.0.1".to_string(),
-            port: 5986,
-            user: "admin".to_string(),
-            auth: crate::config::AuthConfig::Password {
-                password: zeroize::Zeroizing::new("secret123".to_string()),
-            },
-            description: None,
-            host_key_verification: crate::config::HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: crate::config::OsType::Windows,
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        };
-        let limits = LimitsConfig::default();
-        let conn = WinRmConnection::new("myhost", &host, &limits).unwrap();
-        assert_eq!(conn.host_name, "myhost");
-        assert_eq!(conn.user, "admin");
-        assert_eq!(conn.password, "secret123");
-        assert_eq!(conn.config.endpoint, "https://10.0.0.1:5986/wsman");
-        assert!(conn.config.use_ssl);
-        assert!(!conn.failed);
-    }
-
-    #[test]
-    fn test_new_requires_password_auth() {
-        let host = HostConfig {
-            hostname: "10.0.0.1".to_string(),
-            port: 5986,
-            user: "admin".to_string(),
-            auth: crate::config::AuthConfig::Agent,
-            description: None,
-            host_key_verification: crate::config::HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: crate::config::OsType::Windows,
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        };
-        let limits = LimitsConfig::default();
-        let result = WinRmConnection::new("test-host", &host, &limits);
-        assert!(result.is_err());
-        match result {
-            Err(e) => assert!(e.to_string().contains("requires password authentication")),
-            Ok(_) => panic!("Expected error"),
+            winrm_use_tls: None,
+            winrm_accept_invalid_certs: None,
+            winrm_operation_timeout_secs: None,
+            winrm_max_envelope_size: None,
         }
     }
 
     #[test]
-    fn test_winrm_config_custom_port() {
-        let host = HostConfig {
-            hostname: "192.168.1.100".to_string(),
-            port: 8443,
-            user: "admin".to_string(),
-            auth: crate::config::AuthConfig::Password {
-                password: zeroize::Zeroizing::new("pass".to_string()),
-            },
-            description: None,
-            host_key_verification: crate::config::HostKeyVerification::default(),
-            proxy_jump: None,
-            socks_proxy: None,
-            sudo_password: None,
-            tags: Vec::new(),
-            os_type: crate::config::OsType::Windows,
-            shell: None,
-            retry: None,
-            protocol: crate::config::Protocol::default(),
-        };
-        let config = WinRmConfig::from_host_config(&host);
-        assert_eq!(config.endpoint, "https://192.168.1.100:8443/wsman");
-        assert!(config.use_ssl); // any port != 5985 uses SSL
+    fn test_build_winrm_config_password_basic() {
+        let host = test_host_config();
+        let (cfg, creds) = build_winrm_config(&host).unwrap();
+        assert_eq!(cfg.port, 5986);
+        assert!(cfg.use_tls);
+        assert!(!cfg.accept_invalid_certs);
+        assert_eq!(cfg.operation_timeout_secs, 60);
+        assert_eq!(cfg.max_envelope_size, 153_600);
+        assert!(matches!(cfg.auth_method, winrm_rs::AuthMethod::Basic));
+        assert_eq!(creds.username, "admin");
     }
 
     #[test]
-    fn test_extract_xml_value_with_attributes() {
-        let xml = r#"<Stream Name="stdout">data here</Stream>"#;
-        assert_eq!(
-            extract_xml_value(xml, r#"Stream Name="stdout""#),
-            Some("data here".to_string())
+    fn test_build_winrm_config_ntlm() {
+        let mut host = test_host_config();
+        host.auth = crate::config::AuthConfig::Ntlm {
+            password: zeroize::Zeroizing::new("secret".to_string()),
+            domain: Some("CORP".to_string()),
+        };
+        let (cfg, creds) = build_winrm_config(&host).unwrap();
+        assert!(matches!(cfg.auth_method, winrm_rs::AuthMethod::Ntlm));
+        assert_eq!(creds.domain, "CORP");
+    }
+
+    #[test]
+    fn test_build_winrm_config_kerberos() {
+        let mut host = test_host_config();
+        host.auth = crate::config::AuthConfig::Kerberos;
+        let (cfg, _) = build_winrm_config(&host).unwrap();
+        assert!(matches!(cfg.auth_method, winrm_rs::AuthMethod::Kerberos));
+    }
+
+    #[test]
+    fn test_build_winrm_config_certificate() {
+        let mut host = test_host_config();
+        host.auth = crate::config::AuthConfig::Certificate {
+            cert_path: "/path/to/cert.pem".to_string(),
+            key_path: "/path/to/key.pem".to_string(),
+        };
+        let (cfg, _) = build_winrm_config(&host).unwrap();
+        assert!(matches!(cfg.auth_method, winrm_rs::AuthMethod::Certificate));
+        assert_eq!(cfg.client_cert_pem, Some("/path/to/cert.pem".to_string()));
+        assert_eq!(cfg.client_key_pem, Some("/path/to/key.pem".to_string()));
+    }
+
+    #[test]
+    fn test_build_winrm_config_rejects_ssh_key() {
+        let mut host = test_host_config();
+        host.auth = crate::config::AuthConfig::Key {
+            path: "/path/to/key".to_string(),
+            passphrase: None,
+        };
+        let result = build_winrm_config(&host);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("not supported for WinRM")
         );
     }
 
     #[test]
-    fn test_build_soap_envelope_special_chars() {
-        let envelope =
-            build_winrm_command_envelope("https://host:5986/wsman", "echo hello & whoami");
-        assert!(envelope.contains("echo hello & whoami"));
+    fn test_build_winrm_config_rejects_agent() {
+        let mut host = test_host_config();
+        host.auth = crate::config::AuthConfig::Agent;
+        let result = build_winrm_config(&host);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_build_winrm_config_tls_auto_detect() {
+        let mut host = test_host_config();
+        host.port = 5985;
+        let (cfg, _) = build_winrm_config(&host).unwrap();
+        assert!(!cfg.use_tls);
+
+        host.port = 5986;
+        let (cfg, _) = build_winrm_config(&host).unwrap();
+        assert!(cfg.use_tls);
+    }
+
+    #[test]
+    fn test_build_winrm_config_tls_override() {
+        let mut host = test_host_config();
+        host.port = 5985;
+        host.winrm_use_tls = Some(true); // Force TLS on HTTP port
+        let (cfg, _) = build_winrm_config(&host).unwrap();
+        assert!(cfg.use_tls);
+    }
+
+    #[test]
+    fn test_build_winrm_config_custom_options() {
+        let mut host = test_host_config();
+        host.winrm_accept_invalid_certs = Some(true);
+        host.winrm_operation_timeout_secs = Some(120);
+        host.winrm_max_envelope_size = Some(500_000);
+        let (cfg, _) = build_winrm_config(&host).unwrap();
+        assert!(cfg.accept_invalid_certs);
+        assert_eq!(cfg.operation_timeout_secs, 120);
+        assert_eq!(cfg.max_envelope_size, 500_000);
+    }
+
+    #[test]
+    fn test_from_parts_creates_connection() {
+        let host = test_host_config();
+        let (cfg, creds) = build_winrm_config(&host).unwrap();
+        let client = Arc::new(winrm_rs::WinrmClient::new(cfg, creds).unwrap());
+        let conn = WinRmConnection::from_parts("test-host", client);
+        assert_eq!(conn.host_name(), "test-host");
+        assert!(!conn.failed);
+    }
+
+    #[test]
+    fn test_mark_failed() {
+        let host = test_host_config();
+        let (cfg, creds) = build_winrm_config(&host).unwrap();
+        let client = Arc::new(winrm_rs::WinrmClient::new(cfg, creds).unwrap());
+        let mut conn = WinRmConnection::from_parts("test-host", client);
+        assert!(!conn.failed);
+        conn.mark_failed();
+        assert!(conn.failed);
     }
 }

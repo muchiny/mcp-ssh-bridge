@@ -42,6 +42,8 @@ pub mod telemetry;
 pub mod cloud_exec;
 #[cfg(feature = "k8s-exec")]
 pub mod k8s_exec;
+#[cfg(feature = "psrp")]
+pub mod psrp;
 #[cfg(feature = "serial")]
 pub mod serial_port;
 #[cfg(feature = "ssm")]

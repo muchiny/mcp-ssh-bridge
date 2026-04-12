@@ -219,6 +219,35 @@ pub struct HostConfig {
     /// When omitted, defaults to SSH for full backward compatibility.
     #[serde(default)]
     pub protocol: Protocol,
+
+    /// Override TLS auto-detection for `WinRM`/PSRP (ignored for other protocols).
+    ///
+    /// By default, TLS is auto-detected from the port: 5986 = HTTPS, 5985 = HTTP.
+    #[cfg(feature = "winrm")]
+    #[serde(default)]
+    pub winrm_use_tls: Option<bool>,
+
+    /// Accept invalid TLS certificates for `WinRM`/PSRP endpoints.
+    ///
+    /// Set to `true` for self-signed certificates in test environments.
+    /// Default: `false`.
+    #[cfg(feature = "winrm")]
+    #[serde(default)]
+    pub winrm_accept_invalid_certs: Option<bool>,
+
+    /// Operation timeout in seconds for `WinRM`/PSRP commands.
+    ///
+    /// Default: 60 seconds (matches `winrm-rs` default).
+    #[cfg(feature = "winrm")]
+    #[serde(default)]
+    pub winrm_operation_timeout_secs: Option<u64>,
+
+    /// Maximum SOAP envelope size in bytes for `WinRM`/PSRP.
+    ///
+    /// Default: 153600 (150 KB, matches `winrm-rs` default).
+    #[cfg(feature = "winrm")]
+    #[serde(default)]
+    pub winrm_max_envelope_size: Option<u32>,
 }
 
 /// Per-host retry configuration override
@@ -314,6 +343,10 @@ pub enum Protocol {
     #[cfg(feature = "winrm")]
     #[serde(alias = "WinRM")]
     WinRm,
+    /// PSRP — `PowerShell` Remoting Protocol (native PS over `WinRM` transport)
+    #[cfg(feature = "psrp")]
+    #[serde(alias = "PSRP")]
+    Psrp,
     /// Telnet — legacy network equipment (Cisco IOS, switches, PLCs)
     #[cfg(feature = "telnet")]
     Telnet,
@@ -377,7 +410,10 @@ const fn default_socks_port() -> u16 {
     1080
 }
 
-/// SSH authentication configuration.
+/// Authentication configuration.
+///
+/// SSH variants (`Key`, `Agent`, `Password`) are always available.
+/// `WinRM` variants (`Ntlm`, `Certificate`, `Kerberos`) are feature-gated.
 ///
 /// Sensitive fields (`password`, `passphrase`) are wrapped in [`Zeroizing`]
 /// so they are securely erased from memory when the config is dropped
@@ -394,6 +430,28 @@ pub enum AuthConfig {
     Password {
         password: Zeroizing<String>,
     },
+    /// `NTLMv2` authentication for `WinRM` (default `WinRM` auth method).
+    #[cfg(feature = "winrm")]
+    Ntlm {
+        password: Zeroizing<String>,
+        /// Windows domain (e.g., "CORP"). Optional — omit for local accounts.
+        #[serde(default)]
+        domain: Option<String>,
+    },
+    /// TLS client certificate authentication for `WinRM`.
+    #[cfg(feature = "winrm")]
+    Certificate {
+        /// Path to the client certificate PEM file.
+        cert_path: String,
+        /// Path to the client private key PEM file.
+        key_path: String,
+    },
+    /// Kerberos (SPNEGO) authentication for `WinRM`.
+    ///
+    /// Requires a valid TGT from `kinit` at runtime. The `kerberos`
+    /// feature must be enabled in the `winrm-rs` dependency.
+    #[cfg(feature = "winrm")]
+    Kerberos,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

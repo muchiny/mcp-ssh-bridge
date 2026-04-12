@@ -91,6 +91,44 @@ hosts:
   #     type: password
   #     password: "your-password-here"
 
+  # Example: Windows Server via WinRM with NTLMv2 (requires --features winrm)
+  # windows-winrm:
+  #   hostname: 192.168.1.200
+  #   port: 5986
+  #   user: Administrator
+  #   description: "Windows DC via WinRM"
+  #   os_type: windows
+  #   protocol: winrm
+  #   auth:
+  #     type: ntlm
+  #     password: "${WIN_PASSWORD}"
+  #     domain: CORP              # optional NTLM domain
+  #   winrm_use_tls: true         # default: auto (true if port=5986)
+  #   winrm_accept_invalid_certs: true  # for self-signed certs
+
+  # Example: Windows Server via WinRM with Kerberos (requires --features winrm)
+  # windows-kerberos:
+  #   hostname: app01.corp.local
+  #   port: 5985
+  #   user: svc_deploy@CORP.LOCAL
+  #   os_type: windows
+  #   protocol: winrm
+  #   auth:
+  #     type: kerberos
+
+  # Example: Windows Server via PSRP (requires --features psrp)
+  # windows-psrp:
+  #   hostname: 192.168.1.201
+  #   port: 5986
+  #   user: Administrator
+  #   description: "Windows via native PowerShell Remoting"
+  #   os_type: windows
+  #   protocol: psrp
+  #   auth:
+  #     type: ntlm
+  #     password: "${WIN_PASSWORD}"
+  #   winrm_use_tls: true
+
 # =============================================================================
 # SECURITY SETTINGS
 # =============================================================================

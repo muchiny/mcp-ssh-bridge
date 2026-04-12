@@ -21,7 +21,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-machete]
-ignored = ["hyper-util", "quick-xml", "tower"]
+ignored = ["hyper-util", "tower"]
 
 [features]
 default = ["cli"]
@@ -30,7 +30,8 @@ http = ["dep:axum", "dep:tower", "dep:tower-http", "dep:hyper-util", "dep:tokio-
 mimalloc = ["dep:mimalloc"]
 
 # Protocol adapters (Tier 1)
-winrm = ["dep:reqwest", "dep:quick-xml"]
+winrm = ["dep:winrm-rs"]
+psrp = ["dep:psrp-rs", "winrm"]
 telnet = []
 # Protocol adapters (Tier 2)
 k8s-exec = ["dep:kube", "dep:k8s-openapi"]
@@ -57,14 +58,14 @@ otel = [
 # Bundles
 full = ["cli", "mimalloc", "http", "jq", "otel"]
 air-gapped = ["winrm", "telnet"]
-all-protocols = ["winrm", "telnet", "k8s-exec", "serial", "ssm", "azure", "gcp"]
+all-protocols = ["winrm", "psrp", "telnet", "k8s-exec", "serial", "ssm", "azure", "gcp"]
 
 [dependencies]
 # Async runtime (explicit features instead of "full" for smaller binary)
 tokio = { version = "1", features = ["rt-multi-thread", "io-util", "net", "process", "time", "fs", "io-std", "macros", "sync", "signal"] }
 
 # SSH
-russh = "0.58"
+russh = "0.60"
 russh-sftp = "2.1"
 
 # Serialization
@@ -116,9 +117,13 @@ tokio-stream = { version = "0.1", optional = true }
 # Alternative allocator (optional, recommended for musl builds)
 mimalloc = { version = "0.1", default-features = false, optional = true }
 
-# WinRM adapter (optional) — SOAP/WS-Man over HTTPS
+# WinRM adapter (optional) — wraps winrm-rs for WS-Man/SOAP over HTTPS
+winrm-rs = { version = "1.0", optional = true }
+# PSRP adapter (optional) — PowerShell Remoting Protocol via psrp-rs
+psrp-rs = { version = "1.0", optional = true, default-features = false }
+
+# HTTP client — used by Azure adapter (reqwest is also a transitive dep of winrm-rs)
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"], optional = true }
-quick-xml = { version = "0.39", features = ["serialize"], optional = true }
 
 # Kubernetes Exec adapter (optional) — direct pod exec via K8s API
 kube = { version = "3.1", default-features = false, features = ["client", "rustls-tls", "ws"], optional = true }

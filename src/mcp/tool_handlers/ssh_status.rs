@@ -64,6 +64,20 @@ impl ToolHandler for SshStatusHandler {
                 crate::config::AuthConfig::Key { path, .. } => format!("SSH Key ({path})"),
                 crate::config::AuthConfig::Agent => "SSH Agent".to_string(),
                 crate::config::AuthConfig::Password { .. } => "Password".to_string(),
+                #[cfg(feature = "winrm")]
+                crate::config::AuthConfig::Ntlm { domain, .. } => {
+                    if let Some(d) = domain {
+                        format!("NTLM ({d})")
+                    } else {
+                        "NTLM".to_string()
+                    }
+                }
+                #[cfg(feature = "winrm")]
+                crate::config::AuthConfig::Certificate { cert_path, .. } => {
+                    format!("Certificate ({cert_path})")
+                }
+                #[cfg(feature = "winrm")]
+                crate::config::AuthConfig::Kerberos => "Kerberos".to_string(),
             };
             let _ = writeln!(result, "    Auth: {auth_type}");
 
@@ -136,6 +150,14 @@ mod tests {
                 shell: None,
                 retry: None,
                 protocol: crate::config::Protocol::default(),
+                #[cfg(feature = "winrm")]
+                winrm_use_tls: None,
+                #[cfg(feature = "winrm")]
+                winrm_accept_invalid_certs: None,
+                #[cfg(feature = "winrm")]
+                winrm_operation_timeout_secs: None,
+                #[cfg(feature = "winrm")]
+                winrm_max_envelope_size: None,
             },
         );
 
@@ -176,6 +198,14 @@ mod tests {
                 shell: None,
                 retry: None,
                 protocol: crate::config::Protocol::default(),
+                #[cfg(feature = "winrm")]
+                winrm_use_tls: None,
+                #[cfg(feature = "winrm")]
+                winrm_accept_invalid_certs: None,
+                #[cfg(feature = "winrm")]
+                winrm_operation_timeout_secs: None,
+                #[cfg(feature = "winrm")]
+                winrm_max_envelope_size: None,
             },
         );
 
@@ -196,6 +226,14 @@ mod tests {
                 shell: None,
                 retry: None,
                 protocol: crate::config::Protocol::default(),
+                #[cfg(feature = "winrm")]
+                winrm_use_tls: None,
+                #[cfg(feature = "winrm")]
+                winrm_accept_invalid_certs: None,
+                #[cfg(feature = "winrm")]
+                winrm_operation_timeout_secs: None,
+                #[cfg(feature = "winrm")]
+                winrm_max_envelope_size: None,
             },
         );
 
@@ -218,6 +256,14 @@ mod tests {
                 shell: None,
                 retry: None,
                 protocol: crate::config::Protocol::default(),
+                #[cfg(feature = "winrm")]
+                winrm_use_tls: None,
+                #[cfg(feature = "winrm")]
+                winrm_accept_invalid_certs: None,
+                #[cfg(feature = "winrm")]
+                winrm_operation_timeout_secs: None,
+                #[cfg(feature = "winrm")]
+                winrm_max_envelope_size: None,
             },
         );
 

@@ -381,6 +381,7 @@ impl McpServer {
         }
         self.tunnel_manager.close_all().await;
         self.session_manager.close_all().await;
+        self.connection_pool.close_all().await;
         transport.shutdown().await;
 
         Ok(())
@@ -417,7 +418,16 @@ impl McpServer {
             }
         });
 
-        vec![sm_handle, ts_handle, oc_handle]
+        let cleanup_cp = Arc::clone(&self.connection_pool);
+        let cp_handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                cleanup_cp.cleanup().await;
+            }
+        });
+
+        vec![sm_handle, ts_handle, oc_handle, cp_handle]
     }
 
     /// Start a config file watcher that broadcasts `list_changed`

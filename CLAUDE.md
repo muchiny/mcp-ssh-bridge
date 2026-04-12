@@ -193,3 +193,10 @@ Detailed guidance is loaded automatically via `.claude/rules/`:
 - `ports.md` — Traits, mock patterns, ToolContext, ExecutorRouter
 - `cli.md` — Clap derive, global flags, runner pattern, exit codes
 - `tool-groups-reference.md` — Full 74-group tool reference table
+
+## Active Technologies
+- Rust 2024 edition, MSRV 1.94 + winrm-rs 1.0, psrp-rs 1.0, russh 0.58, tokio, serde, clap 4 (001-winrm-psrp-integration)
+- N/A (YAML config files only) (001-winrm-psrp-integration)
+
+## Recent Changes
+- 001-winrm-psrp-integration: Added Rust 2024 edition, MSRV 1.94 + winrm-rs 1.0, psrp-rs 1.0, russh 0.58, tokio, serde, clap 4
