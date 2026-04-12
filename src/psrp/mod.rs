@@ -311,8 +311,8 @@ mod tests {
             "true"
         );
         assert_eq!(
-            psvalue_to_string(&psrp_rs::clixml::PsValue::Double(3.14)),
-            "3.14"
+            psvalue_to_string(&psrp_rs::clixml::PsValue::Double(99.5)),
+            "99.5"
         );
     }
 

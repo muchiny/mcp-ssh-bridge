@@ -40,6 +40,18 @@ fn create_test_config() -> Config {
             shell: None,
             retry: None,
             protocol: mcp_ssh_bridge::config::Protocol::default(),
+
+            #[cfg(feature = "winrm")]
+            winrm_use_tls: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_accept_invalid_certs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_operation_timeout_secs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_max_envelope_size: None,
         },
     );
 
@@ -60,6 +72,18 @@ fn create_test_config() -> Config {
             shell: None,
             retry: None,
             protocol: mcp_ssh_bridge::config::Protocol::default(),
+
+            #[cfg(feature = "winrm")]
+            winrm_use_tls: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_accept_invalid_certs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_operation_timeout_secs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_max_envelope_size: None,
         },
     );
 
@@ -471,6 +495,18 @@ fn test_proxy_jump_config() {
             shell: None,
             retry: None,
             protocol: mcp_ssh_bridge::config::Protocol::default(),
+
+            #[cfg(feature = "winrm")]
+            winrm_use_tls: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_accept_invalid_certs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_operation_timeout_secs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_max_envelope_size: None,
         },
     );
 
@@ -495,6 +531,18 @@ fn test_proxy_jump_config() {
             shell: None,
             retry: None,
             protocol: mcp_ssh_bridge::config::Protocol::default(),
+
+            #[cfg(feature = "winrm")]
+            winrm_use_tls: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_accept_invalid_certs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_operation_timeout_secs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_max_envelope_size: None,
         },
     );
 
@@ -542,6 +590,18 @@ fn test_proxy_jump_resolution() {
             shell: None,
             retry: None,
             protocol: mcp_ssh_bridge::config::Protocol::default(),
+
+            #[cfg(feature = "winrm")]
+            winrm_use_tls: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_accept_invalid_certs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_operation_timeout_secs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_max_envelope_size: None,
         },
     );
 
@@ -562,6 +622,18 @@ fn test_proxy_jump_resolution() {
             shell: None,
             retry: None,
             protocol: mcp_ssh_bridge::config::Protocol::default(),
+
+            #[cfg(feature = "winrm")]
+            winrm_use_tls: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_accept_invalid_certs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_operation_timeout_secs: None,
+
+            #[cfg(feature = "winrm")]
+            winrm_max_envelope_size: None,
         },
     );
 
@@ -605,6 +677,18 @@ fn test_proxy_jump_chain_detection() {
         shell: None,
         retry: None,
         protocol: mcp_ssh_bridge::config::Protocol::default(),
+
+        #[cfg(feature = "winrm")]
+        winrm_use_tls: None,
+
+        #[cfg(feature = "winrm")]
+        winrm_accept_invalid_certs: None,
+
+        #[cfg(feature = "winrm")]
+        winrm_operation_timeout_secs: None,
+
+        #[cfg(feature = "winrm")]
+        winrm_max_envelope_size: None,
     };
 
     let host_without_jump = HostConfig {
@@ -622,6 +706,18 @@ fn test_proxy_jump_chain_detection() {
         shell: None,
         retry: None,
         protocol: mcp_ssh_bridge::config::Protocol::default(),
+
+        #[cfg(feature = "winrm")]
+        winrm_use_tls: None,
+
+        #[cfg(feature = "winrm")]
+        winrm_accept_invalid_certs: None,
+
+        #[cfg(feature = "winrm")]
+        winrm_operation_timeout_secs: None,
+
+        #[cfg(feature = "winrm")]
+        winrm_max_envelope_size: None,
     };
 
     assert!(host_with_jump.proxy_jump.is_some());

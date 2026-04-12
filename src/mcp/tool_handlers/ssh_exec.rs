@@ -525,6 +525,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_rate_limit_returns_error_result() {
         use crate::config::{
             AuditConfig, AuthConfig, Config, HostConfig, HostKeyVerification, HttpTransportConfig,

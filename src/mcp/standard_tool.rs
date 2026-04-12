@@ -413,7 +413,7 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
     }
 }
 
-/// Apply typed data reduction based on [`OutputKind`].
+/// Apply typed data reduction based on [`crate::domain::output_kind::OutputKind`].
 ///
 /// Returns `true` if a jq filter was applied (so `post_process` should be skipped).
 ///

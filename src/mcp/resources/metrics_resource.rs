@@ -164,6 +164,7 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
+    #[allow(clippy::too_many_lines)]
     fn create_ctx_with_hosts() -> ToolContext {
         let mut hosts = HashMap::new();
         hosts.insert(
