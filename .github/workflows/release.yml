@@ -39,10 +39,6 @@ jobs:
             os: macos-latest
             name: macos-arm64
             archive: tar.gz
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            name: windows-x86_64
-            archive: zip
 
     steps:
       - uses: actions/checkout@v6
@@ -72,22 +68,12 @@ jobs:
         if: ${{ !matrix.cross }}
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package (unix)
-        if: matrix.archive == 'tar.gz'
+      - name: Package
         run: |
           cd target/${{ matrix.target }}/release
           tar czf ../../../${{ env.BINARY_NAME }}-${{ matrix.name }}.tar.gz ${{ env.BINARY_NAME }}
           cd ../../..
           sha256sum ${{ env.BINARY_NAME }}-${{ matrix.name }}.tar.gz > ${{ env.BINARY_NAME }}-${{ matrix.name }}.tar.gz.sha256
-
-      - name: Package (windows)
-        if: matrix.archive == 'zip'
-        shell: bash
-        run: |
-          cd target/${{ matrix.target }}/release
-          7z a ../../../${{ env.BINARY_NAME }}-${{ matrix.name }}.zip ${{ env.BINARY_NAME }}.exe
-          cd ../../..
-          sha256sum ${{ env.BINARY_NAME }}-${{ matrix.name }}.zip > ${{ env.BINARY_NAME }}-${{ matrix.name }}.zip.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -133,12 +119,6 @@ jobs:
               cd dist && zip -r "../artifacts/${{ env.BINARY_NAME }}-${arch}.dxt" dxt-${arch}/ && cd ..
             fi
           done
-          mkdir -p dist/dxt-windows-x86_64
-          if [ -f "artifacts/${{ env.BINARY_NAME }}-windows-x86_64.zip" ]; then
-            unzip "artifacts/${{ env.BINARY_NAME }}-windows-x86_64.zip" -d dist/dxt-windows-x86_64/
-            cp dxt/manifest.json dxt/icon.svg dist/dxt-windows-x86_64/
-            cd dist && zip -r "../artifacts/${{ env.BINARY_NAME }}-windows-x86_64.dxt" dxt-windows-x86_64/ && cd ..
-          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
