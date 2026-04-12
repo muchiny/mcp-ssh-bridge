@@ -82,8 +82,14 @@ impl PsrpConnection {
         // Open RunspacePool from transport
         let mut pool = psrp_rs::RunspacePool::open_from_transport(transport, rpid, 1, 1).await?;
 
+        // Wrap command with Out-String to force text output, making PSRP
+        // output identical to SSH/WinRM. Without this, PSRP returns typed
+        // PsValue objects whose string representation may differ from the
+        // formatted text that handlers expect to parse.
+        let wrapped = format!("{command} | Out-String");
+
         // Run the PowerShell script with all 7 streams
-        let result = psrp_rs::Pipeline::new(command)
+        let result = psrp_rs::Pipeline::new(&wrapped)
             .run_all_streams(&mut pool)
             .await?;
 
@@ -129,7 +135,9 @@ impl PsrpConnection {
 
         let mut pool = psrp_rs::RunspacePool::open_from_transport(transport, rpid, 1, 1).await?;
 
-        let result = psrp_rs::Pipeline::new(command)
+        let wrapped = format!("{command} | Out-String");
+
+        let result = psrp_rs::Pipeline::new(&wrapped)
             .run_all_streams_with_cancel(&mut pool, cancel)
             .await?;
 
