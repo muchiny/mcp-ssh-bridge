@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-04-12
+
 ### Summary — Sprint 3 (complete)
 
-**Transport unified** | **Daemon inherits stdio features** | **WinRM + K8sExec pools** | **Multi-host output diffing** | **`#[mcp_tool]` auto-registration — 357/357 handlers migrated**
+**Transport unified** | **Daemon inherits stdio features** | **WinRM + K8sExec pools** | **Multi-host output diffing** | **`#[mcp_tool]` auto-registration — 357/357 handlers migrated** | **Server-side data-reduction for custom handlers**
 
 ### Added
 
@@ -22,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Multi-host output diffing** in `ssh_exec_multi` — new `diff`, `diff_baseline`, `normalize` args add a structured diff section to the response comparing the output of the same command across every host against a baseline. Useful for detecting config drift on a fleet. Backed by a new pure-domain module `src/domain/diff.rs` using the `similar` crate. Large outputs (>100 KB) skip the unified-diff generation and fall back to a hash-based match/differ comparison to keep per-call cost bounded.
 - **Sanitizer YAML custom patterns** — explicit end-to-end tests proving that `SanitizeConfig.custom_patterns` compose with builtin patterns and that invalid regexes in YAML are skipped rather than fatal.
 - **New daemon integration tests**: batch request dispatch + parse_error response for malformed JSON, both proving that behaviors `daemon/connection.rs` used to reject are now inherited from the shared `serve_session` path.
+- **Server-side data-reduction for custom (non-`StandardTool`) handlers.** `apply_typed_reduction` is renamed to `apply_reduction` and made `pub` in `src/mcp/standard_tool.rs` so handlers that opt out of the `StandardTool` pipeline can still consume `jq_filter`, `yq_filter`, `columns`, `limit`, and `output_format`. 12 AWX handlers (`ssh_awx_*`), `ssh_ls`, and `ssh_metrics` now participate in the reduction pipeline.
+- **`OutputKind::short_marker()` + `strategy_hint()`** — new helpers on the domain enum used by the CLI to surface per-tool reduction metadata without leaking enum details.
+- **CLI `list-tools`** — text table gains a `REDUCE` column; JSON output adds a `reduce` field per tool. A legend at the bottom explains the markers (`jq+tsv`, `yq+tsv`, `cols`, `*`, `—`).
+- **CLI `describe-tool`** — text mode prints `Output Kind` and `Reduction Strategy`; JSON mode adds `output_kind` + `reduction_strategy` fields.
+- **CLI `--output-format` flag** on `DataReductionFlags` maps to the `output_format` tool parameter. Explicit tool args still win over the flag.
 
 ### Changed
 
@@ -42,6 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `src/daemon/connection.rs` — the per-connection handler is now replaced by `McpServer::serve_session`, which already has cancellation plumbing, the request registry, and the full dispatch surface.
 - **`/sync-counts` skill** (`.claude/skills/sync-counts/`) and every reference to it in `.claude/` docs, rules, settings, and agent memory. The "manually update 78 test count assertions after adding a tool" maintenance chore is dead code since commit D.
 - The "Adding a tool = 8 steps" procedure. The new procedure is **3 steps**: annotate the struct, add the `mod` + `pub use` line, and (only if introducing a new group) update `ToolGroupsConfig`.
+
+### Fixed
+
+- **Clippy `--all-features`** — `ExecutorRouter` tagged with `#[allow(clippy::struct_field_names)]` (all three fields legitimately end in `_pool`), and `doc_markdown` violations on `host_name` / `WinRM` in `k8s_exec/pool.rs` + `winrm/pool.rs` module docs. Local `cargo clippy` without `--all-features` masked these; CI now validates `--all-features` on every push.
+- **Markdownlint MD024** — two sibling `### Changed` headings in the Unreleased block collapsed into one.
+- **Coverage job `test_docker_file_write_and_read`** — the shell path of `ssh_file_write` returns raw stdout which is empty on success, so the "Write should return confirmation" assertion always failed under CI's `sftp_write_threshold_bytes` default. Assertion dropped; the read-back in the same test is the real semantic check.
+- **Coverage job `e2e_raspberry` leakage** — tests in `tests/e2e_raspberry.rs` are now wrapped in `mod rpi { ... }` so the CI filter `--skip rpi::` (previously `--skip e2e_raspberry`, which never matched since libtest `--skip` filters test function names, not file/binary names) correctly excludes them under `--include-ignored`.
 
 ## [1.11.0] - 2026-04-10
 
