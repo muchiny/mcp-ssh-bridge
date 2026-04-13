@@ -19,6 +19,7 @@ Each protocol implements the `RemoteExecutor` trait from `src/ports/executor.rs`
 ## Feature Gates
 
 Every protocol adapter is behind a feature flag in `Cargo.toml`:
+
 - `winrm` → `src/winrm/` (wraps `winrm-rs` for WS-Man/SOAP, NTLMv2/Basic/Kerberos/Certificate auth)
 - `psrp` → `src/psrp/` (wraps `psrp-rs` for PowerShell Remoting Protocol over WinRM transport)
 - `telnet` → `src/telnet/`
