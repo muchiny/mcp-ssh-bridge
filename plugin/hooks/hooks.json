@@ -1,0 +1,15 @@
+{
+  "description": "MCP SSH Bridge plugin hooks",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'MCP SSH Bridge plugin loaded. Use /mcp-ssh-bridge:bridge to manage remote hosts, or /mcp-ssh-bridge:discover to explore 338 tools.'"
+          }
+        ]
+      }
+    ]
+  }
+}

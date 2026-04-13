@@ -1,0 +1,64 @@
+{
+  "$schema": "https://registry.modelcontextprotocol.io/schemas/server.json",
+  "name": "io.github.muchiny/mcp-ssh-bridge",
+  "version": "1.13.0",
+  "description": "Secure SSH bridge for AI-powered remote server management. 338 tools across 74 groups for Linux, Windows, Docker, Kubernetes, and more.",
+  "repository": {
+    "url": "https://github.com/muchiny/mcp-ssh-bridge",
+    "source": "github"
+  },
+  "license": "MIT",
+  "runtime": "binary",
+  "transport": ["stdio", "streamable-http"],
+  "mcpVersion": "2025-11-25",
+  "capabilities": {
+    "tools": true,
+    "resources": true,
+    "prompts": true,
+    "sampling": true,
+    "elicitation": true
+  },
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "name": "mcp-ssh-bridge",
+      "version": "1.13.0",
+      "url": "https://github.com/muchiny/mcp-ssh-bridge/releases/latest",
+      "platforms": [
+        "linux-x64",
+        "linux-arm64",
+        "macos-x64",
+        "macos-arm64",
+        "windows-x64"
+      ]
+    },
+    {
+      "registryType": "oci",
+      "name": "ghcr.io/muchiny/mcp-ssh-bridge",
+      "version": "1.13.0"
+    }
+  ],
+  "keywords": [
+    "ssh",
+    "mcp",
+    "devops",
+    "remote",
+    "automation",
+    "linux",
+    "windows",
+    "docker",
+    "kubernetes",
+    "air-gapped"
+  ],
+  "authors": [
+    {
+      "name": "muchiny",
+      "url": "https://github.com/muchiny"
+    }
+  ],
+  "links": {
+    "homepage": "https://github.com/muchiny/mcp-ssh-bridge",
+    "documentation": "https://docs.rs/mcp-ssh-bridge",
+    "changelog": "https://github.com/muchiny/mcp-ssh-bridge/blob/main/CHANGELOG.md"
+  }
+}

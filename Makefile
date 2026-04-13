@@ -240,6 +240,16 @@ dxt: release
 	cd dist && zip -r mcp-ssh-bridge.dxt dxt/
 	@echo "DXT package: dist/mcp-ssh-bridge.dxt"
 
+# Build MCPB package (MCP Bundle for official registry)
+mcpb: release
+	@mkdir -p dist/mcpb
+	cp target/release/mcp-ssh-bridge dist/mcpb/
+	cp dxt/manifest.json dxt/icon.svg server.json dist/mcpb/
+	cd dist && zip -r mcp-ssh-bridge.mcpb mcpb/
+	@cd dist && sha256sum mcp-ssh-bridge.mcpb > mcp-ssh-bridge.mcpb.sha256
+	@echo "MCPB package: dist/mcp-ssh-bridge.mcpb"
+	@echo "SHA256: $$(cat dist/mcp-ssh-bridge.mcpb.sha256)"
+
 # Show help
 help:
 	@echo "MCP SSH Bridge - Available targets:"
@@ -298,6 +308,7 @@ help:
 	@echo ""
 	@echo "Packaging:"
 	@echo "  dxt              - Build DXT package for Claude Desktop"
+	@echo "  mcpb             - Build MCPB package for MCP Registry"
 	@echo ""
 	@echo "Pipelines:"
 	@echo "  ci               - Quick CI (fmt+lint+test+audit+typos)"
