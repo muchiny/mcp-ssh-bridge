@@ -95,6 +95,7 @@ fn build_winrm_config(
 ```
 
 **Mapping rules**:
+
 - `host_config.port` -> `WinrmConfig.port`
 - `host_config.winrm_use_tls` (or auto-detect from port) -> `WinrmConfig.use_tls`
 - `host_config.winrm_accept_invalid_certs` -> `WinrmConfig.accept_invalid_certs`

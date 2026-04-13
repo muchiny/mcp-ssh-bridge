@@ -53,8 +53,8 @@
 
 ### WinRM Adapter Implementation
 
-- [ ] T014 [US1] Rewrite `src/winrm/mod.rs`: replace `WinRmConnection` struct to wrap `Arc<WinrmClient>` instead of `reqwest::Client`, implement `from_parts(host_name, client)` constructor, implement `exec()` using `client.run_powershell_with_cancel()` with proper `CommandOutput` conversion (Vec<u8> -> String, u32 -> i32 exit code, add duration_ms), implement `exec_with_cancel()` propagating `CancellationToken`, implement `mark_failed()` and `host_name()` per contracts/winrm-adapter.md
-- [ ] T015 [US1] Rewrite `src/winrm/pool.rs`: replace `WinRmPool` to cache `Arc<WinrmClient>` instead of `reqwest::Client`, keep same API surface (`new()`, `with_config()`, `get_connection()`, `evict()`, `cleanup()`, `close_all()`, `size()`), cold path calls `build_winrm_config()` from T010 then `WinrmClient::new(config, creds)`, keep 120s idle TTL and `Arc<RwLock<HashMap>>` pattern per research.md R3
+- [ ] T014 [US1] Rewrite `src/winrm/mod.rs`: replace `WinRmConnection` struct to wrap ``Arc<WinrmClient>`` instead of `reqwest::Client`, implement `from_parts(host_name, client)` constructor, implement `exec()` using `client.run_powershell_with_cancel()` with proper `CommandOutput` conversion (`Vec<u8>` -> String, u32 -> i32 exit code, add duration_ms), implement `exec_with_cancel()` propagating `CancellationToken`, implement `mark_failed()` and `host_name()` per contracts/winrm-adapter.md
+- [ ] T015 [US1] Rewrite `src/winrm/pool.rs`: replace `WinRmPool` to cache ``Arc<WinrmClient>`` instead of `reqwest::Client`, keep same API surface (`new()`, `with_config()`, `get_connection()`, `evict()`, `cleanup()`, `close_all()`, `size()`), cold path calls `build_winrm_config()` from T010 then `WinrmClient::new(config, creds)`, keep 120s idle TTL and ``Arc<RwLock<HashMap>>`` pattern per research.md R3
 - [X] T016 [US1] Update `ConnectionGuard` enum in `src/ports/executor_router.rs`: verify `WinRm(crate::winrm::WinRmConnection)` variant still compiles with the new `WinRmConnection` struct, update `exec()` match arm if method signature changed, update `mark_failed()` match arm
 - [X] T017 [US1] Update `ExecutorRouter` in `src/ports/executor_router.rs`: verify `winrm_pool: crate::winrm::WinRmPool` field still compiles with new pool type, verify `get_connection_with_jump()` WinRM dispatch arm works, verify `cleanup()` and `close_all()` forwarding
 
@@ -87,7 +87,7 @@
 
 ### PSRP Tests
 
-- [ ] T026 [P] [US3] Write unit tests for `PsrpConnection::exec()` in `src/psrp/mod.rs` `#[cfg(test)]`: test `psrp_to_command_output()` conversion (Vec<PsValue> to stdout string), test `pipeline_result_to_command_output()` with errors/warnings, test exit code mapping (Completed->0, Failed->1, Stopped->2)
+- [ ] T026 [P] [US3] Write unit tests for `PsrpConnection::exec()` in `src/psrp/mod.rs` `#[cfg(test)]`: test `psrp_to_command_output()` conversion (`Vec<PsValue>` to stdout string), test `pipeline_result_to_command_output()` with errors/warnings, test exit code mapping (Completed->0, Failed->1, Stopped->2)
 - [ ] T027 [P] [US3] Write unit tests for `PsrpPool` in `src/psrp/pool.rs` `#[cfg(test)]`: test pool caching, test 300s TTL eviction, test `evict()`, test `close_all()`
 - [ ] T028 [US3] Run full test suite with PSRP feature: `cargo test --features psrp` — verify no regressions in existing 6300+ tests, verify new PSRP tests pass
 

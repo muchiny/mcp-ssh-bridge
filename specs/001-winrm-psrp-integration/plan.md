@@ -33,31 +33,37 @@ The PSRP-over-SSH transport (Phase 4) requires version alignment. See research.m
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 ### I. Architecture Hexagonale Stricte
+
 - **PASS**: winrm-rs and psrp-rs are wrapped in adapters (`src/winrm/`, `src/psrp/`).
   Domain layer unchanged. Handlers call `ExecutorRouter` which dispatches to adapters.
   No direct dependency from handlers to winrm-rs/psrp-rs.
 
 ### II. Purete du Domaine
+
 - **PASS**: Domain command builders (36 Linux + 13 Windows) remain pure. They produce
   command strings. The adapter decides whether to send via SSH, WinRM `run_powershell()`,
   or PSRP `RunspacePool::run_script()`. Zero changes to `src/domain/`.
 
 ### III. Feature Gates et Compilation Conditionnelle
+
 - **PASS**: `winrm = ["dep:winrm-rs"]` replaces `["dep:reqwest", "dep:quick-xml"]`.
   New `psrp = ["dep:psrp-rs", "winrm"]` feature added. All code behind `#[cfg(feature)]`.
   `cargo check` must pass with no features, with `winrm` only, with `psrp` only, with all.
 
 ### IV. Discipline de Test
+
 - **PASS**: Unit tests for config mapping, pool lifecycle, auth selection. Integration
   tests with mock WinRM server (wiremock). Registry test counts updated. Fuzz targets
   for SOAP envelope parsing if applicable.
 
 ### V. Securite Zero-Trust
+
 - **PASS**: winrm-rs uses `SecretString` (secrecy crate) for passwords. Credentials
   mapped from existing `Zeroizing<String>` in AuthConfig. No OpenSSL by default
   (CredSSP feature not enabled). rustls for TLS.
 
 ### VI. Simplicite et YAGNI
+
 - **PASS**: Phase 1 replaces broken code. Phase 2 adds a genuinely new protocol.
   Phase 3 (typed outputs) is incremental. Phase 4 (PSRP-over-SSH) deferred.
   No speculative abstractions.

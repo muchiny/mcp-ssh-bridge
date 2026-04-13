@@ -42,6 +42,7 @@ pub enum AuthConfig {
 ```
 
 **Validation Rules**:
+
 - `Ntlm.password` must not be empty
 - `Certificate.cert_path` and `key_path` must be valid file paths
 - `Kerberos` requires a valid TGT at runtime (not config-time)
@@ -101,6 +102,7 @@ pub struct HostConfig {
 ```
 
 **Validation Rules**:
+
 - `winrm_*` fields ignored when `protocol != WinRm && protocol != Psrp`
 - `winrm_use_tls` defaults to `true` when port is 5986, `false` when 5985
 - `winrm_accept_invalid_certs` defaults to `false`
@@ -164,6 +166,7 @@ impl WinRmConnection {
 ```
 
 **exec() flow**:
+
 1. Call `client.run_powershell_with_cancel(host, command, token)` (was: `cmd.exe /c`)
 2. Map `CommandOutput { stdout: Vec<u8>, stderr: Vec<u8>, exit_code: u32 }`
    to bridge `CommandOutput { stdout: String, stderr: String, exit_code: i32, duration_ms: u64 }`
@@ -193,6 +196,7 @@ pub struct WinRmPoolConfig {
 ```
 
 **API** (unchanged surface):
+
 - `get_connection(host_name, host_config, limits) -> Result<WinRmConnection>`
 - `evict(host_name)`
 - `cleanup()`
@@ -233,6 +237,7 @@ impl PsrpConnection {
 ```
 
 **exec() flow**:
+
 1. Call `pool.run_script_with_cancel(command, token)`
 2. Convert `Vec<PsValue>` to stdout string (Debug or Display format)
 3. Return `CommandOutput { stdout, stderr: "", exit_code: 0, duration_ms }`
