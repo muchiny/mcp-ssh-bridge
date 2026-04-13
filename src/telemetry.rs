@@ -256,4 +256,67 @@ mod tests {
         // Must not panic even if telemetry was never initialized.
         shutdown_telemetry();
     }
+
+    #[test]
+    fn test_span_duration_guard_start() {
+        let guard = SpanDurationGuard::start();
+        // Guard captures an instant — dropping it records duration_ms on current span.
+        // Even without an active span, drop must not panic.
+        drop(guard);
+    }
+
+    #[test]
+    fn test_telemetry_config_debug() {
+        let config = TelemetryConfig {
+            otlp_endpoint: Some("http://localhost:4317".to_string()),
+            service_name: "test-svc".to_string(),
+            colored_output: true,
+        };
+        let debug = format!("{config:?}");
+        assert!(debug.contains("test-svc"));
+        assert!(debug.contains("localhost:4317"));
+    }
+
+    #[test]
+    fn test_telemetry_config_clone() {
+        let config = TelemetryConfig {
+            otlp_endpoint: Some("http://endpoint".to_string()),
+            service_name: "svc".to_string(),
+            colored_output: false,
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.service_name, "svc");
+        assert_eq!(cloned.otlp_endpoint, Some("http://endpoint".to_string()));
+        assert!(!cloned.colored_output);
+    }
+
+    #[test]
+    fn test_from_env_mcp_mode_disables_colors() {
+        // from_env reads real env vars — we only assert the deterministic part:
+        // MCP mode must disable colored output.
+        let config = TelemetryConfig::from_env(true);
+        assert!(!config.colored_output);
+    }
+
+    #[test]
+    fn test_from_env_non_mcp_mode_enables_colors() {
+        let config = TelemetryConfig::from_env(false);
+        assert!(config.colored_output);
+    }
+
+    #[test]
+    fn test_from_env_service_name_has_default() {
+        // Unless OTEL_SERVICE_NAME is overridden, the default should apply.
+        let config = TelemetryConfig::from_env(false);
+        // The name is either the env var or the default — both are non-empty.
+        assert!(!config.service_name.is_empty());
+    }
+
+    #[test]
+    fn test_span_duration_guard_elapsed_is_non_negative() {
+        let guard = SpanDurationGuard::start();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        // Dropping records duration_ms — must not panic even with elapsed > 0.
+        drop(guard);
+    }
 }

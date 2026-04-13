@@ -650,4 +650,142 @@ mod tests {
         let h3 = SessionRecorder::compute_hash(b"key", "prev", "different");
         assert_ne!(h1, h3);
     }
+
+    #[test]
+    fn test_auto_mask_secrets_getter() {
+        let tmp = TempDir::new().unwrap();
+        let recorder_on = SessionRecorder::new(tmp.path().to_path_buf(), false, Vec::new(), true);
+        assert!(recorder_on.auto_mask_secrets());
+
+        let recorder_off = SessionRecorder::new(tmp.path().to_path_buf(), false, Vec::new(), false);
+        assert!(!recorder_off.auto_mask_secrets());
+    }
+
+    #[test]
+    fn test_list_recordings_includes_active_sessions() {
+        let tmp = TempDir::new().unwrap();
+        let recorder = test_recorder(tmp.path());
+
+        // Start a session without stopping it — it should appear in list as active
+        let id = recorder.start_session("active-host", None).unwrap();
+        let list = recorder.list_recordings().unwrap();
+
+        let active = list.iter().find(|r| r.id == id);
+        assert!(active.is_some(), "Active session should appear in list");
+        let active = active.unwrap();
+        assert_eq!(active.host, "active-host");
+        assert!(active.ended_at.is_none(), "Active session has no end time");
+
+        // Stop it and verify it moves to completed
+        recorder.stop_session(&id).unwrap();
+        let list = recorder.list_recordings().unwrap();
+        assert_eq!(list.len(), 1);
+        assert!(list[0].ended_at.is_none()); // read_recording_info doesn't set ended_at
+    }
+
+    #[test]
+    fn test_recording_header_serialization() {
+        let header = RecordingHeader {
+            version: 2,
+            width: 80,
+            height: 24,
+            timestamp: 1_700_000_000,
+            title: Some("test".to_string()),
+            env: HashMap::new(),
+        };
+        let json = serde_json::to_string(&header).unwrap();
+        assert!(json.contains("\"version\":2"));
+        assert!(json.contains("\"title\":\"test\""));
+        // Empty env should be skipped
+        assert!(!json.contains("\"env\""));
+    }
+
+    #[test]
+    fn test_recording_header_no_title_skips_field() {
+        let header = RecordingHeader {
+            version: 2,
+            width: 120,
+            height: 40,
+            timestamp: 0,
+            title: None,
+            env: HashMap::new(),
+        };
+        let json = serde_json::to_string(&header).unwrap();
+        assert!(!json.contains("title"));
+    }
+
+    #[test]
+    fn test_verify_result_serialization() {
+        let result = VerifyResult {
+            valid: true,
+            total_events: 5,
+            verified_events: 5,
+            first_invalid_index: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"valid\":true"));
+        assert!(json.contains("\"total_events\":5"));
+    }
+
+    #[test]
+    fn test_recording_info_fields() {
+        let info = RecordingInfo {
+            id: "rec_test".to_string(),
+            host: "localhost".to_string(),
+            started_at: Utc::now(),
+            ended_at: Some(Utc::now()),
+            event_count: 42,
+            file_path: "/tmp/test.cast".to_string(),
+            hash_chain_enabled: true,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("rec_test"));
+        assert!(json.contains("\"event_count\":42"));
+        assert!(json.contains("\"hash_chain_enabled\":true"));
+    }
+
+    #[test]
+    fn test_verify_recording_detects_missing_hash_in_chain() {
+        let tmp = TempDir::new().unwrap();
+        let key = b"test-key".to_vec();
+        let recorder = SessionRecorder::new(tmp.path().to_path_buf(), true, key.clone(), false);
+
+        let id = recorder.start_session("host1", None).unwrap();
+        recorder.record_event(&id, "i", "cmd1").unwrap();
+        recorder.record_event(&id, "o", "output1").unwrap();
+        let info = recorder.stop_session(&id).unwrap();
+
+        // Tamper: keep first event with hash, but strip hash from second event
+        let content = fs::read_to_string(&info.file_path).unwrap();
+        let mut lines: Vec<String> = content.lines().map(String::from).collect();
+        assert!(lines.len() >= 3, "Need header + 2 events");
+        // Parse second event and rebuild without hash (3 elements only)
+        let event: Vec<serde_json::Value> = serde_json::from_str(&lines[2]).unwrap();
+        assert!(event.len() >= 4, "Second event should have hash");
+        let stripped = format!("[{}, {}, {}]", event[0], event[1], event[2]);
+        lines[2] = stripped;
+        fs::write(&info.file_path, lines.join("\n")).unwrap();
+
+        let result = SessionRecorder::verify_recording(Path::new(&info.file_path), &key).unwrap();
+        assert!(!result.valid);
+        assert_eq!(result.first_invalid_index, Some(1));
+    }
+
+    #[test]
+    fn test_replay_recording_skips_empty_lines() {
+        let tmp = TempDir::new().unwrap();
+        let recorder = SessionRecorder::new(tmp.path().to_path_buf(), false, Vec::new(), false);
+
+        let id = recorder.start_session("host1", None).unwrap();
+        recorder.record_event(&id, "o", "data").unwrap();
+        let info = recorder.stop_session(&id).unwrap();
+
+        // Append blank lines to the file
+        let mut content = fs::read_to_string(&info.file_path).unwrap();
+        content.push_str("\n\n\n");
+        fs::write(&info.file_path, &content).unwrap();
+
+        let (_, events) = SessionRecorder::replay_recording(Path::new(&info.file_path)).unwrap();
+        assert_eq!(events.len(), 1);
+    }
 }
