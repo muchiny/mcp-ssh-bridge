@@ -233,6 +233,14 @@ security:
   sanitize_patterns: []
     # - "(?i)password\\s*[=:]\\s*\\S+"
 
+  # Require MCP elicitation/create confirmation for tools annotated
+  # destructive_hint: true (cron_remove, k8s_delete, terraform_apply, …).
+  # When true, the server asks the user to confirm via the client UI before
+  # executing the destructive operation; on decline the call is rejected.
+  # Requires a client that advertises the elicitation capability.
+  # Default: false (opt-in).
+  require_elicitation_on_destructive: false
+
 # =============================================================================
 # LIMITS AND TIMEOUTS
 # =============================================================================

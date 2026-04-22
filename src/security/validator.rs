@@ -214,6 +214,7 @@ mod tests {
             blacklist: blacklist.into_iter().map(String::from).collect(),
             sanitize_patterns: vec![],
             sanitize: crate::config::SanitizeConfig::default(),
+            ..SecurityConfig::default()
         }
     }
 

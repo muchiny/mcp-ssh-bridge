@@ -79,6 +79,11 @@ pub struct McpServer {
     roots: Arc<RwLock<Vec<RootEntry>>>,
     /// Whether the client supports `roots/list`.
     client_supports_roots: AtomicBool,
+    /// Whether the client supports `elicitation/create` (MCP 2025-06-18+).
+    /// Populated from `InitializeParams.capabilities.elicitation` during the
+    /// handshake. Used by `handle_tools_call` to gate destructive operations
+    /// when `security.require_elicitation_on_destructive` is enabled.
+    client_supports_elicitation: AtomicBool,
     /// Application metrics for token consumption analytics.
     metrics: Arc<crate::metrics::Metrics>,
     /// Map of in-flight MCP request IDs to their `CancellationToken`.
@@ -195,6 +200,7 @@ impl McpServer {
             resource_subscriptions: Arc::new(RwLock::new(HashMap::new())),
             roots: Arc::new(RwLock::new(Vec::new())),
             client_supports_roots: AtomicBool::new(false),
+            client_supports_elicitation: AtomicBool::new(false),
             metrics: Arc::new(crate::metrics::Metrics::new()),
             active_requests: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
@@ -260,6 +266,87 @@ impl McpServer {
     /// their work against a MCP `notifications/cancelled`. Pass `None` for
     /// handlers that don't participate in cancellation (resources/list,
     /// prompts/get, etc.).
+    /// Ask the client to confirm a destructive tool call via `elicitation/create`.
+    ///
+    /// Returns `Ok(())` when the operation is allowed (not destructive, feature
+    /// disabled, or user confirmed). Returns `Err(msg)` with a user-facing
+    /// reason string when the operation must be blocked (user declined,
+    /// cancelled, elicitation unsupported, or transport unavailable).
+    async fn check_destructive_elicitation(
+        &self,
+        tool_name: &str,
+        arguments: Option<&Value>,
+        notification_tx: Option<&mpsc::Sender<WriterMessage>>,
+    ) -> std::result::Result<(), String> {
+        let require = {
+            let cfg = self.config.read().await;
+            cfg.security.require_elicitation_on_destructive
+        };
+        if !require {
+            return Ok(());
+        }
+
+        let is_destructive = super::registry::tool_annotations(tool_name)
+            .destructive_hint
+            .unwrap_or(false);
+        if !is_destructive {
+            return Ok(());
+        }
+
+        if !self
+            .client_supports_elicitation
+            .load(Ordering::Relaxed)
+        {
+            return Err(format!(
+                "Tool `{tool_name}` is destructive and `require_elicitation_on_destructive` is enabled, but the client does not support elicitation. Either upgrade the client or set `security.require_elicitation_on_destructive: false`."
+            ));
+        }
+
+        let Some(tx) = notification_tx.cloned().or_else(|| {
+            self.notification_tx
+                .try_read()
+                .ok()
+                .and_then(|g| g.as_ref().cloned())
+        }) else {
+            return Err(format!(
+                "Tool `{tool_name}` requires user confirmation but no notification channel is available."
+            ));
+        };
+
+        let summary = arguments.map_or_else(
+            || "(no arguments)".to_string(),
+            |v| {
+                let s = serde_json::to_string(v).unwrap_or_default();
+                if s.len() > 300 {
+                    format!("{}… (truncated)", &s[..300])
+                } else {
+                    s
+                }
+            },
+        );
+
+        let requester = Arc::new(super::client_requester::ClientRequester::new(
+            tx,
+            Arc::clone(&self.pending_requests),
+            std::time::Duration::from_secs(120),
+        ));
+        let elicitation = super::elicitation::ElicitationService::new(requester);
+        elicitation.set_supported(true);
+
+        match elicitation.confirm_destructive(tool_name, &summary).await {
+            Ok(true) => Ok(()),
+            Ok(false) | Err(super::client_requester::ClientRequestError::Declined) => Err(format!(
+                "User declined execution of destructive tool `{tool_name}`."
+            )),
+            Err(super::client_requester::ClientRequestError::Cancelled) => Err(format!(
+                "User cancelled confirmation for destructive tool `{tool_name}`."
+            )),
+            Err(e) => Err(format!(
+                "Elicitation failed for destructive tool `{tool_name}`: {e}"
+            )),
+        }
+    }
+
     async fn create_tool_context(
         &self,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
@@ -934,6 +1021,13 @@ impl McpServer {
                         info!("Client supports roots capability");
                     }
 
+                    // Check if client supports elicitation capability
+                    if init_params.capabilities.elicitation.is_some() {
+                        self.client_supports_elicitation
+                            .store(true, Ordering::Relaxed);
+                        info!("Client supports elicitation capability");
+                    }
+
                     *self.client_info.write().await = Some(init_params.client_info);
                 }
                 Err(e) => {
@@ -1091,6 +1185,24 @@ impl McpServer {
                 })?;
                 Some(ProgressReporter::new(token, tx, Some(3)))
             });
+
+        // Destructive-op gate: when `security.require_elicitation_on_destructive`
+        // is set, ask the client to confirm via `elicitation/create` before
+        // executing any tool annotated `destructive_hint: true`. Runs before the
+        // task branch so async task creation itself is gated.
+        if let Err(msg) = self
+            .check_destructive_elicitation(
+                &call_params.name,
+                call_params.arguments.as_ref(),
+                notification_tx.as_ref(),
+            )
+            .await
+        {
+            return JsonRpcResponse::success_or_serialize_error(
+                id,
+                &ToolCallResult::error(msg),
+            );
+        }
 
         // Task-augmented request: spawn background worker and return immediately.
         // MCP Tasks have their own cancellation via `tasks/cancel`; we don't
@@ -2011,6 +2123,65 @@ mod tests {
         assert!(response.error.is_none());
         let result = response.result.unwrap();
         assert!(result["isError"].as_bool().unwrap_or(false));
+    }
+
+    #[tokio::test]
+    async fn test_destructive_gate_blocks_when_elicitation_unsupported() {
+        // Enable the gate; client has not advertised elicitation support.
+        let mut config = Config {
+            hosts: HashMap::new(),
+            security: SecurityConfig::default(),
+            limits: LimitsConfig::default(),
+            audit: AuditConfig::default(),
+            sessions: SessionConfig::default(),
+            tool_groups: ToolGroupsConfig::default(),
+            ssh_config: SshConfigDiscovery::default(),
+            http: HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
+        };
+        config.security.require_elicitation_on_destructive = true;
+        let (server, _task) = McpServer::new(config);
+
+        // ssh_cron_remove is annotated destructive
+        let params = json!({
+            "name": "ssh_cron_remove",
+            "arguments": {"host": "prod", "name": "backup"}
+        });
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
+            .await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        assert!(result["isError"].as_bool().unwrap_or(false));
+        let text = result["content"][0]["text"].as_str().unwrap_or_default();
+        assert!(
+            text.contains("does not support elicitation"),
+            "unexpected error text: {text}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_destructive_gate_disabled_by_default() {
+        // Default config: require_elicitation_on_destructive = false.
+        // A destructive tool call should not be blocked by the gate
+        // (it will still fail for other reasons, e.g. unknown host),
+        // but the error must not be the elicitation-refusal error.
+        let server = create_test_server();
+        let params = json!({
+            "name": "ssh_cron_remove",
+            "arguments": {"host": "nonexistent", "name": "x"}
+        });
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
+            .await;
+        let result = response.result.unwrap();
+        let text = result["content"][0]["text"].as_str().unwrap_or_default();
+        assert!(
+            !text.contains("does not support elicitation"),
+            "gate fired with feature disabled: {text}"
+        );
     }
 
     #[tokio::test]

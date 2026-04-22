@@ -472,6 +472,14 @@ pub struct SecurityConfig {
     /// Advanced sanitizer configuration
     #[serde(default)]
     pub sanitize: SanitizeConfig,
+
+    /// Require MCP `elicitation/create` confirmation before executing tools
+    /// annotated `destructive_hint: true`. When the client advertises the
+    /// `elicitation` capability, the server asks the user to confirm; on
+    /// decline/cancel the tool call returns an error without executing.
+    /// When the client does not support elicitation, the call is rejected.
+    #[serde(default)]
+    pub require_elicitation_on_destructive: bool,
 }
 
 impl Default for SecurityConfig {
@@ -482,6 +490,7 @@ impl Default for SecurityConfig {
             blacklist: default_blacklist(),
             sanitize_patterns: Vec::new(),
             sanitize: SanitizeConfig::default(),
+            require_elicitation_on_destructive: false,
         }
     }
 }

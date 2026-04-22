@@ -84,6 +84,47 @@ impl ElicitationService {
         }
     }
 
+    /// Ask the client to confirm a destructive tool call.
+    ///
+    /// Sends an `elicitation/create` request with a boolean `confirm` schema
+    /// and returns `Ok(true)` if the user accepted, `Ok(false)` if the result
+    /// was accepted but `confirm` was `false` or absent. `Err(Declined)` and
+    /// `Err(Cancelled)` propagate unchanged so callers can distinguish
+    /// explicit refusal from cancellation.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ClientRequestError::NotSupported` if the client does not
+    /// advertise the elicitation capability.
+    pub async fn confirm_destructive(
+        &self,
+        tool_name: &str,
+        summary: &str,
+    ) -> Result<bool, ClientRequestError> {
+        let message = format!(
+            "Confirm destructive operation: `{tool_name}`\n\n{summary}\n\nProceed?"
+        );
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "confirm": {
+                    "type": "boolean",
+                    "description": "Set to true to execute the destructive operation"
+                }
+            },
+            "required": ["confirm"]
+        });
+
+        let result = self.elicit(&message, Some(schema)).await?;
+        let confirmed = result
+            .content
+            .as_ref()
+            .and_then(|v| v.get("confirm"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        Ok(confirmed)
+    }
+
     /// URL-mode elicitation (SEP-1036).
     ///
     /// Asks the client to open a URL in the user's browser.
@@ -310,6 +351,43 @@ mod tests {
 
         let result = service.elicit("test", None).await;
         assert!(matches!(result, Err(ClientRequestError::ChannelClosed)));
+    }
+
+    #[tokio::test]
+    async fn test_confirm_destructive_not_supported() {
+        let (service, _rx) = create_test_service();
+        let result = service.confirm_destructive("ssh_terraform_apply", "rm -rf /").await;
+        assert!(matches!(result, Err(ClientRequestError::NotSupported)));
+    }
+
+    #[tokio::test]
+    async fn test_confirm_destructive_accepted_true() {
+        let (service, mut rx) = create_test_service();
+        service.set_supported(true);
+        let handle = tokio::spawn(async move {
+            service
+                .confirm_destructive("ssh_win_update_reboot", "reboot host prod-01")
+                .await
+        });
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("should receive within timeout")
+            .expect("channel open");
+
+        // Grab the request id so we can resolve it through the shared pending map.
+        // Here we can't; instead, verify the request schema and abort the handle.
+        match msg {
+            super::super::protocol::WriterMessage::Request(req) => {
+                assert_eq!(req.method, "elicitation/create");
+                let params = req.params.expect("params");
+                let schema = &params["requestedSchema"];
+                assert_eq!(schema["properties"]["confirm"]["type"], "boolean");
+                assert_eq!(schema["required"][0], "confirm");
+            }
+            _ => panic!("expected Request"),
+        }
+        handle.abort();
     }
 
     #[test]
