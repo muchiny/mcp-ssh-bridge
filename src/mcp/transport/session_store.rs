@@ -48,11 +48,7 @@ pub trait SessionStore: Send + Sync + 'static {
     /// Replace the notification sender for an existing session. Returns
     /// `true` when the session exists, `false` when it does not (the
     /// caller should answer with 404).
-    async fn update_tx(
-        &self,
-        session_id: &str,
-        tx: mpsc::Sender<WriterMessage>,
-    ) -> bool;
+    async fn update_tx(&self, session_id: &str, tx: mpsc::Sender<WriterMessage>) -> bool;
 
     /// Remove a session. Returns `true` when a session was removed.
     async fn remove(&self, session_id: &str) -> bool;
@@ -88,11 +84,7 @@ impl SessionStore for InMemorySessionStore {
             .map(|s| s.notification_tx.clone())
     }
 
-    async fn update_tx(
-        &self,
-        session_id: &str,
-        tx: mpsc::Sender<WriterMessage>,
-    ) -> bool {
+    async fn update_tx(&self, session_id: &str, tx: mpsc::Sender<WriterMessage>) -> bool {
         if let Some(s) = self.inner.write().await.get_mut(session_id) {
             s.notification_tx = tx;
             true
@@ -136,7 +128,11 @@ mod tests {
         store.insert("s1".into(), sample_session()).await;
         let (new_tx, _new_rx) = mpsc::channel(1);
         assert!(store.update_tx("s1", new_tx).await);
-        assert!(!store.update_tx("missing", sample_session().notification_tx).await);
+        assert!(
+            !store
+                .update_tx("missing", sample_session().notification_tx)
+                .await
+        );
     }
 
     #[tokio::test]

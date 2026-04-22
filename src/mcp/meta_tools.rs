@@ -165,13 +165,9 @@ fn search(args: Option<&Value>, registry: &ToolRegistry) -> ToolCallResult {
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
     else {
-        return ToolCallResult::error(
-            "mcp_search_tools: `query` (string, non-empty) is required",
-        );
+        return ToolCallResult::error("mcp_search_tools: `query` (string, non-empty) is required");
     };
-    let group_filter = args
-        .and_then(|o| o.get("group"))
-        .and_then(Value::as_str);
+    let group_filter = args.and_then(|o| o.get("group")).and_then(Value::as_str);
     let limit = args
         .and_then(|o| o.get("limit"))
         .and_then(Value::as_u64)
@@ -223,9 +219,7 @@ fn describe(args: Option<&Value>, registry: &ToolRegistry) -> ToolCallResult {
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
     else {
-        return ToolCallResult::error(
-            "mcp_describe_tool: `name` (string, non-empty) is required",
-        );
+        return ToolCallResult::error("mcp_describe_tool: `name` (string, non-empty) is required");
     };
 
     let Some(handler) = registry.get(name) else {
@@ -253,8 +247,7 @@ fn describe(args: Option<&Value>, registry: &ToolRegistry) -> ToolCallResult {
 }
 
 fn success_json(value: Value) -> ToolCallResult {
-    let text = serde_json::to_string_pretty(&value)
-        .unwrap_or_else(|_| value.to_string());
+    let text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string());
     ToolCallResult {
         content: vec![ToolContent::Text { text }],
         is_error: Some(false),
@@ -319,8 +312,7 @@ mod tests {
             let name = entry["name"].as_str().unwrap();
             let desc = entry["description"].as_str().unwrap();
             assert!(
-                name.to_lowercase().contains("docker")
-                    || desc.to_lowercase().contains("docker"),
+                name.to_lowercase().contains("docker") || desc.to_lowercase().contains("docker"),
                 "match {name} does not contain 'docker'"
             );
         }

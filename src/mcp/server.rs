@@ -293,10 +293,7 @@ impl McpServer {
             return Ok(());
         }
 
-        if !self
-            .client_supports_elicitation
-            .load(Ordering::Relaxed)
-        {
+        if !self.client_supports_elicitation.load(Ordering::Relaxed) {
             return Err(format!(
                 "Tool `{tool_name}` is destructive and `require_elicitation_on_destructive` is enabled, but the client does not support elicitation. Either upgrade the client or set `security.require_elicitation_on_destructive: false`."
             ));
@@ -1218,10 +1215,7 @@ impl McpServer {
             )
             .await
         {
-            return JsonRpcResponse::success_or_serialize_error(
-                id,
-                &ToolCallResult::error(msg),
-            );
+            return JsonRpcResponse::success_or_serialize_error(id, &ToolCallResult::error(msg));
         }
 
         // Task-augmented request: spawn background worker and return immediately.
@@ -2186,11 +2180,11 @@ mod tests {
     async fn test_tools_list_surfaces_meta_tools() {
         let server = create_test_server();
         let response = server.handle_tools_list(Some(json!(1)), None);
-        let tools = response.result.unwrap()["tools"].as_array().cloned().unwrap();
-        let names: Vec<&str> = tools
-            .iter()
-            .filter_map(|t| t["name"].as_str())
-            .collect();
+        let tools = response.result.unwrap()["tools"]
+            .as_array()
+            .cloned()
+            .unwrap();
+        let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
         assert!(names.contains(&super::super::meta_tools::LIST_TOOL_GROUPS));
         assert!(names.contains(&super::super::meta_tools::SEARCH_TOOLS));
         assert!(names.contains(&super::super::meta_tools::DESCRIBE_TOOL));

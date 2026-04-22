@@ -101,9 +101,8 @@ impl ElicitationService {
         tool_name: &str,
         summary: &str,
     ) -> Result<bool, ClientRequestError> {
-        let message = format!(
-            "Confirm destructive operation: `{tool_name}`\n\n{summary}\n\nProceed?"
-        );
+        let message =
+            format!("Confirm destructive operation: `{tool_name}`\n\n{summary}\n\nProceed?");
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -356,7 +355,9 @@ mod tests {
     #[tokio::test]
     async fn test_confirm_destructive_not_supported() {
         let (service, _rx) = create_test_service();
-        let result = service.confirm_destructive("ssh_terraform_apply", "rm -rf /").await;
+        let result = service
+            .confirm_destructive("ssh_terraform_apply", "rm -rf /")
+            .await;
         assert!(matches!(result, Err(ClientRequestError::NotSupported)));
     }
 
