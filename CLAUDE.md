@@ -201,3 +201,4 @@ Detailed guidance is loaded automatically via `.claude/rules/`:
 ## Recent Changes
 
 - 001-winrm-psrp-integration: Added winrm-rs + psrp-rs protocol adapters, russh 0.58->0.60
+- 2026-roadmap-alignment: opt-in `security.require_elicitation_on_destructive` (MCP `elicitation/create` confirmation before any `destructive_hint: true` tool runs); three progressive-discovery meta-tools (`mcp_list_tool_groups`, `mcp_search_tools`, `mcp_describe_tool`) surfaced at the top of `tools/list`; `SessionStore` async trait + `InMemorySessionStore` behind the HTTP session hashmap so a future Redis/Valkey store drops in without touching the handlers.

@@ -46,6 +46,7 @@ MCP SSH Bridge acts as a security boundary between an AI client (Claude Code) an
 | Shell Escaping | Single-quote wrapping for all user-supplied parameters |
 | Output Sanitization | 56 patterns masking secrets in command output (`Sanitizer`) |
 | Rate Limiting | Per-host token bucket rate limiter (`RateLimiter`) |
+| Destructive-op Confirmation | Opt-in `security.require_elicitation_on_destructive` asks the client via MCP `elicitation/create` before any tool annotated `destructive_hint: true` executes. Fail-closed when the client does not advertise the elicitation capability. |
 | Audit Logging | Async JSON-lines audit trail (`AuditLogger`) |
 | Host Key Verification | Strict mode by default (MITM protection) |
 | Memory Safety | `#![forbid(unsafe_code)]`, `Zeroizing<String>` for credentials |
