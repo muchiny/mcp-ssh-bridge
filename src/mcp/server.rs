@@ -1092,6 +1092,12 @@ impl McpServer {
         let filter_group = params.and_then(|p| p.get("group")).and_then(|v| v.as_str());
 
         let mut all_tools = self.registry.list_tools();
+        // Surface the progressive-discovery meta-tools alongside the registry
+        // so clients can find them via `tools/list`. They stay at the front
+        // so a client paging through the list sees them immediately.
+        let mut meta_defs = super::meta_tools::definitions();
+        meta_defs.extend(all_tools);
+        all_tools = meta_defs;
 
         if let Some(group_name) = filter_group {
             all_tools.retain(|t| tool_group(&t.name) == group_name);
@@ -1170,6 +1176,20 @@ impl McpServer {
         };
 
         info!(tool = %call_params.name, "Tool call");
+
+        // Progressive-discovery meta-tools are dispatched before the registry
+        // so they can inspect the registry itself. They are read-only and
+        // argument-validated locally, so they skip the elicitation gate and
+        // the task/progress plumbing.
+        if super::meta_tools::is_meta_tool(&call_params.name) {
+            let result = super::meta_tools::execute(
+                &call_params.name,
+                call_params.arguments.as_ref(),
+                &self.registry,
+            )
+            .unwrap_or_else(|| ToolCallResult::error("unreachable: meta-tool dispatch"));
+            return JsonRpcResponse::success_or_serialize_error(id, &result.without_apps());
+        }
 
         // Create progress reporter if the client sent a progressToken.
         // Prefer the per-session `notification_tx`; fall back to the
@@ -2160,6 +2180,89 @@ mod tests {
             text.contains("does not support elicitation"),
             "unexpected error text: {text}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_tools_list_surfaces_meta_tools() {
+        let server = create_test_server();
+        let response = server.handle_tools_list(Some(json!(1)), None);
+        let tools = response.result.unwrap()["tools"].as_array().cloned().unwrap();
+        let names: Vec<&str> = tools
+            .iter()
+            .filter_map(|t| t["name"].as_str())
+            .collect();
+        assert!(names.contains(&super::super::meta_tools::LIST_TOOL_GROUPS));
+        assert!(names.contains(&super::super::meta_tools::SEARCH_TOOLS));
+        assert!(names.contains(&super::super::meta_tools::DESCRIBE_TOOL));
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_dispatches_list_tool_groups() {
+        let server = create_test_server();
+        let params = json!({
+            "name": super::super::meta_tools::LIST_TOOL_GROUPS,
+            "arguments": {}
+        });
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
+            .await;
+        let result = response.result.unwrap();
+        assert_ne!(result["isError"].as_bool(), Some(true));
+        let structured = &result["structuredContent"];
+        assert!(structured["total_groups"].as_u64().unwrap_or(0) > 0);
+        assert!(structured["groups"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_dispatches_search_tools() {
+        let server = create_test_server();
+        let params = json!({
+            "name": super::super::meta_tools::SEARCH_TOOLS,
+            "arguments": {"query": "docker", "limit": 3}
+        });
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
+            .await;
+        let result = response.result.unwrap();
+        assert_ne!(result["isError"].as_bool(), Some(true));
+        let structured = &result["structuredContent"];
+        let results = structured["results"].as_array().unwrap();
+        assert!(!results.is_empty());
+        assert!(results.len() <= 3);
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_dispatches_describe_tool() {
+        let server = create_test_server();
+        // First find a real tool via list
+        let list_response = server.handle_tools_list(Some(json!(1)), None);
+        let first_real = list_response.result.unwrap()["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find_map(|t| {
+                let name = t["name"].as_str()?.to_string();
+                if !super::super::meta_tools::is_meta_tool(&name) {
+                    Some(name)
+                } else {
+                    None
+                }
+            })
+            .expect("registry has a real tool");
+
+        let params = json!({
+            "name": super::super::meta_tools::DESCRIBE_TOOL,
+            "arguments": {"name": first_real}
+        });
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None, None)
+            .await;
+        let result = response.result.unwrap();
+        assert_ne!(result["isError"].as_bool(), Some(true));
+        let structured = &result["structuredContent"];
+        assert_eq!(structured["name"], first_real);
+        assert!(structured["input_schema"].is_object());
+        assert!(structured["reduction_strategy"].is_string());
     }
 
     #[tokio::test]

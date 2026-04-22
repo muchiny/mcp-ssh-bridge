@@ -5,6 +5,7 @@ pub mod elicitation;
 pub mod history;
 mod instructions;
 pub mod logger;
+pub mod meta_tools;
 pub mod pending_requests;
 pub mod progress;
 pub mod prompt_registry;
