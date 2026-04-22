@@ -2236,11 +2236,7 @@ mod tests {
             .iter()
             .find_map(|t| {
                 let name = t["name"].as_str()?.to_string();
-                if !super::super::meta_tools::is_meta_tool(&name) {
-                    Some(name)
-                } else {
-                    None
-                }
+                (!super::super::meta_tools::is_meta_tool(&name)).then_some(name)
             })
             .expect("registry has a real tool");
 
