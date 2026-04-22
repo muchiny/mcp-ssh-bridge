@@ -23,6 +23,11 @@
   "license": "MIT",
   "mcp_version": "2025-11-25",
   "extensions": {
+    "progressive_discovery": {
+      "supported": true,
+      "description": "Three meta-tools let clients discover the registry on demand instead of loading all 338 schemas up front. Call mcp_list_tool_groups first (~74 entries), then mcp_search_tools to narrow by keyword, then mcp_describe_tool for the one full schema you need. All three are read-only and argument-validated locally.",
+      "tools": ["mcp_list_tool_groups", "mcp_search_tools", "mcp_describe_tool"]
+    },
     "data_reduction": {
       "supported": true,
       "description": "Server-side output reduction to minimize token consumption. Each tool declares an OutputKind (RawText/Tabular/Json/Yaml/Auto) that determines which params apply. Call describe-tool or inspect the tool schema to see the exact Reduction Strategy per tool.",

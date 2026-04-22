@@ -21,9 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # rustsec/audit-check@v2 crashes with "Unexpected end of JSON
+      # input" when advisories need to be ignored — run cargo-audit
+      # directly instead. It reads .cargo/audit.toml natively so the
+      # ignore list stays in one place.
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Run cargo audit
+        run: cargo audit
 
   deny:
     name: Cargo deny

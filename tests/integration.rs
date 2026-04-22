@@ -102,6 +102,7 @@ fn create_test_config() -> Config {
                 r"(?i)secret\s*=\s*\S+".to_string(),
             ],
             sanitize: SanitizeConfig::default(),
+            ..SecurityConfig::default()
         },
         limits: LimitsConfig::default(),
         audit: AuditConfig::default(),
@@ -231,6 +232,7 @@ fn test_security_config_modes() {
         blacklist: vec![],
         sanitize_patterns: vec![],
         sanitize: SanitizeConfig::default(),
+        ..SecurityConfig::default()
     };
     let strict_validator = CommandValidator::new(&strict_config);
 
@@ -244,6 +246,7 @@ fn test_security_config_modes() {
         blacklist: vec![r"dangerous".to_string()],
         sanitize_patterns: vec![],
         sanitize: SanitizeConfig::default(),
+        ..SecurityConfig::default()
     };
     let permissive_validator = CommandValidator::new(&permissive_config);
 

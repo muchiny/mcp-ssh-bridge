@@ -7,7 +7,6 @@
 //!
 //! Sessions are identified by the `Mcp-Session-Id` header.
 
-use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,13 +18,14 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde_json::Value;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::info;
 
 use super::oauth::{OAuthConfig, OAuthMetadata};
+use super::session_store::{InMemorySessionStore, SessionData, SessionStore};
 
 use crate::mcp::protocol::{
     IncomingMessage, JsonRpcError, JsonRpcMessage, JsonRpcResponse, WriterMessage,
@@ -59,25 +59,11 @@ impl Default for HttpTransportConfig {
     }
 }
 
-/// A connected HTTP session.
-struct HttpSession {
-    /// Channel for sending notifications/responses back to the SSE stream.
-    notification_tx: mpsc::Sender<WriterMessage>,
-    /// Created at timestamp.
-    created_at: std::time::Instant,
-}
-
-impl HttpSession {
-    /// Check if this session has expired (used during session cleanup).
-    #[allow(dead_code)]
-    fn is_expired(&self, timeout: Duration) -> bool {
-        self.created_at.elapsed() > timeout
-    }
-}
-
 /// Shared state for the HTTP transport.
 pub struct HttpTransportState {
-    sessions: RwLock<HashMap<String, HttpSession>>,
+    /// Pluggable session backing store (in-memory today, Redis/Valkey
+    /// once the June 2026 stateless-transport proposal lands).
+    sessions: Arc<dyn SessionStore>,
     config: HttpTransportConfig,
     /// The MCP server processes requests from any session.
     server: Arc<McpServer>,
@@ -87,10 +73,21 @@ pub struct HttpTransportState {
 
 /// Build the axum Router for the MCP HTTP transport.
 pub fn build_router(server: Arc<McpServer>, config: HttpTransportConfig) -> Router {
+    build_router_with_store(server, config, Arc::new(InMemorySessionStore::new()))
+}
+
+/// Variant of [`build_router`] that accepts a caller-provided session
+/// store. Useful for tests and for future shared-store deployments
+/// (Redis, Valkey, …) once the stateless-transport spec lands.
+pub fn build_router_with_store(
+    server: Arc<McpServer>,
+    config: HttpTransportConfig,
+    sessions: Arc<dyn SessionStore>,
+) -> Router {
     let oauth_config = Arc::new(config.oauth.clone());
 
     let state = Arc::new(HttpTransportState {
-        sessions: RwLock::new(HashMap::new()),
+        sessions,
         config,
         server,
         oauth: Arc::clone(&oauth_config),
@@ -198,29 +195,27 @@ async fn handle_post(
     };
 
     if is_initialize {
-        let sessions = state.sessions.read().await;
-        if sessions.len() >= state.config.max_sessions {
+        if state.sessions.count().await >= state.config.max_sessions {
             let resp = JsonRpcResponse::error(
                 None,
                 JsonRpcError::internal_error("Maximum sessions reached"),
             );
             return Json(resp).into_response();
         }
-        drop(sessions);
 
         // Create session channels
         let (notif_tx, _notif_rx) = mpsc::channel::<WriterMessage>(100);
 
-        let session = HttpSession {
-            notification_tx: notif_tx,
-            created_at: std::time::Instant::now(),
-        };
-
         state
             .sessions
-            .write()
-            .await
-            .insert(session_id.clone(), session);
+            .insert(
+                session_id.clone(),
+                SessionData {
+                    notification_tx: notif_tx,
+                    created_at: std::time::Instant::now(),
+                },
+            )
+            .await;
     }
 
     // Process the request through the MCP server
@@ -284,13 +279,10 @@ async fn handle_sse(State(state): State<Arc<HttpTransportState>>, headers: Heade
     // Create a notification channel for this SSE connection
     let (notif_tx, notif_rx) = mpsc::channel::<WriterMessage>(100);
 
-    // Update session with the new notification channel
-    {
-        let mut sessions = state.sessions.write().await;
-        let Some(session) = sessions.get_mut(&session_id) else {
-            return StatusCode::NOT_FOUND.into_response();
-        };
-        session.notification_tx = notif_tx;
+    // Swap the session's notification channel. 404 if the client
+    // connects to SSE before `initialize` (or after `DELETE`).
+    if !state.sessions.update_tx(&session_id, notif_tx).await {
+        return StatusCode::NOT_FOUND.into_response();
     }
 
     // Convert channel to SSE stream of Result<Event, Infallible>
@@ -319,7 +311,7 @@ async fn handle_delete(
         return StatusCode::BAD_REQUEST;
     };
 
-    if state.sessions.write().await.remove(&session_id).is_some() {
+    if state.sessions.remove(&session_id).await {
         info!(session = %session_id, "Session closed");
         StatusCode::NO_CONTENT
     } else {
@@ -370,10 +362,9 @@ async fn handle_oauth_discovery(State(state): State<Arc<HttpTransportState>>) ->
 
 /// GET /health — Simple health check endpoint.
 async fn handle_health(State(state): State<Arc<HttpTransportState>>) -> Response {
-    let sessions = state.sessions.read().await;
     Json(serde_json::json!({
         "status": "ok",
-        "sessions": sessions.len(),
+        "sessions": state.sessions.count().await,
         "max_sessions": state.config.max_sessions,
     }))
     .into_response()
@@ -462,28 +453,6 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("mcp-session-id", uuid.parse().unwrap());
         assert_eq!(get_session_id(&headers), Some(uuid));
-    }
-
-    #[test]
-    fn test_session_is_expired_false() {
-        let (tx, _rx) = tokio::sync::mpsc::channel(1);
-        let session = HttpSession {
-            notification_tx: tx,
-            created_at: std::time::Instant::now(),
-        };
-        assert!(!session.is_expired(Duration::from_secs(60)));
-    }
-
-    #[test]
-    fn test_session_is_expired_true() {
-        let (tx, _rx) = tokio::sync::mpsc::channel(1);
-        let session = HttpSession {
-            notification_tx: tx,
-            created_at: std::time::Instant::now()
-                .checked_sub(Duration::from_secs(120))
-                .unwrap(),
-        };
-        assert!(session.is_expired(Duration::from_secs(60)));
     }
 
     #[test]

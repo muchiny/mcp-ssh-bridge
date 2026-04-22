@@ -19,10 +19,18 @@ version = 2
 # Safe for local use, timing attack requires network observation
 ignore = [
     "RUSTSEC-2023-0071",   # Marvin Attack on RSA — transitive from russh, no upstream fix
-    "RUSTSEC-2026-0074",   # libcrux-ml-kem SHAKE API — transitive from russh, awaiting upstream fix
-    # Removed Sprint 2 (no longer matched by the dependency graph):
+    # aws-sdk pins rustls 0.21 / rustls-webpki 0.101.7 via aws-smithy-http-client 1.1.12.
+    # The three advisories below are patched in rustls-webpki >=0.103.12 but that
+    # version can only be pulled once aws-sdk bumps its TLS stack (unrelated to this
+    # crate). All three require certificate misissuance to exploit and are reachable
+    # only after signature verification — acceptable risk for the cloud feature.
+    "RUSTSEC-2026-0098",   # webpki: URI name constraints ignored — aws-sdk chain
+    "RUSTSEC-2026-0099",   # webpki: wildcard name constraint bypass — aws-sdk chain
+    "RUSTSEC-2026-0104",   # webpki: panic parsing CRL IssuingDistributionPoint — aws-sdk chain
+    # Removed (no longer matched by the dependency graph):
     # - RUSTSEC-2025-0134 (rustls-pemfile unmaintained)
     # - RUSTSEC-2026-0049 (rustls-webpki CRL matching)
+    # - RUSTSEC-2026-0074 (libcrux-ml-kem SHAKE API — patched upstream in russh)
 ]
 
 # =============================================================================

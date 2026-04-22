@@ -21,6 +21,7 @@ fn create_test_config() -> SecurityConfig {
         ],
         sanitize_patterns: vec![],
         sanitize: SanitizeConfig::default(),
+        ..SecurityConfig::default()
     }
 }
 
@@ -39,6 +40,7 @@ fn create_strict_config() -> SecurityConfig {
         blacklist: vec![r"rm\s+-rf".to_string()],
         sanitize_patterns: vec![],
         sanitize: SanitizeConfig::default(),
+        ..SecurityConfig::default()
     }
 }
 

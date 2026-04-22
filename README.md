@@ -41,9 +41,10 @@ Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──13 protocols�
 
 - **338 tools, 74 groups** — manage Linux, Windows, Docker, Kubernetes, Podman, databases, LDAP, network equipment, certificates, and more
 - **8 protocol adapters** — SSH, WinRM, Telnet, K8s Exec, Serial, AWS SSM, Azure, GCP
-- **Security-first** — command whitelist/blacklist, 56 secret-redaction patterns + entropy detection, tamper-proof session recording
+- **Security-first** — command whitelist/blacklist, 56 secret-redaction patterns + entropy detection, tamper-proof session recording, opt-in MCP elicitation confirmation for destructive operations
 - **Auto-discovery** — reads `~/.ssh/config` automatically, merges with YAML config
 - **Smart output** — server-side `jq_filter` / `yq_filter` / `columns` / `limit`, TSV mode (60-80% token savings), pagination via `ssh_output_fetch`, per-client size limits (see [Token-efficient output](#token-efficient-output))
+- **Progressive MCP discovery** — three meta-tools (`mcp_list_tool_groups`, `mcp_search_tools`, `mcp_describe_tool`) let clients browse the registry on demand instead of loading all 338 schemas up front
 - **CLI + MCP** — all tools available as CLI commands (10-32x token savings) or via MCP JSON-RPC
 - **6300+ tests** — `#![forbid(unsafe_code)]`, Rust 2024 edition, strict clippy
 
@@ -305,6 +306,13 @@ security:
         replacement: "[INTERNAL_REDACTED]"
 ```
 
+**Destructive-op confirmation** — opt-in gate that asks the user to confirm via MCP `elicitation/create` before any tool annotated `destructive_hint: true` (`ssh_terraform_apply`, `ssh_k8s_delete`, `ssh_cron_remove`, `ssh_win_update_reboot`, …) executes. Requires a client that advertises the elicitation capability (Claude Desktop, Claude Code):
+
+```yaml
+security:
+  require_elicitation_on_destructive: true  # default: false
+```
+
 **Audit logging:**
 
 ```yaml
@@ -503,12 +511,22 @@ mcp-ssh-bridge --json tool ssh_docker_ps host=prod
 
 ### Progressive discovery
 
+From the CLI:
+
 ```bash
 mcp-ssh-bridge list-tools --groups-only       # 74 groups (~2K tokens)
 mcp-ssh-bridge list-tools --group docker      # Tools in a group (~500 tokens)
 mcp-ssh-bridge list-tools --search kubernetes # Keyword search
 mcp-ssh-bridge describe-tool ssh_docker_ps    # Full schema for 1 tool (~200 tokens)
 ```
+
+From an MCP client (Claude Desktop / Claude Code), the same progressive-discovery pattern is available as three top-level tools so the model can walk the registry without loading all 338 schemas up front:
+
+| Tool | Purpose | Typical cost |
+|---|---|---|
+| `mcp_list_tool_groups` | List the 74 groups with counts | ~2 K tokens |
+| `mcp_search_tools` | Keyword search (`query`, `group?`, `limit=20`) | ~3 K tokens / page |
+| `mcp_describe_tool` | Full schema + reduction strategy for one tool | ~500 tokens |
 
 ### Token-efficient output
 

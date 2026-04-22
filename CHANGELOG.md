@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Summary
+
+**Destructive-op confirmation via MCP elicitation** | **Progressive discovery meta-tools** | **`SessionStore` trait for future stateless HTTP transport**
+
+### Added
+
+- **`security.require_elicitation_on_destructive`** (opt-in, default `false`) — when enabled, the server sends `elicitation/create` to the client before executing any tool annotated `destructive_hint: true` (`ssh_terraform_apply`, `ssh_k8s_delete`, `ssh_cron_remove`, `ssh_win_update_reboot`, `ssh_helm_uninstall`, and ~30 more). The tool call is rejected on decline, cancel, or when the client does not advertise the `elicitation` capability (fail-closed). Addresses Anthropic's 2026 MCP roadmap "destructive-op confirmation" recommendation.
+- **`ElicitationService::confirm_destructive(tool_name, summary)`** — builds a boolean `{confirm: bool}` schema, parses the client's reply, propagates `Declined`/`Cancelled` as user-facing errors.
+- **`McpServer.client_supports_elicitation`** — captures `InitializeParams.capabilities.elicitation` during the handshake so the gate can fail fast without a round-trip.
+- **Progressive discovery meta-tools** — three read-only MCP tools let clients browse the registry on demand instead of loading all 338 schemas up front (~100 K tokens):
+  - `mcp_list_tool_groups` — 74 groups with tool counts (~2 K tokens).
+  - `mcp_search_tools(query, group?, limit=20)` — case-insensitive substring search over name + description, compact entries without the full schema.
+  - `mcp_describe_tool(name)` — full input schema + output_kind + Reduction Strategy for one tool.
+  - All three populate `structuredContent` (MCP 2025-06-18+) and advertise `task_support: "optional"` to preserve the registry invariant.
+- **`mcp::meta_tools` module** — pure logic that consumes a `ToolRegistry` reference; dispatched specially from `handle_tools_call` before the elicitation gate and before the task/progress plumbing.
+- **`SessionStore` async trait** in `src/mcp/transport/session_store.rs` — pluggable backing store for the streamable HTTP transport with `insert`, `get_tx`, `update_tx`, `remove`, `count`. Default impl `InMemorySessionStore` preserves current behavior.
+- **`build_router_with_store(server, config, store)`** — variant of `build_router` that accepts a caller-provided `Arc<dyn SessionStore>`. Drop-in extension point for a future `RedisSessionStore` / `ValkeySessionStore` once the 2026 stateless-transport SEP lands.
+- **`.well-known/mcp/server-card.json`** — new `extensions.progressive_discovery` entry listing the three meta-tools so crawlers and registries can detect the capability without connecting.
+- **17 new tests** — 3 for the elicitation gate (unit + integration via `handle_tools_call`), 12 for meta-tools (8 unit + 4 dispatch round-trip), 4 for `InMemorySessionStore`.
+
+### Changed
+
+- **`handle_tools_call` dispatch order** — progressive-discovery meta-tools are intercepted right after params parsing; the elicitation gate runs next, covering both the synchronous path and the task-augmented async path.
+- **`HttpTransportState.sessions`** goes from owning a `RwLock<HashMap<String, HttpSession>>` to holding an `Arc<dyn SessionStore>`; the four HTTP handlers (POST init, GET SSE, DELETE, /health) route through the trait methods.
+- **`tools/list` response** — the three meta-tools are surfaced at the front of the list so clients find them before paginating through the 338 real tools.
+- **`config/config.example.yaml`** — documents the new `require_elicitation_on_destructive` flag.
+
+### Removed
+
+- **`HttpSession::is_expired`** and the two tests that exercised it — dead code; the transport never called the expiry helper.
+
 ## [1.12.0] - 2026-04-12
 
 ### Summary — Sprint 3 (complete)

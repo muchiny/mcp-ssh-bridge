@@ -9,6 +9,16 @@ ignore = [
     # Severity: 5.9 (medium) - not critical for CLI tool
     # No fixed version available
     "RUSTSEC-2023-0071",
+    # aws-sdk pins rustls 0.21 / rustls-webpki 0.101.7 via
+    # aws-smithy-http-client 1.1.12. The three advisories below are
+    # patched in rustls-webpki >=0.103.12 but that version can only be
+    # pulled once aws-sdk bumps its TLS stack (unrelated to this crate).
+    # All three require certificate misissuance to exploit and are
+    # reachable only after signature verification — acceptable risk for
+    # the cloud feature. Same list as deny.toml.
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
 ]
 
 # Warn instead of error for informational advisories
