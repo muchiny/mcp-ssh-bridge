@@ -246,6 +246,28 @@ pub struct ServerInfo {
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub website_url: Option<String>,
+    /// Optional icons for client display (SEP-973).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icons: Option<Vec<Icon>>,
+}
+
+/// Icon metadata (SEP-973). Used by `Tool`, `Resource`, `Prompt`, and
+/// `Implementation` to advertise visual affordances.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Icon {
+    /// URI to the icon — `https?://` URL or `data:` URI with base64 image.
+    pub src: String,
+    /// MIME type override (e.g. `"image/png"`, `"image/svg+xml"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    /// Sizes in `WxH` format (e.g. `["48x48", "96x96"]`) or `["any"]` for
+    /// scalable formats. Per spec this is an array, not a single string.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sizes: Option<Vec<String>>,
+    /// Designed-for theme: `"light"` or `"dark"`. Omit when theme-agnostic.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
 }
 
 /// MCP Tool Definition
@@ -264,6 +286,9 @@ pub struct Tool {
     /// Structured output schema for the tool's return value (MCP 2025-06-18+).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<Value>,
+    /// Visual affordances for client UIs (SEP-973).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icons: Option<Vec<Icon>>,
     /// Client-specific metadata hints (e.g., `anthropic/maxResultSizeChars`).
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<Value>,
@@ -1030,6 +1055,7 @@ mod tests {
                 version: SERVER_VERSION.to_string(),
                 description: None,
                 website_url: None,
+                icons: None,
             },
             instructions: None,
         };
@@ -1077,6 +1103,7 @@ mod tests {
             annotations: None,
             execution: None,
             output_schema: None,
+            icons: None,
             meta: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
@@ -1085,6 +1112,8 @@ mod tests {
         assert!(!json.contains("annotations"));
         // execution: None should be omitted
         assert!(!json.contains("execution"));
+        // icons: None should be omitted
+        assert!(!json.contains("\"icons\""));
         // meta: None should be omitted
         assert!(!json.contains("_meta"));
     }
@@ -1151,6 +1180,7 @@ mod tests {
             version: "1.0.0".to_string(),
             description: Some("A test server".to_string()),
             website_url: Some("https://example.com".to_string()),
+            icons: None,
         };
         let json = serde_json::to_string(&info).unwrap();
         assert!(json.contains("\"description\""));
@@ -1165,10 +1195,90 @@ mod tests {
             version: "1.0.0".to_string(),
             description: None,
             website_url: None,
+            icons: None,
         };
         let json = serde_json::to_string(&info).unwrap();
         assert!(!json.contains("description"));
         assert!(!json.contains("websiteUrl"));
+    }
+
+    // ============== Icon Tests (SEP-973) ==============
+
+    #[test]
+    fn test_icon_full_serialization_camel_case() {
+        let icon = Icon {
+            src: "https://example.com/icon.png".to_string(),
+            mime_type: Some("image/png".to_string()),
+            sizes: Some(vec!["48x48".to_string(), "96x96".to_string()]),
+            theme: Some("dark".to_string()),
+        };
+        let json = serde_json::to_value(&icon).unwrap();
+        assert_eq!(json["src"], "https://example.com/icon.png");
+        assert_eq!(json["mimeType"], "image/png");
+        assert!(json["sizes"].is_array());
+        assert_eq!(json["sizes"][0], "48x48");
+        assert_eq!(json["theme"], "dark");
+        assert!(json.get("mime_type").is_none());
+    }
+
+    #[test]
+    fn test_icon_minimal_omits_optional_fields() {
+        let icon = Icon {
+            src: "data:image/svg+xml;base64,PHN2Zy8+".to_string(),
+            mime_type: None,
+            sizes: None,
+            theme: None,
+        };
+        let json = serde_json::to_string(&icon).unwrap();
+        assert!(json.contains("\"src\""));
+        assert!(!json.contains("mimeType"));
+        assert!(!json.contains("sizes"));
+        assert!(!json.contains("theme"));
+    }
+
+    #[test]
+    fn test_tool_with_icons_serialization() {
+        let tool = Tool {
+            name: "ssh_docker_ps".to_string(),
+            description: "List containers".to_string(),
+            input_schema: json!({"type": "object"}),
+            annotations: None,
+            execution: None,
+            output_schema: None,
+            icons: Some(vec![Icon {
+                src: "https://example.com/docker.svg".to_string(),
+                mime_type: Some("image/svg+xml".to_string()),
+                sizes: Some(vec!["any".to_string()]),
+                theme: None,
+            }]),
+            meta: None,
+        };
+        let json = serde_json::to_value(&tool).unwrap();
+        assert!(json["icons"].is_array());
+        assert_eq!(json["icons"][0]["src"], "https://example.com/docker.svg");
+        assert_eq!(json["icons"][0]["sizes"][0], "any");
+    }
+
+    #[test]
+    fn test_server_info_with_icons() {
+        let info = ServerInfo {
+            name: "test".to_string(),
+            version: "1.0.0".to_string(),
+            description: None,
+            website_url: None,
+            icons: Some(vec![Icon {
+                src: "https://example.com/server-icon.png".to_string(),
+                mime_type: None,
+                sizes: None,
+                theme: None,
+            }]),
+        };
+        let json = serde_json::to_value(&info).unwrap();
+        assert!(json["icons"].is_array());
+        assert_eq!(
+            json["icons"][0]["src"],
+            "https://example.com/server-icon.png"
+        );
     }
 
     // ============== Tool Annotations Tests ==============
@@ -1182,6 +1292,7 @@ mod tests {
             annotations: Some(ToolAnnotations::read_only("List Docker Containers")),
             execution: None,
             output_schema: None,
+            icons: None,
             meta: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
@@ -1200,6 +1311,7 @@ mod tests {
             annotations: None,
             execution: None,
             output_schema: None,
+            icons: None,
             meta: None,
         };
         let json = serde_json::to_string(&tool).unwrap();
@@ -1557,6 +1669,7 @@ mod tests {
                 task_support: "optional".to_string(),
             }),
             output_schema: None,
+            icons: None,
             meta: None,
         };
         let json = serde_json::to_value(&tool).unwrap();
@@ -1572,6 +1685,7 @@ mod tests {
             annotations: None,
             execution: None,
             output_schema: None,
+            icons: None,
             meta: Some(json!({"anthropic/maxResultSizeChars": 200_000})),
         };
         let json = serde_json::to_value(&tool).unwrap();
@@ -1587,6 +1701,7 @@ mod tests {
             annotations: None,
             execution: None,
             output_schema: None,
+            icons: None,
             meta: None,
         };
         let json = serde_json::to_string(&tool).unwrap();

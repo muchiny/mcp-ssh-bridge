@@ -1067,6 +1067,7 @@ impl McpServer {
                     "Secure SSH bridge for remote server management via MCP".to_string(),
                 ),
                 website_url: Some("https://github.com/petermachini/mcp-ssh-bridge".to_string()),
+                icons: None,
             },
             instructions: Some(instructions),
         };
@@ -1386,6 +1387,22 @@ impl McpServer {
         // legacy global slot for code paths that don't have a session.
         let task_notification_tx = notification_tx.clone();
         let global_notification_tx = Arc::clone(&self.notification_tx);
+
+        // SEP-1686: emit `notifications/tasks/status` for the initial
+        // non-existent → working transition. The worker emits the matching
+        // terminal notification on completion/failure/cancellation.
+        {
+            let msg = WriterMessage::Notification(JsonRpcNotification::task_status(&task_info));
+            if let Some(tx) = task_notification_tx.as_ref() {
+                let _ = tx.try_send(msg);
+            } else {
+                let tx_guard = global_notification_tx.read().await;
+                if let Some(tx) = tx_guard.as_ref() {
+                    let _ = tx.try_send(msg);
+                }
+            }
+        }
+
         // Propagate the task's cancel_token into the ToolContext so the
         // handler can do clean shutdown (e.g. evicting the SSH connection
         // from the pool) when the task is cancelled via `tasks/cancel`.
@@ -2884,6 +2901,55 @@ mod tests {
         assert_eq!(result["task"]["status"], "working");
         assert!(result["task"]["createdAt"].is_string());
         assert!(result["task"]["pollInterval"].is_number());
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_with_task_emits_status_working_notification() {
+        // SEP-1686: every status transition (including non-existent → working at
+        // creation) MUST emit `notifications/tasks/status` so clients can track
+        // the task lifecycle without polling.
+        let server = create_test_server();
+        let (tx, mut rx) = mpsc::channel::<WriterMessage>(8);
+        let params = json!({
+            "name": "ssh_status",
+            "arguments": {},
+            "task": {"ttl": 30000}
+        });
+
+        let response = server
+            .handle_tools_call(Some(json!(1)), Some(params), None, Some(tx))
+            .await;
+
+        assert!(response.error.is_none());
+        let result = response.result.unwrap();
+        let task_id = result["task"]["taskId"]
+            .as_str()
+            .expect("response should carry task.taskId")
+            .to_string();
+
+        // The creation notification is emitted synchronously before the response
+        // is built, so it MUST already be queued. Drain anything on the channel
+        // and look for the working notification specifically — the spawned
+        // worker may also race in a terminal-status notification.
+        let mut found_working = false;
+        while let Ok(Some(msg)) =
+            tokio::time::timeout(std::time::Duration::from_millis(200), rx.recv()).await
+        {
+            if let WriterMessage::Notification(n) = msg
+                && n.method == "notifications/tasks/status"
+            {
+                let params = n.params.expect("tasks/status should carry params");
+                if params["taskId"] == task_id.as_str() && params["status"] == "working" {
+                    found_working = true;
+                    break;
+                }
+            }
+        }
+
+        assert!(
+            found_working,
+            "expected `notifications/tasks/status` with status=\"working\" and taskId={task_id}"
+        );
     }
 
     #[tokio::test]

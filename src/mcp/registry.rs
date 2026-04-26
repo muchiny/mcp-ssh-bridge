@@ -177,6 +177,7 @@ impl ToolRegistry {
                         task_support: "optional".to_string(),
                     }),
                     output_schema: None,
+                    icons: None,
                     meta: tool_meta(schema.name),
                 }
             })

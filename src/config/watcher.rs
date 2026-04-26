@@ -360,6 +360,12 @@ mod tests {
         let config = Arc::new(RwLock::new(initial_config.clone()));
         let _watcher = ConfigWatcher::new(&config_path, Arc::clone(&config)).unwrap();
 
+        // Give the inotify watcher time to register with the kernel before
+        // the first write. Under instrumented builds (llvm-cov) the watcher
+        // thread can be slow to come online, causing the first event to be
+        // missed when the write happens immediately after `new()`.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
         // Modify the config file
         initial_config.hosts.insert(
             "new-host".to_string(),

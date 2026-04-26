@@ -84,6 +84,7 @@ async fn main() -> Result<()> {
                 ),
                 max_sessions: config.http.max_sessions,
                 oauth,
+                allowed_origins: config.http.allowed_origins.clone(),
             };
 
             http_transport::serve(server, http_config).await?;

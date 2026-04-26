@@ -12,10 +12,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-2025--11--25-blueviolet?style=flat-square)](https://modelcontextprotocol.io)
 
-**A Rust MCP server for secure remote infrastructure management — 338 tools, 13 protocols.**
+**A Rust MCP server for secure remote infrastructure management — 357 tools, 9 protocols.**
 
 ```
-Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──13 protocols──►  Your Infrastructure
+Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──9 protocols──►  Your Infrastructure
 ```
 
 </div>
@@ -31,6 +31,7 @@ Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──13 protocols�
 - [Tool Groups](#tool-groups)
 - [MCP Prompts & Resources](#mcp-prompts--resources)
 - [CLI Usage](#cli-usage)
+- [Daemon Mode](#daemon-mode)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [License](#license)
@@ -39,14 +40,16 @@ Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──13 protocols�
 
 ## Features
 
-- **338 tools, 74 groups** — manage Linux, Windows, Docker, Kubernetes, Podman, databases, LDAP, network equipment, certificates, and more
-- **8 protocol adapters** — SSH, WinRM, Telnet, K8s Exec, Serial, AWS SSM, Azure, GCP
-- **Security-first** — command whitelist/blacklist, 56 secret-redaction patterns + entropy detection, tamper-proof session recording, opt-in MCP elicitation confirmation for destructive operations
+- **357 tools, 75 groups** — manage Linux, Windows, Docker, Kubernetes, Podman, AWX, databases, LDAP, network equipment, certificates, and more
+- **9 protocol adapters** — SSH, WinRM, PSRP (PowerShell Remoting), Telnet, K8s Exec, Serial, AWS SSM, Azure, GCP
+- **Security-first** — command whitelist/blacklist, 62 secret-redaction patterns + entropy detection, tamper-proof session recording, opt-in MCP elicitation confirmation for destructive operations
 - **Auto-discovery** — reads `~/.ssh/config` automatically, merges with YAML config
 - **Smart output** — server-side `jq_filter` / `yq_filter` / `columns` / `limit`, TSV mode (60-80% token savings), pagination via `ssh_output_fetch`, per-client size limits (see [Token-efficient output](#token-efficient-output))
-- **Progressive MCP discovery** — three meta-tools (`mcp_list_tool_groups`, `mcp_search_tools`, `mcp_describe_tool`) let clients browse the registry on demand instead of loading all 338 schemas up front
+- **Progressive MCP discovery** — three meta-tools (`mcp_list_tool_groups`, `mcp_search_tools`, `mcp_describe_tool`) let clients browse the registry on demand instead of loading all 357 schemas up front
+- **MCP Tasks support** — every tool advertises `taskSupport: "optional"`, enabling async cancellation and progress notifications for long-running operations
 - **CLI + MCP** — all tools available as CLI commands (10-32x token savings) or via MCP JSON-RPC
-- **6300+ tests** — `#![forbid(unsafe_code)]`, Rust 2024 edition, strict clippy
+- **Daemon mode** — Unix-socket transport for multi-client local usage; built-in `WinRmPool` (120 s TTL) and `K8sExecPool` (300 s TTL) amortize TLS handshakes across calls
+- **7500+ tests** — `#![forbid(unsafe_code)]`, Rust 2024 edition, strict clippy
 
 ---
 
@@ -132,11 +135,11 @@ mcp-ssh-bridge status
 
 ## Architecture
 
-MCP SSH Bridge sits between Claude Code and your infrastructure. It routes commands through 8 protocol adapters with built-in security validation, output sanitization, and audit logging.
+MCP SSH Bridge sits between Claude Code and your infrastructure. It routes commands through 9 protocol adapters with built-in security validation, output sanitization, and audit logging.
 
 ```mermaid
 graph LR
-    CC[Claude Code] -->|JSON-RPC stdio| BR[MCP SSH Bridge]
+    CC[Claude Code] -->|JSON-RPC stdio or Unix socket| BR[MCP SSH Bridge]
 
     BR --> SEC[Security<br/>Validator · Sanitizer · Audit]
     SEC --> ER[Executor Router]
@@ -144,6 +147,7 @@ graph LR
     subgraph "Air-Gapped Protocols"
         ER -->|SSH| P1[Linux / Windows<br/>Docker · K8s · Network]
         ER -->|WinRM| P2[Windows]
+        ER -->|PSRP| P2b[PowerShell Remoting]
         ER -->|Telnet| P3[Legacy Devices]
     end
 
@@ -339,7 +343,7 @@ recording:
 
 ## Tool Groups
 
-338 tools organized in 74 groups — all enabled by default. Disable groups you don't need:
+357 tools organized in 75 groups — all enabled by default. Disable groups you don't need:
 
 ```yaml
 tool_groups:
@@ -350,11 +354,11 @@ tool_groups:
 ```
 
 <details>
-<summary><strong>Linux groups (59 groups, 261 tools)</strong></summary>
+<summary><strong>Linux & cross-platform groups (41 groups)</strong></summary>
 
 | Group | Tools |
 |-------|-------|
-| `core` | ssh_exec, ssh_exec_multi, ssh_status, ssh_health, ssh_history, ssh_output_fetch |
+| `core` | ssh_exec, ssh_exec_multi (with `diff` / `diff_baseline` / `normalize` for cross-host drift detection), ssh_status, ssh_health, ssh_history, ssh_output_fetch |
 | `config` | ssh_config_get, ssh_config_set |
 | `file_transfer` | ssh_upload, ssh_download, ssh_sync |
 | `file_ops` | ssh_file_read, ssh_file_write, ssh_file_chmod, ssh_file_chown, ssh_file_stat, ssh_file_diff, ssh_file_patch, ssh_file_template |
@@ -374,6 +378,7 @@ tool_groups:
 | `kubernetes` | ssh_k8s_get, ssh_k8s_logs, ssh_k8s_describe, ssh_k8s_apply, ssh_k8s_delete, ssh_k8s_rollout, ssh_k8s_scale, ssh_k8s_exec, ssh_k8s_top, ssh_helm_list, ssh_helm_status, ssh_helm_upgrade, ssh_helm_install, ssh_helm_rollback, ssh_helm_history, ssh_helm_uninstall |
 | `git` | ssh_git_status, ssh_git_log, ssh_git_diff, ssh_git_pull, ssh_git_clone, ssh_git_branch, ssh_git_checkout |
 | `ansible` | ssh_ansible_playbook, ssh_ansible_inventory, ssh_ansible_adhoc |
+| `awx` | ssh_awx_status, ssh_awx_inventories, ssh_awx_inventory_hosts, ssh_awx_templates, ssh_awx_template_detail, ssh_awx_job_launch, ssh_awx_job_status, ssh_awx_job_summary, ssh_awx_job_stdout, ssh_awx_job_events, ssh_awx_job_follow, ssh_awx_job_cancel, ssh_awx_project_sync |
 | `terraform` | ssh_terraform_init, ssh_terraform_plan, ssh_terraform_apply, ssh_terraform_state, ssh_terraform_output |
 | `vault` | ssh_vault_status, ssh_vault_read, ssh_vault_list, ssh_vault_write |
 | `systemd` | ssh_service_status, ssh_service_start, ssh_service_stop, ssh_service_restart, ssh_service_list, ssh_service_logs, ssh_service_enable, ssh_service_disable, ssh_service_daemon_reload |
@@ -398,7 +403,7 @@ tool_groups:
 </details>
 
 <details>
-<summary><strong>Windows groups (13 groups, 74 tools)</strong></summary>
+<summary><strong>Windows groups (13 groups)</strong></summary>
 
 | Group | Tools |
 |-------|-------|
@@ -419,7 +424,7 @@ tool_groups:
 </details>
 
 <details>
-<summary><strong>Advanced groups (19 groups)</strong></summary>
+<summary><strong>Advanced groups (21 groups)</strong></summary>
 
 | Group | Tools | Description |
 |-------|-------|-------------|
@@ -474,6 +479,9 @@ tool_groups:
 | `metrics://{host}` | System metrics (CPU, memory, disk, network, load) as JSON |
 | `file://{host}/{path}` | Remote file content |
 | `log://{host}/{path}` | Last lines of a log file |
+| `health://{host}` | Health check summary for a host (connectivity, load, key services) |
+| `history://{host}` | Recent command history captured by the bridge for that host |
+| `services://{host}` | Snapshot of active systemd services on the host |
 
 </details>
 
@@ -495,7 +503,7 @@ mcp-ssh-bridge validate                     # Validate config file
 mcp-ssh-bridge config-diff                  # Compare config vs defaults
 ```
 
-### Tool invocation (all 338 MCP tools)
+### Tool invocation (all 357 MCP tools)
 
 ```bash
 # Invoke any tool with key=value pairs
@@ -514,17 +522,17 @@ mcp-ssh-bridge --json tool ssh_docker_ps host=prod
 From the CLI:
 
 ```bash
-mcp-ssh-bridge list-tools --groups-only       # 74 groups (~2K tokens)
+mcp-ssh-bridge list-tools --groups-only       # 75 groups (~2K tokens)
 mcp-ssh-bridge list-tools --group docker      # Tools in a group (~500 tokens)
 mcp-ssh-bridge list-tools --search kubernetes # Keyword search
 mcp-ssh-bridge describe-tool ssh_docker_ps    # Full schema for 1 tool (~200 tokens)
 ```
 
-From an MCP client (Claude Desktop / Claude Code), the same progressive-discovery pattern is available as three top-level tools so the model can walk the registry without loading all 338 schemas up front:
+From an MCP client (Claude Desktop / Claude Code), the same progressive-discovery pattern is available as three top-level tools so the model can walk the registry without loading all 357 schemas up front:
 
 | Tool | Purpose | Typical cost |
 |---|---|---|
-| `mcp_list_tool_groups` | List the 74 groups with counts | ~2 K tokens |
+| `mcp_list_tool_groups` | List the 75 groups with counts | ~2 K tokens |
 | `mcp_search_tools` | Keyword search (`query`, `group?`, `limit=20`) | ~3 K tokens / page |
 | `mcp_describe_tool` | Full schema + reduction strategy for one tool | ~500 tokens |
 
@@ -614,6 +622,29 @@ This enables:
 
 ---
 
+## Daemon Mode
+
+In addition to the default stdio transport, the bridge can run as a long-lived daemon listening on a Unix socket. Multiple local clients (Claude Code, Claude Desktop, scripts) can connect concurrently to the same daemon, each getting an isolated MCP session that shares the same audit log, output cache, and connection pools.
+
+```bash
+# Start the daemon (foreground)
+mcp-ssh-bridge --daemon /tmp/mcp-ssh-bridge.sock
+
+# Connect a client to the socket via the standard MCP `--transport unix` flag,
+# or any tool that speaks JSON-RPC over a Unix socket.
+```
+
+**Built-in connection pools** kick in automatically when you build with the corresponding feature flags:
+
+| Pool | Default TTL | Effect |
+|---|---|---|
+| `WinRmPool` (`--features winrm`) | 120 s | Reuses the per-host `reqwest::Client` so back-to-back WinRM calls skip the TLS handshake. |
+| `K8sExecPool` (`--features k8s-exec`) | 300 s | Caches the `kube::Client` (kubeconfig walk + auth-plugin refresh) across `ssh_k8s_*` calls. |
+
+Both pools clean up idle entries automatically; nothing is required to enable them beyond compiling the relevant feature.
+
+---
+
 ## Troubleshooting
 
 <details>
@@ -653,7 +684,9 @@ make ci-full            # Full CI (ci + hack + geiger)
 make dxt                # Build DXT package for Claude Desktop
 ```
 
-Rust edition 2024, MSRV 1.94+. `#![forbid(unsafe_code)]`. 6300+ tests.
+Rust edition 2024, MSRV 1.94+. `#![forbid(unsafe_code)]`. 7500+ tests.
+
+**Adding a new tool — 3 steps:** annotate the struct with `#[mcp_tool]` (or `#[mcp_standard_tool]`), add the `mod` + `pub use` line, and (only if introducing a new group) update `ToolGroupsConfig`. The `inventory` crate auto-registers the handler at compile time — no test-count assertions to update.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [THREAT_MODEL.md](docs/THREAT_MODEL.md) for security design.
 

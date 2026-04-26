@@ -96,6 +96,12 @@ pub struct HttpTransportConfig {
     /// OAuth 2.0 configuration.
     #[serde(default)]
     pub oauth: HttpOAuthConfig,
+
+    /// Allowlist of `Origin` headers (anti-DNS-rebinding, MCP 2025-11-25).
+    /// Default: localhost variants only. Production servers MUST list
+    /// their public origin (e.g. `https://app.example.com`).
+    #[serde(default = "default_http_allowed_origins")]
+    pub allowed_origins: Vec<String>,
 }
 
 impl Default for HttpTransportConfig {
@@ -106,12 +112,24 @@ impl Default for HttpTransportConfig {
             session_timeout_seconds: default_http_session_timeout(),
             max_sessions: default_http_max_sessions(),
             oauth: HttpOAuthConfig::default(),
+            allowed_origins: default_http_allowed_origins(),
         }
     }
 }
 
 fn default_http_bind() -> String {
     "0.0.0.0:3000".to_string()
+}
+
+fn default_http_allowed_origins() -> Vec<String> {
+    vec![
+        "http://localhost".to_string(),
+        "https://localhost".to_string(),
+        "http://127.0.0.1".to_string(),
+        "https://127.0.0.1".to_string(),
+        "http://[::1]".to_string(),
+        "https://[::1]".to_string(),
+    ]
 }
 
 const fn default_http_max_body_size() -> usize {

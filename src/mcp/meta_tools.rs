@@ -56,6 +56,7 @@ pub fn definitions() -> Vec<Tool> {
                 task_support: "optional".to_string(),
             }),
             output_schema: None,
+            icons: None,
             meta: None,
         },
         Tool {
@@ -93,6 +94,7 @@ pub fn definitions() -> Vec<Tool> {
                 task_support: "optional".to_string(),
             }),
             output_schema: None,
+            icons: None,
             meta: None,
         },
         Tool {
@@ -118,6 +120,7 @@ pub fn definitions() -> Vec<Tool> {
                 task_support: "optional".to_string(),
             }),
             output_schema: None,
+            icons: None,
             meta: None,
         },
     ]
@@ -310,10 +313,11 @@ mod tests {
         assert!(!results.is_empty());
         for entry in results {
             let name = entry["name"].as_str().unwrap();
-            let desc = entry["description"].as_str().unwrap();
+            let full_desc = registry.get(name).expect("registry has tool").description();
             assert!(
-                name.to_lowercase().contains("docker") || desc.to_lowercase().contains("docker"),
-                "match {name} does not contain 'docker'"
+                name.to_lowercase().contains("docker")
+                    || full_desc.to_lowercase().contains("docker"),
+                "match {name} does not contain 'docker' in name or full description"
             );
         }
     }

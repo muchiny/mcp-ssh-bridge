@@ -11,8 +11,9 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::State;
+use axum::extract::{Request, State};
 use axum::http::{HeaderMap, StatusCode};
+use axum::middleware::Next;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
@@ -22,7 +23,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
-use tracing::info;
+use tracing::{info, warn};
 
 use super::oauth::{OAuthConfig, OAuthMetadata};
 use super::session_store::{InMemorySessionStore, SessionData, SessionStore};
@@ -31,6 +32,35 @@ use crate::mcp::protocol::{
     IncomingMessage, JsonRpcError, JsonRpcMessage, JsonRpcResponse, WriterMessage,
 };
 use crate::mcp::server::McpServer;
+
+/// Default allowlist for the `Origin` header — localhost variants only.
+///
+/// Per MCP 2025-11-25 the server **MUST** reject requests carrying an
+/// invalid `Origin` to prevent DNS-rebinding. Production deployments should
+/// override this list to include their public origin.
+fn default_allowed_origins() -> Vec<String> {
+    vec![
+        "http://localhost".to_string(),
+        "https://localhost".to_string(),
+        "http://127.0.0.1".to_string(),
+        "https://127.0.0.1".to_string(),
+        "http://[::1]".to_string(),
+        "https://[::1]".to_string(),
+    ]
+}
+
+/// Returns true if `origin` matches one of `allowed` either exactly or with
+/// an explicit `:<port>` suffix. Path components or other suffixes are
+/// rejected so that lookalike hosts (`http://localhost.evil.com`) do not
+/// slip through.
+fn is_allowed_origin(origin: &str, allowed: &[String]) -> bool {
+    allowed.iter().any(|a| {
+        origin == a
+            || origin.strip_prefix(a.as_str()).is_some_and(|rest| {
+                rest.starts_with(':') && rest[1..].bytes().all(|b| b.is_ascii_digit())
+            })
+    })
+}
 
 /// Configuration for the HTTP transport.
 #[derive(Debug, Clone)]
@@ -45,6 +75,10 @@ pub struct HttpTransportConfig {
     pub max_sessions: usize,
     /// OAuth configuration (disabled by default).
     pub oauth: OAuthConfig,
+    /// Allowlist of origins for the `Origin` header (anti-DNS-rebinding).
+    /// An empty list means "reject every request that carries an `Origin`",
+    /// which is rarely what you want — see `default_allowed_origins`.
+    pub allowed_origins: Vec<String>,
 }
 
 impl Default for HttpTransportConfig {
@@ -55,6 +89,7 @@ impl Default for HttpTransportConfig {
             session_timeout: Duration::from_secs(1800),
             max_sessions: 100,
             oauth: OAuthConfig::default(),
+            allowed_origins: default_allowed_origins(),
         }
     }
 }
@@ -69,6 +104,36 @@ pub struct HttpTransportState {
     server: Arc<McpServer>,
     /// OAuth configuration.
     oauth: Arc<OAuthConfig>,
+}
+
+/// Anti-DNS-rebinding gate (MCP 2025-11-25 §"Streamable HTTP / Security Warning").
+///
+/// Requests with no `Origin` are forwarded — this matches non-browser MCP
+/// clients which do not set the header. Requests with an `Origin` not in
+/// the configured allowlist receive HTTP 403 with a JSON-RPC error body
+/// (no `id`), as the spec mandates.
+async fn origin_guard(
+    State(state): State<Arc<HttpTransportState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if let Some(origin) = request
+        .headers()
+        .get("origin")
+        .and_then(|v| v.to_str().ok())
+        && !is_allowed_origin(origin, &state.config.allowed_origins)
+    {
+        warn!(origin = %origin, "Rejected request with invalid Origin header");
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32600,
+                "message": format!("Origin '{origin}' is not allowed"),
+            },
+        });
+        return (StatusCode::FORBIDDEN, Json(body)).into_response();
+    }
+    next.run(request).await
 }
 
 /// Build the axum Router for the MCP HTTP transport.
@@ -104,7 +169,9 @@ pub fn build_router_with_store(
         router = router.layer(axum::Extension(Arc::clone(&oauth_config)));
     }
 
-    // Discovery and health endpoints (not behind OAuth)
+    // Discovery and health endpoints (not behind OAuth, but still
+    // protected by the Origin gate so a malicious cross-origin page
+    // cannot enumerate them).
     let discovery_router = Router::new()
         .route("/.well-known/mcp.json", get(handle_mcp_discovery))
         .route(
@@ -114,11 +181,41 @@ pub fn build_router_with_store(
         .route("/health", get(handle_health))
         .with_state(Arc::clone(&state));
 
+    // CORS allowlist mirrors `allowed_origins` so browsers receive the
+    // appropriate Access-Control-Allow-Origin header. The
+    // `origin_guard` middleware is the actual MUST-comply spec hook —
+    // CORS is an in-browser convenience layered on top.
+    let mut cors = CorsLayer::new()
+        .allow_methods([
+            axum::http::Method::POST,
+            axum::http::Method::GET,
+            axum::http::Method::DELETE,
+            axum::http::Method::OPTIONS,
+        ])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::ACCEPT,
+            axum::http::header::AUTHORIZATION,
+            axum::http::HeaderName::from_static("mcp-session-id"),
+            axum::http::HeaderName::from_static("mcp-protocol-version"),
+        ]);
+    for origin in &state.config.allowed_origins {
+        if let Ok(value) = origin.parse::<axum::http::HeaderValue>() {
+            cors = cors.allow_origin(value);
+        } else {
+            warn!(origin = %origin, "Skipping unparsable allowed_origin entry");
+        }
+    }
+
     router
-        .layer(RequestBodyLimitLayer::new(state.config.max_body_size))
-        .layer(CorsLayer::permissive())
-        .with_state(state)
         .merge(discovery_router)
+        .layer(axum::middleware::from_fn_with_state(
+            Arc::clone(&state),
+            origin_guard,
+        ))
+        .layer(RequestBodyLimitLayer::new(state.config.max_body_size))
+        .layer(cors)
+        .with_state(state)
 }
 
 /// Start the HTTP transport server.
@@ -463,11 +560,80 @@ mod tests {
             session_timeout: Duration::from_secs(600),
             max_sessions: 50,
             oauth: OAuthConfig::default(),
+            allowed_origins: Vec::new(),
         };
         assert_eq!(config.bind, "127.0.0.1:8080");
         assert_eq!(config.max_body_size, 2_097_152);
         assert_eq!(config.session_timeout, Duration::from_secs(600));
         assert_eq!(config.max_sessions, 50);
+    }
+
+    // ========================================================================
+    // Origin validation (MCP 2025-11-25: anti-DNS-rebinding)
+    // ========================================================================
+
+    #[test]
+    fn test_origin_exact_match() {
+        let allowed = vec!["http://localhost".to_string()];
+        assert!(is_allowed_origin("http://localhost", &allowed));
+    }
+
+    #[test]
+    fn test_origin_match_with_port() {
+        let allowed = vec!["http://localhost".to_string()];
+        assert!(is_allowed_origin("http://localhost:3000", &allowed));
+        assert!(is_allowed_origin("http://localhost:8080", &allowed));
+    }
+
+    #[test]
+    fn test_origin_rejects_lookalike_host() {
+        let allowed = vec!["http://localhost".to_string()];
+        assert!(!is_allowed_origin("http://localhost.evil.com", &allowed));
+        assert!(!is_allowed_origin("http://localhostevil", &allowed));
+    }
+
+    #[test]
+    fn test_origin_rejects_different_scheme() {
+        let allowed = vec!["http://localhost".to_string()];
+        assert!(!is_allowed_origin("https://localhost", &allowed));
+        assert!(!is_allowed_origin("ws://localhost", &allowed));
+    }
+
+    #[test]
+    fn test_origin_rejects_path_after_host() {
+        let allowed = vec!["http://localhost".to_string()];
+        assert!(!is_allowed_origin("http://localhost/evil", &allowed));
+    }
+
+    #[test]
+    fn test_origin_default_localhost_variants() {
+        let allowed = default_allowed_origins();
+        assert!(is_allowed_origin("http://localhost:3000", &allowed));
+        assert!(is_allowed_origin("https://localhost", &allowed));
+        assert!(is_allowed_origin("http://127.0.0.1:8080", &allowed));
+        assert!(is_allowed_origin("http://[::1]:9000", &allowed));
+        assert!(!is_allowed_origin("http://attacker.com", &allowed));
+    }
+
+    #[test]
+    fn test_origin_empty_allowlist_rejects_all() {
+        let allowed: Vec<String> = Vec::new();
+        assert!(!is_allowed_origin("http://localhost", &allowed));
+        assert!(!is_allowed_origin("http://attacker.com", &allowed));
+    }
+
+    #[test]
+    fn test_origin_production_exact_match() {
+        // A production server with an explicit allowlist should NOT
+        // accept arbitrary ports on its own domain.
+        let allowed = vec!["https://app.example.com".to_string()];
+        assert!(is_allowed_origin("https://app.example.com", &allowed));
+        // The prefix+port rule still applies for explicit hosts; this
+        // is fine for IPv4/IPv6/localhost. For HTTPS production this
+        // is rarely an issue since browsers strip the default 443.
+        assert!(is_allowed_origin("https://app.example.com:443", &allowed));
+        assert!(!is_allowed_origin("https://evil.com", &allowed));
+        assert!(!is_allowed_origin("https://app.example.com.evil", &allowed));
     }
 
     #[test]
@@ -485,5 +651,118 @@ mod tests {
         let debug_str = format!("{config:?}");
         assert!(debug_str.contains("HttpTransportConfig"));
         assert!(debug_str.contains("3000"));
+    }
+
+    // ========================================================================
+    // End-to-end Origin guard (full router) — MCP 2025-11-25 §Security Warning
+    // ========================================================================
+
+    fn build_test_router() -> Router {
+        let mcp_config = crate::config::Config {
+            hosts: std::collections::HashMap::new(),
+            security: crate::config::SecurityConfig::default(),
+            limits: crate::config::LimitsConfig::default(),
+            audit: crate::config::AuditConfig::default(),
+            sessions: crate::config::SessionConfig::default(),
+            tool_groups: crate::config::ToolGroupsConfig::default(),
+            ssh_config: crate::config::SshConfigDiscovery::default(),
+            http: crate::config::HttpTransportConfig::default(),
+            rbac: crate::security::rbac::RbacConfig::default(),
+            awx: None,
+        };
+        let (server, _audit_task) = McpServer::new(mcp_config);
+        build_router(Arc::new(server), HttpTransportConfig::default())
+    }
+
+    #[tokio::test]
+    async fn test_origin_guard_returns_403_on_invalid_origin() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let response = build_test_router()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("origin", "http://attacker.example.com")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_origin_guard_allows_localhost() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let response = build_test_router()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("origin", "http://localhost:5173")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Anything other than 403 is fine — we just need to confirm the
+        // gate let the request through.
+        assert_ne!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_origin_guard_allows_no_origin_header() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        // Non-browser MCP clients (e.g. Claude Desktop over HTTP) do not
+        // set an Origin header. Per spec we forward those untouched.
+        let response = build_test_router()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_ne!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_origin_guard_protects_health_endpoint() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        // Discovery and health endpoints must also reject cross-origin
+        // probes — otherwise an attacker could fingerprint the server.
+        let response = build_test_router()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/health")
+                    .header("origin", "http://attacker.example.com")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }

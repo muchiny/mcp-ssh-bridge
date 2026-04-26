@@ -5,7 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.14.0] - 2026-04-26
+
+### Summary
+
+**SEP-973 Icons on `Tool` / `ServerInfo`** | **MCP 2025-11-25 anti-DNS-rebinding Origin guard** | **SEP-1686 `notifications/tasks/status` on task creation** | **CORS allowlist replaces `permissive()`**
+
+### Added
+
+- **SEP-973 Icons support** — new `Icon { src, mime_type, sizes, theme }` struct in `src/mcp/protocol.rs`, surfaced on `Tool` and `ServerInfo`. Lets MCP clients render per-tool / per-server visual affordances. All fields optional; serialization stays byte-identical when `icons = None`.
+- **Anti-DNS-rebinding Origin guard** (`origin_guard` axum middleware in `src/mcp/transport/http.rs`) — closes the hole called out in MCP 2025-11-25 §"Streamable HTTP / Security Warning". Requests with no `Origin` (non-browser clients like Claude Desktop) are forwarded; an `Origin` not in the allowlist returns HTTP 403 with a JSON-RPC error body. Covers the MCP routes and the `/health` + `.well-known` endpoints so attackers cannot fingerprint the server cross-origin.
+- **`http.allowed_origins`** — new YAML config field on `HttpTransportConfig`. Default is the localhost set (`http://localhost`, `http://127.0.0.1`, `http://[::1]` + HTTPS variants). Operators with a public origin must add it explicitly.
+- **CORS allowlist** — explicit origin list (built from `allowed_origins`) replaces `CorsLayer::permissive()`. Browsers receive `Access-Control-Allow-Origin` only for allowlisted origins; the origin guard is the actual MUST-comply spec hook layered underneath.
+- **SEP-1686 task-status notification on creation** — `handle_tools_call` emits `notifications/tasks/status` (`status: "working"`) synchronously when an async task is registered, so clients see the non-existent → working transition without polling. The worker still fires the matching terminal-status notification on completion / failure / cancellation.
+- **12 new tests** — 8 unit tests on `is_allowed_origin` (exact match, port suffix, lookalike rejection like `http://localhost.evil.com`); 4 end-to-end full-router tests covering invalid origin (403), localhost allowed, no Origin header (forwarded), `/health` cross-origin probe (403); 1 server-level test asserting `notifications/tasks/status` on task creation; round-trip + minimal-form tests for `Icon`, `Tool { icons }`, `ServerInfo { icons }`.
+
+### Changed
+
+- **`CorsLayer::permissive()` → explicit allowlist** — browsers no longer receive `*` for `Access-Control-Allow-Origin`. Aligns with the server-side `origin_guard`.
+- **`HttpTransportConfig.allowed_origins`** is the single source of truth — `default_http_allowed_origins()` provides the localhost set used by both the YAML config layer (`src/config/types.rs`) and the transport layer (`src/mcp/transport/http.rs`).
+- **`McpServer::initialize`** sets `serverInfo.icons = None` explicitly so downstream renderers see the field.
+- **`config_watcher` integration test** — added a 200 ms grace period after `ConfigWatcher::new()` so the first event isn't lost under instrumented (llvm-cov) builds where the inotify watcher thread is slow to come online.
+- **`mcp_search_tools` test assertion** — relaxed to compare against the registry's full description rather than the truncated search-entry text, fixing a flake when a match's description exceeds the truncation limit.
+- **README** — top-of-file counts updated to reflect the current registry (357 tools / 75 groups) and protocol surface (9 adapters: SSH, WinRM, PSRP, Telnet, K8s Exec, Serial, AWS SSM, Azure, GCP). Mentions daemon mode and the WinRM/K8s pools shipped in 1.12.0.
+
+### Security
+
+- **Spec compliance** — `origin_guard` closes the DNS-rebinding hole flagged by MCP 2025-11-25. Operators upgrading from 1.13.0 with browser clients on a non-localhost origin **must** add their origin to `http.allowed_origins` or the gate will reject them with HTTP 403.
+- **CORS does not opt into `allow_credentials`** — preserves the previous (safe) behavior.
+
+## [1.13.0] - 2026-04-23
 
 ### Summary
 
