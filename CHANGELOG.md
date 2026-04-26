@@ -1000,7 +1000,12 @@ This release marks the first stable version of MCP SSH Bridge with a completely 
 - Hexagonal architecture (ports & adapters)
 - Extensible tool handler registry (Open/Closed principle)
 
-[Unreleased]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.1.0...HEAD
+[1.14.0]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.13.0...v1.14.0
+[1.13.0]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.12.0...v1.13.0
+[1.12.0]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.11.0...v1.12.0
+[1.11.0]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.10.0...v1.11.0
+[1.10.0]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.9.1...v1.10.0
+[1.9.1]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.9.0...v1.9.1
 [1.1.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.0.0...v1.1.0
 [2.0.1]: https://github.com/muchini/mcp-ssh-bridge/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/muchini/mcp-ssh-bridge/compare/v1.9.0...v2.0.0
