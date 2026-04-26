@@ -128,7 +128,7 @@ jobs:
               tar xzf "artifacts/${{ env.BINARY_NAME }}-${arch}.tar.gz" -C dist/mcpb-${arch}/
               cp dxt/manifest.json dxt/icon.svg server.json dist/mcpb-${arch}/
               cd dist && zip -r "../artifacts/${{ env.BINARY_NAME }}-${arch}.mcpb" mcpb-${arch}/ && cd ..
-              sha256sum "../artifacts/${{ env.BINARY_NAME }}-${arch}.mcpb" >> artifacts/mcpb-checksums.sha256
+              sha256sum "artifacts/${{ env.BINARY_NAME }}-${arch}.mcpb" >> artifacts/mcpb-checksums.sha256
             fi
           done
 
