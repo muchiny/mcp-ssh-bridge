@@ -9,9 +9,9 @@ all: check lint test
 build:
 	cargo build
 
-# Build release version
+# Build release version (full features: cli + mimalloc + http + jq + otel)
 release:
-	cargo build --release
+	cargo build --release --features full
 
 # Check compilation without building
 check:
@@ -68,9 +68,12 @@ deny:
 clean:
 	cargo clean
 
-# Install to ~/.cargo/bin
+# Install to ~/.local/bin (in PATH ahead of ~/.cargo/bin on most setups).
+# Uses the release target above which builds with --features full so server-side
+# jq filtering is available.
 install: release
-	cp target/release/mcp-ssh-bridge ~/.cargo/bin/
+	@mkdir -p ~/.local/bin
+	cp target/release/mcp-ssh-bridge ~/.local/bin/
 
 # Development mode with auto-reload
 dev:
