@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-04-27
+
+### Summary
+
+**`jq_filter` no-longer silently no-ops** | **DNS-1123 namespace validation across all 16 k8s/helm handlers** | **`ssh_k8s_top` gains `--all-namespaces`** | **`parse_columnar_output` handles tab-separated and ss-style headers**
+
+### Added
+
+- **`KubernetesCommandBuilder::validate_namespace`** — DNS-1123 label validator (`[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`) wired into all 16 k8s/helm handlers' `build_command`. Rejects flag-like values such as `namespace=--all-namespaces` (previously accepted as a literal name and silently producing "No resources found"), uppercase, and oversized inputs at the boundary, before the command reaches kubectl/helm. Returns `BridgeError::CommandDenied` with a descriptive reason.
+- **`ssh_k8s_top` `all_namespaces` flag** — `SshK8sTopArgs` and the JSON schema gain a boolean field; `build_top_command` propagates `-A` to kubectl. Users no longer need to fall back to `ssh_exec command="kubectl top pods -A"`.
+- **Tab-separated branch in `parse_columnar_output`** — when the header line contains `\t` (e.g. `helm list -A`), columns are split on tab. The space-aligned algorithm previously emitted a single concatenated header cell (`"name   namespace  revision …"`) that broke `--columns` filtering.
+- **JSON-shape guard in `parse_columnar_output`** — input whose first non-empty char is `{` or `[` is rejected. Without the `jq` feature, raw kubectl JSON used to fall through to `post_process` and produce mangled TSV with tab-padded JSON lines.
+- **Runtime warning when `jq_filter` is requested without the feature** — `DataReductionArgs::extract` now strips `jq_filter`/`yq_filter`/`output_format` from the JSON args and emits a `tracing::warn!` pointing the user at `--features jq` (or `full`). Previously these keys silently survived into the handler args and were dropped without trace.
+- **15+ tests** — 4 `validate_namespace` cases, 1 handler-level rejection (`test_build_command_rejects_flag_like_namespace`), 1 builder test for `top -A`, 4 parser tests (tab-separated helm, ss `tunap`, JSON object/array rejection), 1 CLI-flag rejection test under `cfg(not(feature = "jq"))`.
+
+### Changed
+
+- **CLI flags `--jq` and `--output-format` are feature-gated** — clap only registers them when `cfg(feature = "jq")`. A binary built without the feature now rejects them as unknown arguments instead of silently no-op'ing the filter. The `DataReductionFlags` runner struct mirrors the gating.
+- **`parse_columnar_output` uses data-only gap detection** — phase 1 previously required `header has space AND all data rows have space`, which collapsed the column boundaries on tools like `ss -tunap` whose header packs single-space gaps even though the data is multi-space aligned. The relaxed rule (data-only + the existing `≥ 2` run-width filter) keeps multi-word values like `Up 2 hours` and multi-word headers like `CONTAINER ID` intact, and now produces meaningful columns on `ss` output (4 detected columns instead of an empty `columns: []` envelope).
+- **`KubernetesCommandBuilder::build_top_command` signature** — gains a `all_namespaces: bool` parameter. Library consumers calling it directly need to thread the flag (false preserves prior behavior).
+- **`Makefile install`** — `release` now passes `--features full` (cli + mimalloc + http + jq + otel) and `install` lands the binary in `~/.local/bin` (with `mkdir -p`), matching where most users have it on PATH.
+
+### Fixed
+
+- **Silent `jq_filter` no-op when binary lacks the `jq` feature** — three layered guards (clap-level rejection, runner-side struct gating, runtime warn in `extract`) close the trap that previously let `--jq '.items'` succeed-but-do-nothing on a `default = ["cli"]` build.
+- **Mangled JSON TSV on `ssh_k8s_get output=json`** without the `jq` feature — the JSON-shape guard in `parse_columnar_output` blocks the columnar fallback that produced tab-padded raw JSON lines.
+- **`namespace=--all-namespaces` accepted as a literal** — `validate_namespace` rejects flag-like values across all k8s/helm handlers with a clear error.
+- **`ssh_helm_list` `App.columns` returned the whole header line as a single concatenated cell** — fixed by the tab-separated branch in `parse_columnar_output`.
+
+### Internal
+
+- **All 16 k8s/helm handlers** (`ssh_k8s_*`, `ssh_helm_*`) call `KubernetesCommandBuilder::validate_namespace(ns)?` at the top of `build_command` when a namespace is supplied. Helm handlers gained a `KubernetesCommandBuilder` import alongside `HelmCommandBuilder`.
+
 ## [1.14.0] - 2026-04-26
 
 ### Summary
@@ -1000,6 +1033,7 @@ This release marks the first stable version of MCP SSH Bridge with a completely 
 - Hexagonal architecture (ports & adapters)
 - Extensible tool handler registry (Open/Closed principle)
 
+[1.15.0]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/muchiny/mcp-ssh-bridge/compare/v1.11.0...v1.12.0
