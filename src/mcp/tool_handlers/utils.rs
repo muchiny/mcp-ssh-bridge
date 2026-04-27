@@ -232,10 +232,47 @@ pub fn maybe_reduce_table(
 ///
 /// Returns `None` if fewer than 2 non-empty lines are found.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn parse_columnar_output(output: &str) -> Option<ParsedTable> {
     let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
     if lines.len() < 2 {
         return None;
+    }
+
+    // Reject JSON-shaped input: when the first non-empty char is `{` or `[`,
+    // the columnar heuristic mangles structured payloads into garbage tables.
+    // This typically happens when `jq_filter` was requested but the binary
+    // was compiled without the `jq` feature, leaving raw JSON to fall through
+    // to `post_process` (see #2B).
+    if let Some(first) = lines[0].trim_start().chars().next()
+        && (first == '{' || first == '[')
+    {
+        return None;
+    }
+
+    // Tab-separated input (e.g. `helm list -A`): columns are split by `\t`,
+    // not space-padded. Detect tabs in the header and switch parser. The
+    // space-aligned algorithm below would otherwise produce a single header
+    // cell containing the whole first line.
+    if lines[0].contains('\t') {
+        // Headers are lowercased to match the case-insensitive select_columns
+        // contract used by the rest of the pipeline.
+        let headers: Vec<String> = lines[0]
+            .split('\t')
+            .map(|s| s.trim().to_lowercase())
+            .collect();
+        let n_cols = headers.len();
+        let rows: Vec<Vec<String>> = lines[1..]
+            .iter()
+            .map(|line| {
+                let mut cells: Vec<String> =
+                    line.split('\t').map(|s| s.trim().to_string()).collect();
+                cells.resize(n_cols, String::new());
+                cells.truncate(n_cols);
+                cells
+            })
+            .collect();
+        return Some(ParsedTable { headers, rows });
     }
 
     let header_line = lines[0];
@@ -245,20 +282,15 @@ pub fn parse_columnar_output(output: &str) -> Option<ParsedTable> {
         return None;
     }
 
-    // Phase 1: Find positions where the HEADER has a space AND ALL data rows
-    // have a space (or are shorter). Both conditions are required:
-    //   - Header check prevents right-aligned padding from creating false gaps
-    //     (padding positions have column name chars like "Taille" in header)
-    //   - Data check prevents multi-word column names from creating false gaps
-    //     ("CONTAINER ID" has a space at pos 9, but data has "5" there)
-    let header_bytes = header_line.as_bytes();
+    // Phase 1: Find positions where ALL data rows have a space (or are
+    // shorter). We rely on data alignment, NOT header alignment, because
+    // tools like `ss -tunap` emit single-space gaps in the header even though
+    // the data is multi-space aligned. The "≥ 2 spaces" run-width filter
+    // below keeps multi-word values like "Up 2 hours" intact (their internal
+    // 1-space gaps don't qualify) and multi-word headers like "CONTAINER ID"
+    // grouped (their data column has 1-space gap inside the value).
     let mut is_data_gap = vec![false; max_len];
     for (pos, gap) in is_data_gap.iter_mut().enumerate() {
-        // Header must have a space at this position
-        if header_bytes.get(pos).is_some_and(|&b| b != b' ') {
-            continue;
-        }
-        // ALL data rows must also have a space (or be shorter)
         *gap = data_lines
             .iter()
             .all(|l| l.as_bytes().get(pos).is_none_or(|&b| b == b' '));
@@ -642,6 +674,85 @@ node-2   500m         25%    2048Mi          50%";
     #[test]
     fn test_parse_columnar_header_only() {
         assert!(parse_columnar_output("NAME   IMAGE   STATUS").is_none());
+    }
+
+    #[test]
+    fn test_parse_columnar_handles_ss_tunap_output() {
+        // Regression: `ss -tunap` post_process produced an empty `columns: []`
+        // app payload because long process tokens like
+        // `users:(("Plex Media Serv",pid=1167191,fd=70))` contain spaces
+        // (around the comma-quote sequence on some locales) that broke the
+        // gap-detection assumption.
+        let ss_output = "Netid State      Recv-Q Send-Q                           Local Address:Port                 Peer Address:Port Process
+udp   UNCONN     0      0                                 192.168.1.51:42661                     0.0.0.0:*     users:((\"PlexMediaServer\",pid=1167191,fd=70))
+tcp   LISTEN     0      128                                     0.0.0.0:22                       0.0.0.0:*     users:((\"sshd\",pid=1234,fd=3))";
+        let parsed = parse_columnar_output(ss_output).expect("expected parse");
+        // We expect at least 7 columns (Netid State Recv-Q Send-Q Local Peer Process).
+        assert!(
+            parsed.headers.len() >= 6,
+            "expected ≥ 6 columns, got {:?}",
+            parsed.headers
+        );
+        assert_eq!(parsed.headers[0], "netid");
+        assert_eq!(parsed.rows[0][0], "udp");
+        assert_eq!(parsed.rows[1][0], "tcp");
+    }
+
+    #[test]
+    fn test_parse_columnar_handles_tab_separated_helm_output() {
+        // Regression: `helm list -A` emits tab-separated columns, not the
+        // space-padded format `parse_columnar_output` originally targeted.
+        // The result was a one-cell-wide table where the header was the whole
+        // first line concatenated.
+        let helm_list = "NAME   \tNAMESPACE  \tREVISION\tUPDATED            \tSTATUS  \tCHART          \tAPP VERSION
+traefik\tkube-system\t3       \t2026-02-14 20:01:24\tdeployed\ttraefik-39.0.1\tv3.6.8";
+        let parsed = parse_columnar_output(helm_list).expect("expected tab-separated parse");
+        // Headers are lowercased (case-insensitive select_columns contract).
+        assert_eq!(
+            parsed.headers,
+            vec![
+                "name",
+                "namespace",
+                "revision",
+                "updated",
+                "status",
+                "chart",
+                "app version"
+            ]
+        );
+        assert_eq!(parsed.rows.len(), 1);
+        assert_eq!(parsed.rows[0][0], "traefik");
+        assert_eq!(parsed.rows[0][1], "kube-system");
+        assert_eq!(parsed.rows[0][3], "2026-02-14 20:01:24");
+        assert_eq!(parsed.rows[0][6], "v3.6.8");
+    }
+
+    #[test]
+    fn test_parse_columnar_rejects_json_object() {
+        // Raw kubectl JSON must not be parsed as a columnar table — when the
+        // jq feature is disabled, falling through to columnar parsing on a
+        // JSON payload mangles it into garbage TSV (#2B).
+        let kubectl_pods = r#"{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "metadata": {
+                "name": "argocd-server-7d4d46b98-tbq4h",
+                "namespace": "argocd"
+            }
+        }
+    ]
+}"#;
+        assert!(parse_columnar_output(kubectl_pods).is_none());
+    }
+
+    #[test]
+    fn test_parse_columnar_rejects_json_array() {
+        let docker_inspect = r#"[
+    {"Id": "abc", "Name": "/web1"},
+    {"Id": "def", "Name": "/web2"}
+]"#;
+        assert!(parse_columnar_output(docker_inspect).is_none());
     }
 
     #[test]
