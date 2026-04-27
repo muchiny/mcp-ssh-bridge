@@ -133,9 +133,11 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
             let data_reduction = DataReductionFlags {
+                #[cfg(feature = "jq")]
                 jq: cli.jq.clone(),
                 columns: cli.columns.clone(),
                 limit: cli.limit,
+                #[cfg(feature = "jq")]
                 output_format: cli.output_format.clone(),
             };
             let exit_code = run_tool(

@@ -155,6 +155,7 @@ fn print_daemon_response(response: &serde_json::Value, json_output: bool) -> Res
 #[derive(Debug, Default, Clone)]
 pub struct DataReductionFlags {
     /// jq expression to apply to JSON output (mapped to `jq_filter`).
+    #[cfg(feature = "jq")]
     pub jq: Option<String>,
     /// Columns to keep in tabular output (mapped to `columns`).
     pub columns: Option<Vec<String>>,
@@ -162,6 +163,7 @@ pub struct DataReductionFlags {
     pub limit: Option<usize>,
     /// Output format for jq/yq results: `json` (default) or `tsv` (mapped
     /// to `output_format`).
+    #[cfg(feature = "jq")]
     pub output_format: Option<String>,
 }
 
@@ -170,10 +172,15 @@ impl DataReductionFlags {
     /// `DataReductionFlags::default()`.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.jq.is_none()
-            && self.columns.is_none()
-            && self.limit.is_none()
-            && self.output_format.is_none()
+        #[cfg(feature = "jq")]
+        if self.jq.is_some() {
+            return false;
+        }
+        #[cfg(feature = "jq")]
+        if self.output_format.is_some() {
+            return false;
+        }
+        self.columns.is_none() && self.limit.is_none()
     }
 }
 
@@ -195,6 +202,7 @@ fn merge_data_reduction(
     }
     let map = args.as_object_mut().expect("just ensured object");
 
+    #[cfg(feature = "jq")]
     if let Some(expr) = flags.jq.as_deref()
         && !map.contains_key("jq_filter")
     {
@@ -218,6 +226,7 @@ fn merge_data_reduction(
     {
         map.insert("limit".to_string(), serde_json::Value::from(n));
     }
+    #[cfg(feature = "jq")]
     if let Some(fmt) = flags.output_format.as_deref()
         && !map.contains_key("output_format")
     {
@@ -1373,6 +1382,7 @@ mod tests {
         assert!(flags.is_empty());
     }
 
+    #[cfg(feature = "jq")]
     #[test]
     fn test_merge_into_empty_args_creates_object() {
         let flags = DataReductionFlags {
@@ -1388,6 +1398,7 @@ mod tests {
         assert!(!obj.contains_key("columns"));
     }
 
+    #[cfg(feature = "jq")]
     #[test]
     fn test_merge_preserves_explicit_key_value_wins() {
         // User already set jq_filter=.custom via key=value; --jq '.flag' must NOT override.
@@ -1409,9 +1420,11 @@ mod tests {
     #[test]
     fn test_merge_injects_columns_as_array() {
         let flags = DataReductionFlags {
+            #[cfg(feature = "jq")]
             jq: None,
             columns: Some(vec!["name".to_string(), "status".to_string()]),
             limit: None,
+            #[cfg(feature = "jq")]
             output_format: None,
         };
         let merged =
@@ -1422,6 +1435,7 @@ mod tests {
         assert_eq!(arr[1], "status");
     }
 
+    #[cfg(feature = "jq")]
     #[test]
     fn test_merge_injects_output_format_tsv() {
         let flags = DataReductionFlags {
@@ -1436,6 +1450,7 @@ mod tests {
         assert_eq!(merged["jq_filter"], ".[]");
     }
 
+    #[cfg(feature = "jq")]
     #[test]
     fn test_merge_preserves_explicit_output_format() {
         let mut m = serde_json::Map::new();

@@ -49,6 +49,21 @@ impl DataReductionArgs {
             return Self::default();
         };
 
+        // When the binary is built without the `jq` feature, jq/yq/output_format
+        // params would otherwise stay in the JSON object and silently bypass
+        // both the reduction pipeline and the handler arg parsing (no
+        // deny_unknown_fields). Strip them and warn the caller (#2A).
+        #[cfg(not(feature = "jq"))]
+        for key in ["jq_filter", "yq_filter", "output_format"] {
+            if obj.remove(key).is_some() {
+                tracing::warn!(
+                    param = key,
+                    "ignoring data-reduction param: binary built without the 'jq' feature \
+                     — rebuild with --features jq (or 'full') to enable server-side filtering"
+                );
+            }
+        }
+
         #[cfg(feature = "jq")]
         let jq_filter = obj
             .remove("jq_filter")

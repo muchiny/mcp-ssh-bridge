@@ -74,6 +74,7 @@ pub struct Cli {
     /// jq expression to apply to tool output (equivalent to `jq_filter=<expr>`).
     /// Explicit `jq_filter=...` in tool args takes precedence over this flag.
     /// Example: `--jq '.containers[].Names'`
+    #[cfg(feature = "jq")]
     #[arg(long, global = true)]
     pub jq: Option<String>,
 
@@ -91,6 +92,7 @@ pub struct Cli {
     /// 60-80% token savings on list-shaped data. Equivalent to
     /// `output_format=<value>`. Explicit `output_format=...` in tool args wins.
     /// Example: `--output-format=tsv`
+    #[cfg(feature = "jq")]
     #[arg(long = "output-format", global = true, value_parser = ["json", "tsv"])]
     pub output_format: Option<String>,
 
@@ -617,6 +619,7 @@ mod tests {
         assert!(matches!(cli.command, Some(Commands::Tool { .. })));
     }
 
+    #[cfg(feature = "jq")]
     #[test]
     fn test_global_jq_flag() {
         let cli = Cli::try_parse_from([
@@ -630,6 +633,27 @@ mod tests {
         .unwrap();
         assert_eq!(cli.jq.as_deref(), Some(".containers[].name"));
         assert!(matches!(cli.command, Some(Commands::Tool { .. })));
+    }
+
+    #[cfg(not(feature = "jq"))]
+    #[test]
+    fn test_global_jq_flag_rejected_without_feature() {
+        // When the binary is built without the `jq` feature, --jq must NOT be
+        // accepted silently — clap should reject it as an unknown argument so
+        // the user knows the filter cannot be applied (#2A).
+        let result = Cli::try_parse_from([
+            "mcp-ssh-bridge",
+            "--jq",
+            ".x",
+            "tool",
+            "ssh_exec",
+            "host=h",
+            "command=true",
+        ]);
+        assert!(
+            result.is_err(),
+            "--jq should be rejected when feature 'jq' is disabled"
+        );
     }
 
     #[test]
@@ -661,6 +685,7 @@ mod tests {
         assert_eq!(cli.limit, Some(5));
     }
 
+    #[cfg(feature = "jq")]
     #[test]
     fn test_data_reduction_flags_combined() {
         let cli = Cli::try_parse_from([
