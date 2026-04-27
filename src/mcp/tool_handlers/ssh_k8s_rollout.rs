@@ -93,6 +93,9 @@ impl StandardTool for K8sRolloutTool {
     }"#;
 
     fn build_command(args: &SshK8sRolloutArgs, _host_config: &HostConfig) -> Result<String> {
+        if let Some(ns) = args.namespace.as_deref() {
+            KubernetesCommandBuilder::validate_namespace(ns)?;
+        }
         Ok(KubernetesCommandBuilder::build_rollout_command(
             args.kubectl_bin.as_deref(),
             &args.action,

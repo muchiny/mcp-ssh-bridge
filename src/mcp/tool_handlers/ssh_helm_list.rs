@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::config::HostConfig;
-use crate::domain::use_cases::kubernetes::HelmCommandBuilder;
+use crate::domain::use_cases::kubernetes::{HelmCommandBuilder, KubernetesCommandBuilder};
 use crate::error::Result;
 use crate::mcp::apps::table;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
@@ -108,6 +108,9 @@ impl StandardTool for HelmListTool {
         crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshHelmListArgs, _host_config: &HostConfig) -> Result<String> {
+        if let Some(ns) = args.namespace.as_deref() {
+            KubernetesCommandBuilder::validate_namespace(ns)?;
+        }
         Ok(HelmCommandBuilder::build_list_command(
             args.helm_bin.as_deref(),
             args.kubeconfig.as_deref(),

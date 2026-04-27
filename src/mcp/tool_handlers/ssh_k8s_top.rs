@@ -21,6 +21,8 @@ pub struct SshK8sTopArgs {
     #[serde(default)]
     namespace: Option<String>,
     #[serde(default)]
+    all_namespaces: Option<bool>,
+    #[serde(default)]
     sort_by: Option<String>,
     #[serde(default)]
     containers: Option<bool>,
@@ -65,6 +67,10 @@ impl StandardTool for K8sTopTool {
                 "type": "string",
                 "description": "Kubernetes namespace (for pods only)"
             },
+            "all_namespaces": {
+                "type": "boolean",
+                "description": "Show pods across all namespaces (-A flag, for pods only)"
+            },
             "sort_by": {
                 "type": "string",
                 "enum": ["cpu", "memory"],
@@ -97,10 +103,14 @@ impl StandardTool for K8sTopTool {
         crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshK8sTopArgs, _host_config: &HostConfig) -> Result<String> {
+        if let Some(ns) = args.namespace.as_deref() {
+            KubernetesCommandBuilder::validate_namespace(ns)?;
+        }
         Ok(KubernetesCommandBuilder::build_top_command(
             args.kubectl_bin.as_deref(),
             &args.resource_type,
             args.namespace.as_deref(),
+            args.all_namespaces.unwrap_or(false),
             args.sort_by.as_deref(),
             args.containers.unwrap_or(false),
         ))
@@ -373,6 +383,7 @@ mod tests {
             host: "server1".to_string(),
             resource_type: "pods".to_string(),
             namespace: None,
+            all_namespaces: None,
             sort_by: None,
             containers: None,
             kubectl_bin: Some("kubectl".to_string()),
@@ -391,6 +402,7 @@ mod tests {
             host: "server1".to_string(),
             resource_type: "nodes".to_string(),
             namespace: None,
+            all_namespaces: None,
             sort_by: Some("cpu".to_string()),
             containers: None,
             kubectl_bin: Some("kubectl".to_string()),
@@ -405,11 +417,33 @@ mod tests {
     }
 
     #[test]
+    fn test_build_command_all_namespaces_flag() {
+        // Regression: ssh_k8s_top didn't expose -A / --all-namespaces; users
+        // had to fall back to ssh_exec. Now supported.
+        let args = SshK8sTopArgs {
+            host: "server1".to_string(),
+            resource_type: "pods".to_string(),
+            namespace: None,
+            all_namespaces: Some(true),
+            sort_by: None,
+            containers: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let cmd = K8sTopTool::build_command(&args, &host_config).unwrap();
+        assert_eq!(cmd, "kubectl top 'pods' -A");
+    }
+
+    #[test]
     fn test_build_command_with_namespace() {
         let args = SshK8sTopArgs {
             host: "server1".to_string(),
             resource_type: "pods".to_string(),
             namespace: Some("production".to_string()),
+            all_namespaces: None,
             sort_by: Some("memory".to_string()),
             containers: Some(true),
             kubectl_bin: Some("kubectl".to_string()),

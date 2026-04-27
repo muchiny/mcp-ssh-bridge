@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 
 use crate::config::HostConfig;
-use crate::domain::use_cases::kubernetes::HelmCommandBuilder;
+use crate::domain::use_cases::kubernetes::{HelmCommandBuilder, KubernetesCommandBuilder};
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
@@ -133,6 +133,9 @@ impl StandardTool for HelmInstallTool {
     }"#;
 
     fn build_command(args: &SshHelmInstallArgs, _host_config: &HostConfig) -> Result<String> {
+        if let Some(ns) = args.namespace.as_deref() {
+            KubernetesCommandBuilder::validate_namespace(ns)?;
+        }
         Ok(HelmCommandBuilder::build_install_command(
             args.helm_bin.as_deref(),
             args.kubeconfig.as_deref(),

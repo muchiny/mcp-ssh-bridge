@@ -124,6 +124,9 @@ impl StandardTool for K8sGetTool {
         crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshK8sGetArgs, _host_config: &HostConfig) -> Result<String> {
+        if let Some(ns) = args.namespace.as_deref() {
+            KubernetesCommandBuilder::validate_namespace(ns)?;
+        }
         Ok(KubernetesCommandBuilder::build_get_command(
             args.kubectl_bin.as_deref(),
             &args.resource,
@@ -445,6 +448,34 @@ mod tests {
         assert!(cmd.contains("--field-selector 'status.phase=Running'"));
         assert!(cmd.contains("-o 'json'"));
         assert!(cmd.contains("--sort-by='"));
+    }
+
+    #[test]
+    fn test_build_command_rejects_flag_like_namespace() {
+        // Regression: namespace=--all-namespaces was accepted as a literal
+        // namespace name, producing "No resources found" silently. The handler
+        // must now reject it via validate_namespace before reaching kubectl.
+        let args = SshK8sGetArgs {
+            host: "server1".to_string(),
+            resource: "pods".to_string(),
+            name: None,
+            namespace: Some("--all-namespaces".to_string()),
+            all_namespaces: None,
+            label_selector: None,
+            field_selector: None,
+            output: None,
+            sort_by: None,
+            kubectl_bin: Some("kubectl".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let host_config = test_host_config();
+        let result = K8sGetTool::build_command(&args, &host_config);
+        assert!(
+            result.is_err(),
+            "expected rejection for flag-like namespace"
+        );
     }
 
     #[tokio::test]

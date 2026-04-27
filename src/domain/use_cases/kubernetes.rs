@@ -368,6 +368,7 @@ impl KubernetesCommandBuilder {
         kubectl_bin: Option<&str>,
         resource_type: &str,
         namespace: Option<&str>,
+        all_namespaces: bool,
         sort_by: Option<&str>,
         containers: bool,
     ) -> String {
@@ -377,6 +378,10 @@ impl KubernetesCommandBuilder {
 
         if let Some(ns) = namespace {
             let _ = write!(cmd, " -n {}", shell_escape(ns));
+        }
+
+        if all_namespaces {
+            cmd.push_str(" -A");
         }
 
         if let Some(sort) = sort_by {
@@ -439,6 +444,47 @@ impl KubernetesCommandBuilder {
                 ),
             })
         }
+    }
+
+    /// Validate a Kubernetes namespace name (DNS-1123 label).
+    ///
+    /// Rejects empty strings, names exceeding 63 chars, names containing
+    /// uppercase or non `[a-z0-9-]` characters, and names that don't start
+    /// or end with an alphanumeric. This catches flag-like values such as
+    /// `--all-namespaces` (the literal `--all-namespaces` was previously
+    /// accepted as a namespace name and silently produced empty results).
+    ///
+    /// # Errors
+    ///
+    /// Returns `BridgeError::CommandDenied` when the value is not a valid
+    /// DNS-1123 label.
+    pub fn validate_namespace(ns: &str) -> Result<()> {
+        if ns.is_empty() {
+            return Err(BridgeError::CommandDenied {
+                reason: "Namespace cannot be empty".to_string(),
+            });
+        }
+        if ns.len() > 63 {
+            return Err(BridgeError::CommandDenied {
+                reason: format!("Namespace '{ns}' exceeds 63 chars (DNS-1123 label limit)"),
+            });
+        }
+        let bytes = ns.as_bytes();
+        let head_ok = bytes[0].is_ascii_lowercase() || bytes[0].is_ascii_digit();
+        let tail_ok =
+            bytes[bytes.len() - 1].is_ascii_lowercase() || bytes[bytes.len() - 1].is_ascii_digit();
+        let chars_ok = ns
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+        if !(head_ok && tail_ok && chars_ok) {
+            return Err(BridgeError::CommandDenied {
+                reason: format!(
+                    "Namespace '{ns}' is not a valid DNS-1123 label \
+                     (lowercase alphanumeric and hyphens only, must start and end with alphanumeric)"
+                ),
+            });
+        }
+        Ok(())
     }
 
     /// Validate `resource_type` for the top command.
@@ -1321,6 +1367,7 @@ mod tests {
             Some("kubectl"),
             "pods",
             Some("default"),
+            false,
             Some("cpu"),
             true,
         );
@@ -1336,6 +1383,7 @@ mod tests {
             Some("kubectl"),
             "nodes",
             None,
+            false,
             None,
             false,
         );
@@ -1344,12 +1392,88 @@ mod tests {
 
     #[test]
     fn test_build_top_command_no_containers() {
-        let cmd =
-            KubernetesCommandBuilder::build_top_command(Some("kubectl"), "pods", None, None, false);
+        let cmd = KubernetesCommandBuilder::build_top_command(
+            Some("kubectl"),
+            "pods",
+            None,
+            false,
+            None,
+            false,
+        );
         assert!(!cmd.contains("--containers"));
     }
 
+    #[test]
+    fn test_build_top_command_all_namespaces() {
+        let cmd = KubernetesCommandBuilder::build_top_command(
+            Some("kubectl"),
+            "pods",
+            None,
+            true,
+            None,
+            false,
+        );
+        assert_eq!(cmd, "kubectl top 'pods' -A");
+    }
+
     // ============== validate_delete Tests ==============
+
+    #[test]
+    fn test_validate_namespace_accepts_valid_dns1123_labels() {
+        for ns in [
+            "default",
+            "kube-system",
+            "argocd",
+            "media-stack",
+            "ns-1",
+            "a",
+            "z9",
+        ] {
+            assert!(
+                KubernetesCommandBuilder::validate_namespace(ns).is_ok(),
+                "expected {ns:?} to validate"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_namespace_rejects_flag_like_values() {
+        // The original bug: passing namespace=--all-namespaces was accepted as
+        // a literal namespace name. kubectl then ran -n '--all-namespaces' and
+        // returned "No resources found in --all-namespaces namespace".
+        let err = KubernetesCommandBuilder::validate_namespace("--all-namespaces").unwrap_err();
+        match err {
+            BridgeError::CommandDenied { reason } => {
+                assert!(reason.contains("Namespace"), "unexpected reason: {reason}");
+            }
+            other => panic!("expected CommandDenied, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_validate_namespace_rejects_empty_and_invalid_chars() {
+        for bad in [
+            "",
+            "-leading-dash",
+            "trailing-dash-",
+            "UPPER",
+            "with space",
+            "with_underscore",
+            "with.dot",
+            "shell$inject",
+        ] {
+            assert!(
+                KubernetesCommandBuilder::validate_namespace(bad).is_err(),
+                "expected {bad:?} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_namespace_rejects_oversized() {
+        let too_long = "a".repeat(64);
+        assert!(KubernetesCommandBuilder::validate_namespace(&too_long).is_err());
+    }
 
     #[test]
     fn test_validate_delete_kube_system() {

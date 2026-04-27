@@ -94,6 +94,9 @@ impl StandardTool for K8sDescribeTool {
         crate::domain::output_kind::OutputKind::Auto;
 
     fn build_command(args: &SshK8sDescribeArgs, _host_config: &HostConfig) -> Result<String> {
+        if let Some(ns) = args.namespace.as_deref() {
+            KubernetesCommandBuilder::validate_namespace(ns)?;
+        }
         Ok(KubernetesCommandBuilder::build_describe_command(
             args.kubectl_bin.as_deref(),
             &args.resource,

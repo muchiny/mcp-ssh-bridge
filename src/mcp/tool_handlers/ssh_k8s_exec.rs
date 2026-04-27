@@ -89,6 +89,9 @@ impl StandardTool for K8sExecTool {
     }"#;
 
     fn build_command(args: &SshK8sExecArgs, _host_config: &HostConfig) -> Result<String> {
+        if let Some(ns) = args.namespace.as_deref() {
+            KubernetesCommandBuilder::validate_namespace(ns)?;
+        }
         Ok(KubernetesCommandBuilder::build_exec_command(
             args.kubectl_bin.as_deref(),
             &args.pod,
