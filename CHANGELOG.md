@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.1] - 2026-04-30
+
+### Summary
+
+**Stdio transport silent-exit regression fix** — `mcp-ssh-bridge serve` now actually responds to JSON-RPC requests. Affects every client that spawns the binary in stdio mode (Claude Desktop, DXT, Claude Code via `.mcp.json`).
+
+### Fixed
+
+- **Stdio MCP server died before reading any client message** (regression introduced in 1.13.0 by commit `927f278`, "feat(transport): factor run() into serve<T: Transport> + serve_session()"). The refactor moved the per-session reader loop into a detached `tokio::spawn`, but the `JoinHandle` was discarded. For the single-session stdio transport, `accept()` returned `Some(Session)` once and then `None` on the next call, the accept loop exited, `serve()` returned, `main()` exited, and tokio aborted the still-warming-up `serve_session` task before it had read a single byte from stdin. Symptom: `MCP SSH Bridge server starting...` immediately followed by `Transport accept loop ended, shutting down` on stderr, empty stdout, exit 0. Versions 1.13.0 / 1.14.0 / 1.15.0 are all affected — 1.11.0 and earlier are fine because the reader loop was inlined in `run()`.
+- **Daemon mode shutdown now drains in-flight Unix-socket sessions** instead of abandoning them when the listener stops.
+
+### Internal
+
+- **`McpServer::serve<T: Transport>`** now collects spawned session tasks in a `tokio::task::JoinSet` and drains the set after the accept loop exits, before tearing down `session_manager`, `connection_pool`, and the transport. New log lines `Transport accept loop ended, draining in-flight sessions` and `All sessions drained, shutting down` make the lifecycle explicit.
+- **New regression test `tests/stdio_transport_e2e.rs`** spawns the real binary, pipes a JSON-RPC `initialize` request to its stdin, and asserts that a well-formed response comes back on stdout within 5 seconds. The pre-existing 6857-test suite missed this regression because `accept()` and `serve_session()` were tested in isolation but never their composition via `serve<T>()`.
+
 ## [1.15.0] - 2026-04-27
 
 ### Summary
