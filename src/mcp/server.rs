@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 use tokio::sync::{RwLock, Semaphore, mpsc};
+use tokio::task::JoinSet;
 use tracing::{Instrument, debug, error, info, warn};
 
 use crate::config::{Config, ConfigWatcher};
@@ -448,16 +449,31 @@ impl McpServer {
 
         info!("MCP SSH Bridge server starting...");
 
-        // Accept loop: one session at a time, spawn a handler per
-        // session so concurrent sessions (daemon mode) run in parallel.
+        // Accept loop: one session at a time, spawn into a JoinSet so we
+        // can drain in-flight sessions before tearing down shared state.
+        // Without the drain, a single-session transport like stdio would
+        // exit `serve()` immediately after accept() returns None, killing
+        // the spawned `serve_session` task before it has read a single
+        // byte from stdin.
+        let mut sessions: JoinSet<()> = JoinSet::new();
         while let Some(session) = transport.accept().await {
             let server = Arc::clone(&self);
-            tokio::spawn(async move {
+            sessions.spawn(async move {
                 server.serve_session(session).await;
             });
         }
 
-        info!("Transport accept loop ended, shutting down");
+        info!("Transport accept loop ended, draining in-flight sessions");
+
+        while let Some(res) = sessions.join_next().await {
+            if let Err(e) = res
+                && !e.is_cancelled()
+            {
+                error!(error = %e, "session task failed");
+            }
+        }
+
+        info!("All sessions drained, shutting down");
 
         // Shutdown global resources.
         for h in cleanup_handles {
