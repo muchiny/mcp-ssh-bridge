@@ -13,6 +13,9 @@ use crate::domain::use_cases::kubernetes::{HelmCommandBuilder, KubernetesCommand
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
+use crate::mcp::protocol::LogLevel;
+use crate::ports::ToolContext;
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshHelmInstallArgs {
@@ -149,6 +152,64 @@ impl StandardTool for HelmInstallTool {
             args.create_namespace.unwrap_or(false),
             args.version.as_deref(),
         ))
+    }
+
+    /// Mirror of `ssh_helm_upgrade::enrich`: emit a synthetic
+    /// `phase=start` event then one log per helm status field. Errors
+    /// surface at LogLevel::Error.
+    async fn enrich(
+        result: ToolCallResult,
+        args: &Self::Args,
+        output: &str,
+        ctx: &ToolContext,
+    ) -> Result<ToolCallResult> {
+        let Some(logger) = ctx.mcp_logger.as_ref() else {
+            return Ok(result);
+        };
+        logger.log(
+            LogLevel::Info,
+            "ssh_helm_install",
+            serde_json::json!({
+                "phase": "start",
+                "release": args.release,
+                "chart": args.chart,
+                "namespace": args.namespace.clone().unwrap_or_else(|| "default".to_string()),
+                "dry_run": args.dry_run.is_some(),
+            }),
+        );
+        for line in output.lines() {
+            let trimmed = line.trim_start();
+            if let Some((key, value)) = trimmed.split_once(": ") {
+                let lower = key.to_ascii_lowercase();
+                if matches!(
+                    lower.as_str(),
+                    "release"
+                        | "status"
+                        | "revision"
+                        | "namespace"
+                        | "last deployed"
+                        | "chart"
+                        | "version"
+                ) {
+                    logger.log(
+                        LogLevel::Info,
+                        "ssh_helm_install",
+                        serde_json::json!({
+                            "phase": "field",
+                            "key": lower,
+                            "value": value.trim(),
+                        }),
+                    );
+                }
+            } else if trimmed.starts_with("Error:") || trimmed.starts_with("error:") {
+                logger.log(
+                    LogLevel::Error,
+                    "ssh_helm_install",
+                    serde_json::json!({"phase": "error", "line": trimmed}),
+                );
+            }
+        }
+        Ok(result)
     }
 }
 
