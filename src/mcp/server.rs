@@ -381,6 +381,9 @@ impl McpServer {
         ctx.cancel_token = cancel_token;
         ctx.notification_tx = notification_tx;
         ctx.progress_token = progress_token;
+        ctx.pending_requests = Some(Arc::clone(&self.pending_requests));
+        ctx.client_supports_elicitation =
+            self.client_supports_elicitation.load(Ordering::Relaxed);
         ctx
     }
 

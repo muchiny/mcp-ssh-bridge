@@ -289,6 +289,8 @@ mod tests {
             cancel_token: None,
             notification_tx: None,
             progress_token: None,
+            pending_requests: None,
+            client_supports_elicitation: false,
         }
     }
 

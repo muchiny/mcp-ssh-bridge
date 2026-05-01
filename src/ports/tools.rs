@@ -91,6 +91,21 @@ pub struct ToolContext {
     ///
     /// `None` when the client did not request progress reporting.
     pub progress_token: Option<serde_json::Value>,
+    /// Snapshot of the per-server pending-requests map.
+    ///
+    /// Required to send a server → client request (elicitation, sampling)
+    /// and await the matching response. `None` in test contexts and
+    /// non-MCP call paths — callers must treat that case as "feature
+    /// unavailable" and fall back to whatever default behavior makes
+    /// sense (typically: skip the prompt and rely on configured
+    /// safeguards).
+    pub pending_requests: Option<Arc<crate::mcp::pending_requests::PendingRequests>>,
+    /// Snapshot of `MCPServer::client_supports_elicitation` taken at the
+    /// time the request was dispatched. When `false`, the
+    /// [`Self::elicit_confirm`] helper short-circuits without sending a
+    /// request — saves a network round-trip for clients that do not
+    /// advertise the elicitation capability.
+    pub client_supports_elicitation: bool,
 }
 
 impl ToolContext {
@@ -125,6 +140,8 @@ impl ToolContext {
             cancel_token: None,
             notification_tx: None,
             progress_token: None,
+            pending_requests: None,
+            client_supports_elicitation: false,
         }
     }
 
@@ -155,6 +172,64 @@ impl ToolContext {
         Some(crate::mcp::progress::ProgressReporter::new(
             token, tx, total,
         ))
+    }
+
+    /// Ask the MCP client to confirm a destructive operation via
+    /// `elicitation/create`.
+    ///
+    /// Returns:
+    /// - `Ok(Some(true))`  — the user explicitly accepted
+    /// - `Ok(Some(false))` — the user declined or cancelled
+    /// - `Ok(None)`        — elicitation is unavailable for this request
+    ///   (no notification channel, no pending-requests slot, or the
+    ///   client did not advertise the capability). Callers should fall
+    ///   back to whatever default policy is appropriate — usually
+    ///   "proceed" since the global `require_elicitation_on_destructive`
+    ///   gate has already vetted the call before the handler runs.
+    /// - `Err(_)`          — transport-level failure (channel closed,
+    ///   request timed out, malformed response).
+    ///
+    /// `tool_name` is surfaced in the prompt the user sees so they can
+    /// distinguish which tool is asking. `summary` should be a short
+    /// human-readable description of the side effect (e.g. the package
+    /// list to remove, the host being rebooted).
+    ///
+    /// # Errors
+    ///
+    /// Propagates `BridgeError::McpInvalidRequest` for transport errors
+    /// — the helper does not retry; handlers that need retry semantics
+    /// should layer them on top.
+    pub async fn elicit_confirm(
+        &self,
+        tool_name: &str,
+        summary: &str,
+    ) -> Result<Option<bool>> {
+        let (Some(tx), Some(pending)) =
+            (self.notification_tx.clone(), self.pending_requests.clone())
+        else {
+            return Ok(None);
+        };
+        if !self.client_supports_elicitation {
+            return Ok(None);
+        }
+        let requester = Arc::new(crate::mcp::client_requester::ClientRequester::new(
+            tx,
+            pending,
+            std::time::Duration::from_secs(120),
+        ));
+        let service = crate::mcp::elicitation::ElicitationService::new(requester);
+        service.set_supported(true);
+        match service.confirm_destructive(tool_name, summary).await {
+            Ok(confirmed) => Ok(Some(confirmed)),
+            Err(crate::mcp::client_requester::ClientRequestError::Declined)
+            | Err(crate::mcp::client_requester::ClientRequestError::Cancelled) => {
+                Ok(Some(false))
+            }
+            Err(crate::mcp::client_requester::ClientRequestError::NotSupported) => Ok(None),
+            Err(e) => Err(crate::error::BridgeError::McpInvalidRequest(format!(
+                "elicit_confirm failed: {e:?}"
+            ))),
+        }
     }
 
     /// Check if a path is within the declared client roots.
@@ -362,6 +437,8 @@ pub mod mock {
             cancel_token: None,
             notification_tx: None,
             progress_token: None,
+            pending_requests: None,
+            client_supports_elicitation: false,
         }
     }
 
@@ -413,6 +490,8 @@ pub mod mock {
             cancel_token: None,
             notification_tx: None,
             progress_token: None,
+            pending_requests: None,
+            client_supports_elicitation: false,
         }
     }
 
@@ -463,6 +542,8 @@ pub mod mock {
             cancel_token: None,
             notification_tx: None,
             progress_token: None,
+            pending_requests: None,
+            client_supports_elicitation: false,
         }
     }
 
@@ -500,6 +581,8 @@ pub mod mock {
             cancel_token: None,
             notification_tx: None,
             progress_token: None,
+            pending_requests: None,
+            client_supports_elicitation: false,
         }
     }
 }
@@ -525,6 +608,59 @@ mod tests {
     fn test_progress_reporter_returns_none_without_token() {
         let ctx = mock::create_test_context();
         assert!(ctx.progress_reporter(Some(5)).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_elicit_confirm_returns_none_without_tx() {
+        let ctx = mock::create_test_context();
+        let result = ctx.elicit_confirm("ssh_test", "do thing").await.unwrap();
+        assert_eq!(result, None, "must report unavailable cleanly");
+    }
+
+    #[tokio::test]
+    async fn test_elicit_confirm_returns_none_when_unsupported() {
+        let (tx, _rx) = tokio::sync::mpsc::channel(8);
+        let mut ctx = mock::create_test_context();
+        ctx.notification_tx = Some(tx);
+        ctx.pending_requests =
+            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        // client_supports_elicitation stays false
+        let result = ctx.elicit_confirm("ssh_test", "do thing").await.unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_elicit_confirm_sends_request_when_supported() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let mut ctx = mock::create_test_context();
+        ctx.notification_tx = Some(tx);
+        ctx.pending_requests =
+            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        ctx.client_supports_elicitation = true;
+
+        let handle = tokio::spawn(async move {
+            ctx.elicit_confirm("ssh_pkg_remove", "remove `nginx` from prod-01")
+                .await
+        });
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("notification within timeout")
+            .expect("channel open");
+
+        match msg {
+            crate::mcp::protocol::WriterMessage::Request(req) => {
+                assert_eq!(req.method, "elicitation/create");
+                let params = req.params.expect("params");
+                let message = params["message"].as_str().unwrap();
+                assert!(message.contains("ssh_pkg_remove"));
+                assert!(message.contains("remove `nginx` from prod-01"));
+                let schema = &params["requestedSchema"];
+                assert_eq!(schema["properties"]["confirm"]["type"], "boolean");
+            }
+            _ => panic!("expected Request"),
+        }
+        handle.abort();
     }
 
     #[test]
