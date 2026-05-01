@@ -112,6 +112,42 @@ impl ToolHandler for SshRunbookExecuteHandler {
             .collect();
         vars.extend(args.params);
 
+        // Surface step-by-step resolution to the client so users see the
+        // runbook unroll in real time even though the *plan* is built
+        // synchronously. Both helpers no-op when the client did not
+        // request progress / does not advertise logging support.
+        let progress = ctx.progress_reporter(Some(rb.steps.len() as u64));
+        let step_count = rb.steps.len();
+        for (i, step) in rb.steps.iter().enumerate() {
+            let step_num = (i + 1) as u64;
+            if let Some(reporter) = progress.as_ref() {
+                reporter.report(
+                    step_num,
+                    Some(&format!("step {step_num}/{step_count}: {}", step.name)),
+                );
+            }
+            if let Some(logger) = ctx.mcp_logger.as_ref() {
+                let level = if step.confirm {
+                    crate::mcp::protocol::LogLevel::Warning
+                } else {
+                    crate::mcp::protocol::LogLevel::Info
+                };
+                logger.log(
+                    level,
+                    "ssh_runbook_execute",
+                    serde_json::json!({
+                        "runbook": rb.name,
+                        "host": args.host,
+                        "step": step_num,
+                        "total_steps": step_count,
+                        "name": step.name,
+                        "confirm": step.confirm,
+                        "has_rollback": step.rollback.is_some(),
+                    }),
+                );
+            }
+        }
+
         Ok(ToolCallResult::text(format_execution_plan(
             &rb.name,
             &rb.description,

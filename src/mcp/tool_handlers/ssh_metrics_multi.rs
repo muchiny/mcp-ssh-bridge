@@ -225,12 +225,30 @@ impl ToolHandler for SshMetricsMultiHandler {
             ));
         }
 
-        // Collect raw outputs
+        // Collect raw outputs, reporting progress as each host completes.
+        // The reporter is `None` if the client did not request progress;
+        // calls then become a cheap no-op.
+        let progress = ctx.progress_reporter(Some(args.hosts.len() as u64));
         let mut raw_outputs: Vec<std::result::Result<RawHostOutput, HostMetricsResult>> =
             Vec::with_capacity(args.hosts.len());
+        let mut completed: u64 = 0;
+        let total = args.hosts.len();
         while let Some(join_result) = join_set.join_next().await {
             match join_result {
-                Ok(host_result) => raw_outputs.push(host_result),
+                Ok(host_result) => {
+                    completed += 1;
+                    if let Some(reporter) = progress.as_ref() {
+                        let host_label = match &host_result {
+                            Ok(raw) => raw.host.clone(),
+                            Err(err) => err.host.clone(),
+                        };
+                        reporter.report(
+                            completed,
+                            Some(&format!("{host_label} ({completed}/{total})")),
+                        );
+                    }
+                    raw_outputs.push(host_result);
+                }
                 Err(e) => {
                     warn!("Task join error: {e}");
                 }
