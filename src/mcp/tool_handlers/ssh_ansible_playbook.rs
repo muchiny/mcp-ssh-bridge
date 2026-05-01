@@ -12,6 +12,9 @@ use crate::domain::use_cases::ansible::AnsibleCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
+use crate::mcp::protocol::LogLevel;
+use crate::ports::ToolContext;
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshAnsiblePlaybookArgs {
@@ -179,6 +182,52 @@ impl StandardTool for AnsiblePlaybookTool {
             args.working_dir.as_deref(),
             args.callback.as_deref(),
         ))
+    }
+
+    /// Parse the ansible-playbook output and emit a structured
+    /// `notifications/message` per `PLAY [...]` and `TASK [...]` line so
+    /// the client can render a live timeline of the run. Failed tasks
+    /// (`fatal:` prefix) are logged at Error; others at Info. The raw
+    /// result is returned unchanged — this hook is purely additive
+    /// observability.
+    async fn enrich(
+        result: ToolCallResult,
+        _args: &Self::Args,
+        output: &str,
+        ctx: &ToolContext,
+    ) -> Result<ToolCallResult> {
+        let Some(logger) = ctx.mcp_logger.as_ref() else {
+            return Ok(result);
+        };
+        for line in output.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("PLAY [") || trimmed.starts_with("PLAY RECAP") {
+                logger.log(
+                    LogLevel::Info,
+                    "ssh_ansible_playbook",
+                    serde_json::json!({"phase": "play", "line": trimmed}),
+                );
+            } else if trimmed.starts_with("TASK [") {
+                logger.log(
+                    LogLevel::Info,
+                    "ssh_ansible_playbook",
+                    serde_json::json!({"phase": "task", "line": trimmed}),
+                );
+            } else if trimmed.starts_with("fatal:") || trimmed.starts_with("FAILED!") {
+                logger.log(
+                    LogLevel::Error,
+                    "ssh_ansible_playbook",
+                    serde_json::json!({"phase": "fatal", "line": trimmed}),
+                );
+            } else if trimmed.starts_with("changed:") {
+                logger.log(
+                    LogLevel::Info,
+                    "ssh_ansible_playbook",
+                    serde_json::json!({"phase": "changed", "line": trimmed}),
+                );
+            }
+        }
+        Ok(result)
     }
 
     fn validate(args: &SshAnsiblePlaybookArgs, _host_config: &HostConfig) -> Result<()> {
