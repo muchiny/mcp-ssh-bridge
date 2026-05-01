@@ -10,6 +10,8 @@ use crate::domain::use_cases::sbom::SbomCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
+use crate::ports::ToolContext;
+use crate::ports::protocol::{ToolCallResult, ToolContent};
 
 #[derive(Debug, Deserialize)]
 pub struct SshComplianceCheckArgs {
@@ -22,6 +24,15 @@ pub struct SshComplianceCheckArgs {
     max_output: Option<u64>,
     #[serde(default)]
     save_output: Option<String>,
+    /// When `true`, append an LLM-side summary of failing controls to
+    /// the response. Requires the client to advertise the sampling
+    /// capability; falls back to raw-only output otherwise.
+    #[serde(default)]
+    summarize: Option<bool>,
+    /// Maximum tokens for the LLM summary (default: 512). Only
+    /// meaningful with summarize=true.
+    #[serde(default)]
+    summary_max_tokens: Option<u32>,
 }
 
 impl_common_args!(SshComplianceCheckArgs);
@@ -67,6 +78,16 @@ impl StandardTool for ComplianceCheckTool {
             "save_output": {
                 "type": "string",
                 "description": "Save full output to local file"
+            },
+            "summarize": {
+                "type": "boolean",
+                "description": "When true, append an LLM-side summary of failing controls to the response. Requires the client to advertise the sampling capability; falls back to raw-only output otherwise."
+            },
+            "summary_max_tokens": {
+                "type": "integer",
+                "description": "Maximum tokens for the LLM summary (default: 512). Only meaningful with summarize=true.",
+                "minimum": 32,
+                "maximum": 4096
             }
         },
         "required": ["host"]
@@ -76,6 +97,43 @@ impl StandardTool for ComplianceCheckTool {
         Ok(SbomCommandBuilder::build_compliance_command(
             args.profile.as_deref().unwrap_or("cis-level1"),
         ))
+    }
+
+    /// Optional LLM-side summary appended after the raw compliance
+    /// output. Falls back to raw-only when the client does not
+    /// advertise the sampling capability.
+    async fn enrich(
+        result: ToolCallResult,
+        args: &Self::Args,
+        output: &str,
+        ctx: &ToolContext,
+    ) -> Result<ToolCallResult> {
+        if !args.summarize.unwrap_or(false) {
+            return Ok(result);
+        }
+        let max_tokens = args.summary_max_tokens.unwrap_or(512);
+        let prompt = "You are a compliance auditor. List the top 3 failing \
+                      controls from this report in bullet points, one line \
+                      each, no preamble. Mention the CIS/STIG benchmark id \
+                      when present and a 1-line remediation summary.";
+        let Some(summary) = ctx.sample(prompt, output, max_tokens).await? else {
+            return Ok(result);
+        };
+        let mut text = String::new();
+        for content in &result.content {
+            if let ToolContent::Text { text: t } = content {
+                text.push_str(t);
+            }
+        }
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str("\n=== LLM SUMMARY ===\n");
+        text.push_str(&summary);
+        let mut enriched = ToolCallResult::text(text);
+        enriched.structured_content = result.structured_content;
+        enriched.is_error = result.is_error;
+        Ok(enriched)
     }
 }
 
@@ -184,6 +242,8 @@ mod tests {
             timeout_seconds: None,
             max_output: None,
             save_output: None,
+            summarize: None,
+            summary_max_tokens: None,
         };
         let cmd = ComplianceCheckTool::build_command(&args, &test_host_config()).unwrap();
         assert!(cmd.contains("CIS COMPLIANCE"));
@@ -200,6 +260,8 @@ mod tests {
             timeout_seconds: None,
             max_output: None,
             save_output: None,
+            summarize: None,
+            summary_max_tokens: None,
         };
         let cmd = ComplianceCheckTool::build_command(&args, &test_host_config()).unwrap();
         assert!(cmd.contains("BASIC COMPLIANCE"));

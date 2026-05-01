@@ -10,7 +10,8 @@ use crate::domain::use_cases::log_aggregation::LogAggregationCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
-use crate::ports::protocol::ToolCallResult;
+use crate::ports::ToolContext;
+use crate::ports::protocol::{ToolCallResult, ToolContent};
 
 #[derive(Debug, Deserialize)]
 pub struct SshLogAggregateArgs {
@@ -25,6 +26,15 @@ pub struct SshLogAggregateArgs {
     max_output: Option<u64>,
     /// Save full output to a local file path.
     save_output: Option<String>,
+    /// When `true`, append an LLM-side summary of the log aggregation
+    /// to the response. Requires the client to advertise the sampling
+    /// capability; falls back to raw-only output otherwise.
+    #[serde(default)]
+    summarize: Option<bool>,
+    /// Maximum tokens for the LLM summary (default: 512). Only
+    /// meaningful with summarize=true.
+    #[serde(default)]
+    summary_max_tokens: Option<u32>,
 }
 
 impl_common_args!(SshLogAggregateArgs);
@@ -69,6 +79,16 @@ impl StandardTool for LogAggregateTool {
                     "save_output": {
                         "type": "string",
                         "description": "Save full output to a local file path"
+                    },
+                    "summarize": {
+                        "type": "boolean",
+                        "description": "When true, append an LLM-side summary of the aggregation to the response. Requires the client to advertise the sampling capability; falls back to raw-only output otherwise."
+                    },
+                    "summary_max_tokens": {
+                        "type": "integer",
+                        "description": "Maximum tokens for the LLM summary (default: 512). Only meaningful with summarize=true.",
+                        "minimum": 32,
+                        "maximum": 4096
                     }
                 },
                 "required": ["host"]
@@ -96,6 +116,43 @@ impl StandardTool for LogAggregateTool {
         };
         let parsed = super::utils::maybe_reduce_table(parsed, dr);
         ToolCallResult::text(parsed.to_tsv())
+    }
+
+    /// Optional LLM-side summary appended after the raw aggregation
+    /// output. Falls back to raw-only when the client does not
+    /// advertise the sampling capability.
+    async fn enrich(
+        result: ToolCallResult,
+        args: &Self::Args,
+        output: &str,
+        ctx: &ToolContext,
+    ) -> Result<ToolCallResult> {
+        if !args.summarize.unwrap_or(false) {
+            return Ok(result);
+        }
+        let max_tokens = args.summary_max_tokens.unwrap_or(512);
+        let prompt = "You are an SRE. Summarize the top 3 anomalies from \
+                      this log aggregation in bullet points. One line each, \
+                      no preamble. Focus on error spikes, repeated patterns, \
+                      and time-correlation between logs.";
+        let Some(summary) = ctx.sample(prompt, output, max_tokens).await? else {
+            return Ok(result);
+        };
+        let mut text = String::new();
+        for content in &result.content {
+            if let ToolContent::Text { text: t } = content {
+                text.push_str(t);
+            }
+        }
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str("\n=== LLM SUMMARY ===\n");
+        text.push_str(&summary);
+        let mut enriched = ToolCallResult::text(text);
+        enriched.structured_content = result.structured_content;
+        enriched.is_error = result.is_error;
+        Ok(enriched)
     }
 }
 
@@ -245,6 +302,8 @@ mod tests {
             timeout_seconds: None,
             max_output: None,
             save_output: None,
+            summarize: None,
+            summary_max_tokens: None,
         };
         let cmd = LogAggregateTool::build_command(&args, &test_host_config()).unwrap();
         assert!(cmd.contains("FILE"));
@@ -259,6 +318,8 @@ mod tests {
             timeout_seconds: None,
             max_output: None,
             save_output: None,
+            summarize: None,
+            summary_max_tokens: None,
         };
         let cmd = LogAggregateTool::build_command(&args, &test_host_config()).unwrap();
         assert!(cmd.contains("/var/log/nginx/access.log"));
