@@ -19,7 +19,7 @@ pub fn firewall_detect() -> String {
      elif command -v firewall-cmd &>/dev/null; then echo firewall-cmd; \
      elif command -v iptables &>/dev/null; then echo iptables; \
      elif [ -x /usr/sbin/iptables ]; then echo /usr/sbin/iptables; \
-     else echo ERROR_FIREWALL_NOT_FOUND; fi)"
+     else echo 'No firewall tool found on host' >&2; echo false; fi)"
         .to_string()
 }
 
@@ -453,7 +453,11 @@ mod tests {
         assert!(detect.contains("command -v ufw"));
         assert!(detect.contains("command -v firewall-cmd"));
         assert!(detect.contains("command -v iptables"));
-        assert!(detect.contains("ERROR_FIREWALL_NOT_FOUND"));
+        // When no firewall tool is found we emit a stderr message and echo
+        // `false` so the outer command fails with exit 1 instead of running
+        // a literal sentinel as a command (exit 127, confusing).
+        assert!(detect.contains("No firewall tool found"));
+        assert!(detect.contains("echo false"));
     }
 
     #[test]

@@ -105,9 +105,15 @@ impl TemplateCommandBuilder {
     /// Returns an echo command listing all built-in templates.
     #[must_use]
     pub fn build_template_list_command() -> String {
-        let mut lines = vec!["echo 'Available configuration templates:'".to_string()];
+        // Emit a clean two-line tabular layout (single column "NAME") so the
+        // generic columnar parser used by `ssh_template_list` sees a proper
+        // header row and full-width values. The previous format used a
+        // sentence header followed by lines indented with two spaces, which
+        // the parser misread as a fixed-width column starting at offset 2,
+        // chopping the first two characters off the header.
+        let mut lines = vec!["echo NAME".to_string()];
         for tmpl in KNOWN_TEMPLATES {
-            lines.push(format!("echo '  - {tmpl}'"));
+            lines.push(format!("echo {tmpl}"));
         }
         lines.join(" && ")
     }
@@ -305,7 +311,7 @@ mod tests {
     #[test]
     fn test_list_command() {
         let cmd = TemplateCommandBuilder::build_template_list_command();
-        assert!(cmd.contains("Available configuration templates"));
+        assert!(cmd.contains("echo NAME"));
         assert!(cmd.contains("nginx-reverse-proxy"));
         assert!(cmd.contains("nginx-static"));
         assert!(cmd.contains("apache-vhost"));

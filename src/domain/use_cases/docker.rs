@@ -36,7 +36,7 @@ pub fn docker_detect_prefix(docker_bin: Option<&str>) -> String {
     let Some(bin) = docker_bin else {
         return "$(if command -v docker &>/dev/null; then echo docker; \
          elif command -v podman &>/dev/null; then echo podman; \
-         else echo ERROR_DOCKER_NOT_FOUND; fi) "
+         else echo 'Docker/Podman not installed on host' >&2; echo false; fi) "
             .to_string();
     };
     if is_valid_binary_path(bin) {
@@ -56,7 +56,7 @@ pub fn docker_compose_detect_prefix(compose_bin: Option<&str>) -> String {
     let Some(bin) = compose_bin else {
         return "$(if docker compose version &>/dev/null 2>&1; then echo 'docker compose'; \
          elif command -v docker-compose &>/dev/null; then echo docker-compose; \
-         else echo ERROR_DOCKER_COMPOSE_NOT_FOUND; fi) "
+         else echo 'docker compose / docker-compose not installed on host' >&2; echo false; fi) "
             .to_string();
     };
     if is_valid_binary_path(bin) {
@@ -439,7 +439,12 @@ mod tests {
         let prefix = docker_detect_prefix(None);
         assert!(prefix.contains("command -v docker"));
         assert!(prefix.contains("podman"));
-        assert!(prefix.contains("ERROR_DOCKER_NOT_FOUND"));
+        // When neither docker nor podman is found we emit a stderr message
+        // and echo `false` so the outer command becomes `false ...` (exit 1)
+        // rather than running the literal sentinel as a command (exit 127
+        // with a confusing `command not found` message).
+        assert!(prefix.contains("not installed on host"));
+        assert!(prefix.contains("echo false"));
     }
 
     // ── docker_compose_detect_prefix ────────────────────────────────
@@ -455,7 +460,8 @@ mod tests {
         let prefix = docker_compose_detect_prefix(None);
         assert!(prefix.contains("docker compose version"));
         assert!(prefix.contains("docker-compose"));
-        assert!(prefix.contains("ERROR_DOCKER_COMPOSE_NOT_FOUND"));
+        assert!(prefix.contains("not installed on host"));
+        assert!(prefix.contains("echo false"));
     }
 
     // ── build_ps_command ────────────────────────────────────────────

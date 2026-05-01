@@ -38,7 +38,7 @@ pub fn kubectl_detect_prefix(kubectl_bin: Option<&str>) -> String {
         "$(if command -v kubectl &>/dev/null; then echo kubectl; \
          elif command -v k3s &>/dev/null; then echo 'k3s kubectl'; \
          elif command -v microk8s &>/dev/null; then echo 'microk8s kubectl'; \
-         else echo ERROR_KUBECTL_NOT_FOUND; fi) "
+         else echo 'kubectl/k3s/microk8s not installed on host' >&2; echo false; fi) "
             .to_string()
     }
 }
@@ -57,7 +57,7 @@ pub fn helm_detect_prefix(helm_bin: Option<&str>) -> String {
         }
     } else {
         "$(if command -v helm &>/dev/null; then echo helm; \
-         else echo ERROR_HELM_NOT_FOUND; fi) "
+         else echo 'helm not installed on host' >&2; echo false; fi) "
             .to_string()
     }
 }
@@ -884,7 +884,8 @@ mod tests {
         assert!(prefix.contains("command -v kubectl"));
         assert!(prefix.contains("k3s kubectl"));
         assert!(prefix.contains("microk8s kubectl"));
-        assert!(prefix.contains("ERROR_KUBECTL_NOT_FOUND"));
+        assert!(prefix.contains("not installed on host"));
+        assert!(prefix.contains("echo false"));
     }
 
     // ============== helm_detect_prefix Tests ==============
@@ -899,7 +900,8 @@ mod tests {
     fn test_helm_detect_prefix_auto() {
         let prefix = helm_detect_prefix(None);
         assert!(prefix.contains("command -v helm"));
-        assert!(prefix.contains("ERROR_HELM_NOT_FOUND"));
+        assert!(prefix.contains("not installed on host"));
+        assert!(prefix.contains("echo false"));
     }
 
     // ============== build_get_command Tests ==============

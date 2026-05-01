@@ -85,7 +85,7 @@ pub fn pkg_detect_prefix(pkg_manager: Option<&str>) -> String {
      elif command -v dnf &>/dev/null; then echo dnf; \
      elif command -v yum &>/dev/null; then echo yum; \
      elif command -v apk &>/dev/null; then echo apk; \
-     else echo ERROR_PKG_MANAGER_NOT_FOUND; fi)"
+     else echo 'No supported package manager found on host' >&2; echo false; fi)"
         .to_string()
 }
 

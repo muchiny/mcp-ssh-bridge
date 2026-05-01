@@ -270,7 +270,11 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         // Step 10b: Force C locale for consistent columnar output parsing.
         // Only StandardToolHandler commands are prefixed — ssh_exec and
         // other custom handlers preserve the user's native locale.
-        let command = format!("LC_ALL=C {command}");
+        // Use `export ...; cmd` form so the locale applies to compound
+        // commands (`if`, `for`, `{...}`); a bare `LC_ALL=C cmd` prefix
+        // only works for simple commands and parses as a syntax error
+        // when followed by a shell reserved word.
+        let command = format!("export LC_ALL=C; {command}");
 
         // Step 11: Execute with retry and cancellation support.
         //
