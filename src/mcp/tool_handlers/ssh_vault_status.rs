@@ -283,6 +283,7 @@ mod tests {
             metrics: None,
             cancel_token: None,
             notification_tx: None,
+            progress_token: None,
         }
     }
 

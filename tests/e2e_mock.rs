@@ -189,6 +189,7 @@ fn build_ctx_with_mode(
         metrics: None,
         cancel_token: None,
         notification_tx: None,
+            progress_token: None,
     }
 }
 

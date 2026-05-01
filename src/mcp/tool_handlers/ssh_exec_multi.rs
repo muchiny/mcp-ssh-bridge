@@ -254,11 +254,29 @@ impl ToolHandler for SshExecMultiHandler {
             ));
         }
 
-        // Collect results
+        // Collect results, reporting progress as each host completes.
+        // The reporter is `None` if the client did not request progress;
+        // calls then become a cheap no-op.
+        let progress = ctx.progress_reporter(Some(args.hosts.len() as u64));
         let mut results = Vec::with_capacity(args.hosts.len());
+        let mut completed: u64 = 0;
         while let Some(join_result) = join_set.join_next().await {
             match join_result {
-                Ok(host_result) => results.push(host_result),
+                Ok(host_result) => {
+                    completed += 1;
+                    if let Some(reporter) = progress.as_ref() {
+                        reporter.report(
+                            completed,
+                            Some(&format!(
+                                "{} ({}/{})",
+                                host_result.host,
+                                completed,
+                                args.hosts.len()
+                            )),
+                        );
+                    }
+                    results.push(host_result);
+                }
                 Err(e) => {
                     warn!("Task join error: {e}");
                 }

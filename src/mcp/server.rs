@@ -349,6 +349,7 @@ impl McpServer {
         &self,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
         notification_tx: Option<mpsc::Sender<WriterMessage>>,
+        progress_token: Option<Value>,
     ) -> ToolContext {
         // Read config snapshot
         let mut config_snapshot = {
@@ -379,6 +380,7 @@ impl McpServer {
         ctx.metrics = Some(Arc::clone(&self.metrics));
         ctx.cancel_token = cancel_token;
         ctx.notification_tx = notification_tx;
+        ctx.progress_token = progress_token;
         ctx
     }
 
@@ -1247,6 +1249,10 @@ impl McpServer {
                     task_request,
                     id,
                     notification_tx,
+                    call_params
+                        .meta
+                        .as_ref()
+                        .and_then(|m| m.progress_token.clone()),
                 )
                 .await;
         }
@@ -1257,7 +1263,14 @@ impl McpServer {
         }
 
         let ctx = self
-            .create_tool_context(cancel_token, notification_tx)
+            .create_tool_context(
+                cancel_token,
+                notification_tx,
+                call_params
+                    .meta
+                    .as_ref()
+                    .and_then(|m| m.progress_token.clone()),
+            )
             .await;
 
         if let Some(ref reporter) = progress_reporter {
@@ -1371,6 +1384,7 @@ impl McpServer {
         task_request: super::protocol::TaskRequest,
         id: Option<Value>,
         notification_tx: Option<mpsc::Sender<WriterMessage>>,
+        progress_token: Option<Value>,
     ) -> JsonRpcResponse {
         // Get the handler first to validate the tool exists
         let Some(handler) = self.registry.get(&tool_name) else {
@@ -1423,7 +1437,7 @@ impl McpServer {
         // handler can do clean shutdown (e.g. evicting the SSH connection
         // from the pool) when the task is cancelled via `tasks/cancel`.
         let ctx = self
-            .create_tool_context(Some(cancel_token.clone()), notification_tx)
+            .create_tool_context(Some(cancel_token.clone()), notification_tx, progress_token)
             .await;
 
         // Spawn the background worker
@@ -1513,7 +1527,7 @@ impl McpServer {
 
         info!(prompt = %get_params.name, "Prompt get");
 
-        let ctx = self.create_tool_context(None, None).await;
+        let ctx = self.create_tool_context(None, None, None).await;
 
         match self
             .prompt_registry
@@ -1532,7 +1546,7 @@ impl McpServer {
     }
 
     async fn handle_resources_list(&self, id: Option<Value>) -> JsonRpcResponse {
-        let ctx = self.create_tool_context(None, None).await;
+        let ctx = self.create_tool_context(None, None, None).await;
 
         match self.resource_registry.list(&ctx).await {
             Ok(resources) => {
@@ -1567,7 +1581,7 @@ impl McpServer {
 
         info!(uri = %read_params.uri, "Resource read");
 
-        let ctx = self.create_tool_context(None, None).await;
+        let ctx = self.create_tool_context(None, None, None).await;
 
         match self.resource_registry.read(&read_params.uri, &ctx).await {
             Ok(contents) => {

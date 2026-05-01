@@ -78,6 +78,19 @@ pub struct ToolContext {
     /// connection instead of racing against a shared last-writer-wins
     /// slot.
     pub notification_tx: Option<mpsc::Sender<crate::mcp::protocol::WriterMessage>>,
+    /// Client-provided progress token for `notifications/progress`.
+    ///
+    /// Present when the MCP client passed a `_meta.progressToken` on the
+    /// request. Handlers obtain a [`ProgressReporter`] via
+    /// [`ToolContext::progress_reporter`] which couples this token with
+    /// the per-session [`Self::notification_tx`]; long-running handlers
+    /// (`ssh_exec_multi`, `ssh_metrics_multi`, `ssh_diagnose`, runbook
+    /// engines, ansible runners…) should report incremental progress
+    /// through that helper so the client UI can render real-time
+    /// completion instead of a single black-box wait.
+    ///
+    /// `None` when the client did not request progress reporting.
+    pub progress_token: Option<serde_json::Value>,
 }
 
 impl ToolContext {
@@ -111,7 +124,37 @@ impl ToolContext {
             metrics: None,
             cancel_token: None,
             notification_tx: None,
+            progress_token: None,
         }
+    }
+
+    /// Build a [`ProgressReporter`] for the current request, or `None`
+    /// when the client did not provide a `progressToken` or the session
+    /// has no notification channel attached. `total` is the number of
+    /// expected steps and enables percentage display on the client side
+    /// — pass `None` for indeterminate progress.
+    ///
+    /// Designed to be called once at the top of long-running handlers:
+    ///
+    /// ```ignore
+    /// let progress = ctx.progress_reporter(Some(args.hosts.len() as u64));
+    /// for (i, host) in args.hosts.iter().enumerate() {
+    ///     run_step(host).await?;
+    ///     if let Some(p) = progress.as_ref() {
+    ///         p.report((i + 1) as u64, Some(&format!("{host} done")));
+    ///     }
+    /// }
+    /// ```
+    #[must_use]
+    pub fn progress_reporter(
+        &self,
+        total: Option<u64>,
+    ) -> Option<crate::mcp::progress::ProgressReporter> {
+        let token = self.progress_token.clone()?;
+        let tx = self.notification_tx.clone()?;
+        Some(crate::mcp::progress::ProgressReporter::new(
+            token, tx, total,
+        ))
     }
 
     /// Check if a path is within the declared client roots.
@@ -318,6 +361,7 @@ pub mod mock {
             metrics: None,
             cancel_token: None,
             notification_tx: None,
+            progress_token: None,
         }
     }
 
@@ -368,6 +412,7 @@ pub mod mock {
             metrics: None,
             cancel_token: None,
             notification_tx: None,
+            progress_token: None,
         }
     }
 
@@ -417,6 +462,7 @@ pub mod mock {
             metrics: None,
             cancel_token: None,
             notification_tx: None,
+            progress_token: None,
         }
     }
 
@@ -453,6 +499,7 @@ pub mod mock {
             metrics: None,
             cancel_token: None,
             notification_tx: None,
+            progress_token: None,
         }
     }
 }
@@ -472,6 +519,51 @@ mod tests {
     fn test_validate_root_scope_no_roots_allows_any_path() {
         let ctx = mock::create_test_context();
         assert!(ctx.validate_root_scope("/any/path").is_ok());
+    }
+
+    #[test]
+    fn test_progress_reporter_returns_none_without_token() {
+        let ctx = mock::create_test_context();
+        assert!(ctx.progress_reporter(Some(5)).is_none());
+    }
+
+    #[test]
+    fn test_progress_reporter_returns_none_with_token_but_no_tx() {
+        let mut ctx = mock::create_test_context();
+        ctx.progress_token = Some(serde_json::json!("tok-test"));
+        assert!(ctx.progress_reporter(Some(3)).is_none());
+    }
+
+    #[test]
+    fn test_progress_reporter_emits_when_token_and_tx_present() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let mut ctx = mock::create_test_context();
+        ctx.notification_tx = Some(tx);
+        ctx.progress_token = Some(serde_json::json!("tok-99"));
+
+        let reporter = ctx.progress_reporter(Some(2)).expect("reporter built");
+        reporter.report(1, Some("first"));
+        reporter.report(2, Some("done"));
+
+        // Two notifications must land on the channel.
+        let m1 = rx.try_recv().expect("first notification");
+        let m2 = rx.try_recv().expect("second notification");
+        match (m1, m2) {
+            (
+                crate::mcp::protocol::WriterMessage::Notification(n1),
+                crate::mcp::protocol::WriterMessage::Notification(n2),
+            ) => {
+                assert_eq!(n1.method, "notifications/progress");
+                assert_eq!(n2.method, "notifications/progress");
+                let p1 = n1.params.unwrap();
+                let p2 = n2.params.unwrap();
+                assert_eq!(p1["progressToken"], "tok-99");
+                assert_eq!(p1["progress"], 1);
+                assert_eq!(p1["total"], 2);
+                assert_eq!(p2["progress"], 2);
+            }
+            _ => panic!("expected two progress notifications"),
+        }
     }
 
     #[test]

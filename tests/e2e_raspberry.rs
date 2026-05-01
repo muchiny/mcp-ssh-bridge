@@ -204,6 +204,7 @@ mod rpi {
             metrics: None,
             cancel_token: None,
             notification_tx: None,
+            progress_token: None,
         }
     }
 
@@ -1054,6 +1055,7 @@ mod rpi {
             metrics: None,
             cancel_token: None,
             notification_tx: None,
+            progress_token: None,
         };
 
         let handler = SshExecHandler;
