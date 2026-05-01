@@ -318,6 +318,7 @@ mod tests {
             pending_requests: None,
             client_supports_elicitation: false,
             client_supports_sampling: false,
+            mcp_logger: None,
         }
     }
 

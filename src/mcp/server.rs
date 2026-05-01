@@ -390,6 +390,7 @@ impl McpServer {
         ctx.client_supports_elicitation =
             self.client_supports_elicitation.load(Ordering::Relaxed);
         ctx.client_supports_sampling = self.client_supports_sampling.load(Ordering::Relaxed);
+        ctx.mcp_logger = self.mcp_logger.read().await.as_ref().map(Arc::clone);
         ctx
     }
 

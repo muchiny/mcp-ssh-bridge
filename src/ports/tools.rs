@@ -112,6 +112,19 @@ pub struct ToolContext {
     /// `sampling/createMessage` request — handlers can still proceed
     /// with the raw output, just without the LLM-side summary.
     pub client_supports_sampling: bool,
+    /// Per-session MCP logger for `notifications/message`.
+    ///
+    /// Handlers that want to surface step-level events to the client
+    /// (`ssh_runbook_execute` per-step, `ssh_ansible_playbook` per-task,
+    /// `ssh_security_audit` per-CVE…) can use this to emit structured
+    /// log entries. The level is filtered server-side via the shared
+    /// `log_level` atomic so messages below the client's chosen
+    /// threshold are dropped without any wire traffic.
+    ///
+    /// `None` in test contexts and when the session has no notification
+    /// channel attached. Callers should fall back to `tracing::*` for
+    /// local diagnostics in that case.
+    pub mcp_logger: Option<Arc<crate::mcp::logger::McpLogger>>,
 }
 
 impl ToolContext {
@@ -149,6 +162,7 @@ impl ToolContext {
             pending_requests: None,
             client_supports_elicitation: false,
             client_supports_sampling: false,
+            mcp_logger: None,
         }
     }
 
@@ -503,6 +517,7 @@ pub mod mock {
             pending_requests: None,
             client_supports_elicitation: false,
             client_supports_sampling: false,
+            mcp_logger: None,
         }
     }
 
@@ -557,6 +572,7 @@ pub mod mock {
             pending_requests: None,
             client_supports_elicitation: false,
             client_supports_sampling: false,
+            mcp_logger: None,
         }
     }
 
@@ -610,6 +626,7 @@ pub mod mock {
             pending_requests: None,
             client_supports_elicitation: false,
             client_supports_sampling: false,
+            mcp_logger: None,
         }
     }
 
@@ -650,6 +667,7 @@ pub mod mock {
             pending_requests: None,
             client_supports_elicitation: false,
             client_supports_sampling: false,
+            mcp_logger: None,
         }
     }
 }
@@ -694,6 +712,39 @@ mod tests {
         // client_supports_elicitation stays false
         let result = ctx.elicit_confirm("ssh_test", "do thing").await.unwrap();
         assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_mcp_logger_is_none_in_test_context() {
+        let ctx = mock::create_test_context();
+        assert!(ctx.mcp_logger.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_mcp_logger_emits_when_attached() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let level = Arc::new(std::sync::atomic::AtomicU8::new(
+            crate::mcp::protocol::LogLevel::Debug.severity(),
+        ));
+        let mut ctx = mock::create_test_context();
+        ctx.mcp_logger = Some(Arc::new(crate::mcp::logger::McpLogger::new(level, tx)));
+
+        ctx.mcp_logger
+            .as_ref()
+            .unwrap()
+            .info("ssh_runbook", "step 1/3 complete");
+
+        let msg = rx.try_recv().expect("notification on channel");
+        match msg {
+            crate::mcp::protocol::WriterMessage::Notification(n) => {
+                assert_eq!(n.method, "notifications/message");
+                let params = n.params.unwrap();
+                assert_eq!(params["level"], "info");
+                assert_eq!(params["logger"], "ssh_runbook");
+                assert_eq!(params["data"], "step 1/3 complete");
+            }
+            _ => panic!("expected Notification"),
+        }
     }
 
     #[tokio::test]
