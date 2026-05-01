@@ -10,10 +10,21 @@ use crate::domain::use_cases::diagnostics::DiagnosticsCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
+use crate::ports::ToolContext;
+use crate::ports::protocol::{ToolCallResult, ToolContent};
 
 #[derive(Debug, Deserialize)]
 pub struct SshIncidentTriageArgs {
     host: String,
+    /// When `true`, append an LLM-side summary of the output to the
+    /// response. Requires the client to advertise the sampling
+    /// capability; falls back to raw-only output otherwise.
+    #[serde(default)]
+    summarize: Option<bool>,
+    /// Maximum tokens for the LLM summary (default: 512). Only
+    /// meaningful with summarize=true.
+    #[serde(default)]
+    summary_max_tokens: Option<u32>,
     symptom: String,
     #[serde(default = "default_since")]
     since: String,
@@ -87,6 +98,40 @@ impl StandardTool for IncidentTriageTool {
             &args.symptom,
             &args.since,
         ))
+    }
+
+    /// Optional LLM-side summary appended after the raw output. Falls
+    /// back to raw-only when the client does not advertise the
+    /// sampling capability.
+    async fn enrich(
+        result: ToolCallResult,
+        args: &Self::Args,
+        output: &str,
+        ctx: &ToolContext,
+    ) -> Result<ToolCallResult> {
+        if !args.summarize.unwrap_or(false) {
+            return Ok(result);
+        }
+        let max_tokens = args.summary_max_tokens.unwrap_or(512);
+        let prompt = "You are an on-call engineer. Triage this incident — list the top 3 next actions to investigate, ranked by impact. Bullet points only, one line each, no preamble.";
+        let Some(summary) = ctx.sample(prompt, output, max_tokens).await? else {
+            return Ok(result);
+        };
+        let mut text = String::new();
+        for content in &result.content {
+            if let ToolContent::Text { text: t } = content {
+                text.push_str(t);
+            }
+        }
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str("\n=== LLM SUMMARY ===\n");
+        text.push_str(&summary);
+        let mut enriched = ToolCallResult::text(text);
+        enriched.structured_content = result.structured_content;
+        enriched.is_error = result.is_error;
+        Ok(enriched)
     }
 }
 
@@ -190,6 +235,8 @@ mod tests {
             timeout_seconds: None,
             max_output: None,
             save_output: None,
+            summarize: None,
+            summary_max_tokens: None,
         };
         let cmd = IncidentTriageTool::build_command(&args, &host_config).unwrap();
         assert!(cmd.contains("MEMORY DETAIL"));
