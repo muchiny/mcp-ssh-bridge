@@ -116,6 +116,59 @@ pub trait StandardTool: Send + Sync + 'static {
     ) -> ToolCallResult {
         result
     }
+
+    /// Async hook invoked AFTER args parsing/validation but BEFORE the
+    /// command is built or executed. Receives the full [`ToolContext`]
+    /// so handlers can call `ctx.elicit_confirm`, inspect `ctx.roots`,
+    /// emit log notifications, etc.
+    ///
+    /// Returning `Ok(Some(result))` short-circuits the pipeline — the
+    /// returned `ToolCallResult` is sent straight to the client without
+    /// running `build_command` / `exec` / `post_process`. Use this when
+    /// the user declines an elicitation prompt or when an early policy
+    /// check needs to abort with a custom message.
+    ///
+    /// Returning `Ok(None)` continues the pipeline normally. The
+    /// default implementation is a no-op for that reason.
+    ///
+    /// # Errors
+    ///
+    /// Propagate `BridgeError::*` for transport-level failures (the
+    /// elicitation channel closed, the LLM call timed out). Do NOT use
+    /// errors for "user declined" — return `Ok(Some(error_result))`
+    /// so the response is structured.
+    fn pre_execute(
+        _args: &Self::Args,
+        _ctx: &ToolContext,
+    ) -> impl std::future::Future<Output = Result<Option<ToolCallResult>>> + Send {
+        async { Ok(None) }
+    }
+
+    /// Async hook invoked AFTER `post_process` produced its result and
+    /// BEFORE the response is shipped to the client. Receives the raw
+    /// (pre-truncation) output and the full [`ToolContext`].
+    ///
+    /// Designed for tools that opt into LLM-side analysis via
+    /// `ctx.sample(...)` (e.g. `ssh_diagnose summarize=true`). The
+    /// handler should always return the raw data alongside any summary
+    /// — never replace the source content with the LLM output, since
+    /// downstream automation must be able to verify the bridge's own
+    /// findings.
+    ///
+    /// Returning the input result unchanged is the safe default, hence
+    /// the no-op default impl.
+    ///
+    /// # Errors
+    ///
+    /// Propagate `BridgeError::*` for transport-level failures.
+    fn enrich(
+        result: ToolCallResult,
+        _args: &Self::Args,
+        _output: &str,
+        _ctx: &ToolContext,
+    ) -> impl std::future::Future<Output = Result<ToolCallResult>> + Send {
+        async move { Ok(result) }
+    }
 }
 
 /// Generic handler that wraps a [`StandardTool`] and implements [`ToolHandler`].
@@ -227,6 +280,13 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         // Step 4b: Root scope validation for file-operation tools
         for path in T::scoped_paths(&args) {
             ctx.validate_root_scope(path)?;
+        }
+
+        // Step 4c: Optional async pre-execute hook with `ToolContext`
+        // access. Used by destructive tools to call `ctx.elicit_confirm`
+        // and short-circuit the pipeline when the user declines.
+        if let Some(early) = T::pre_execute(&args, ctx).await? {
+            return Ok(early);
         }
 
         // Step 5: Build command
@@ -406,6 +466,11 @@ impl<T: StandardTool> ToolHandler for StandardToolHandler<T> {
         } else {
             T::post_process(result, &args, &raw_output, &dr)
         };
+
+        // Step 18b: Optional async enrichment hook with `ToolContext` access.
+        // Used by diagnostic tools that opt into LLM-side analysis via
+        // `ctx.sample()` (e.g. `ssh_diagnose summarize=true`).
+        let result = T::enrich(result, &args, &raw_output, ctx).await?;
 
         // Record telemetry fields for this successful execution.
         let span = tracing::Span::current();

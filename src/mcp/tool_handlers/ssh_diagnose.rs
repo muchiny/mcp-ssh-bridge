@@ -10,6 +10,8 @@ use crate::domain::use_cases::diagnostics::DiagnosticsCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
+use crate::ports::ToolContext;
+use crate::ports::protocol::{ToolCallResult, ToolContent};
 
 #[derive(Debug, Deserialize)]
 pub struct SshDiagnoseArgs {
@@ -20,6 +22,18 @@ pub struct SshDiagnoseArgs {
     max_output: Option<u64>,
     #[serde(default)]
     save_output: Option<String>,
+    /// When `true`, ask the MCP client's LLM to summarize the raw
+    /// diagnostic output via `sampling/createMessage`. The summary is
+    /// appended to the response under a `=== LLM SUMMARY ===` section
+    /// — the raw output is always preserved so callers can verify the
+    /// LLM's conclusions. Falls back silently to raw-only output when
+    /// the client does not advertise the sampling capability.
+    #[serde(default)]
+    summarize: Option<bool>,
+    /// Cap on the LLM summary length, in tokens. Only meaningful when
+    /// `summarize=true`. Defaults to 512.
+    #[serde(default)]
+    summary_max_tokens: Option<u32>,
 }
 
 impl_common_args!(SshDiagnoseArgs);
@@ -58,6 +72,16 @@ impl StandardTool for DiagnoseTool {
             "save_output": {
                 "type": "string",
                 "description": "Save full output to local file"
+            },
+            "summarize": {
+                "type": "boolean",
+                "description": "When true, append an LLM-side summary of the diagnostic output to the response. Requires the client to advertise the sampling capability; falls back to raw-only output otherwise."
+            },
+            "summary_max_tokens": {
+                "type": "integer",
+                "description": "Maximum tokens for the LLM summary (default: 512). Only meaningful with summarize=true.",
+                "minimum": 32,
+                "maximum": 4096
             }
         },
         "required": ["host"]
@@ -65,6 +89,53 @@ impl StandardTool for DiagnoseTool {
 
     fn build_command(_args: &SshDiagnoseArgs, _host_config: &HostConfig) -> Result<String> {
         Ok(DiagnosticsCommandBuilder::build_diagnose_command())
+    }
+
+    /// When the user opted in via `summarize=true`, ask the client's
+    /// LLM to identify the top anomalies in the diagnostic output and
+    /// append the summary under a `=== LLM SUMMARY ===` section. The
+    /// raw output is always preserved so downstream automation can
+    /// verify the LLM's conclusions.
+    async fn enrich(
+        result: ToolCallResult,
+        args: &SshDiagnoseArgs,
+        output: &str,
+        ctx: &ToolContext,
+    ) -> Result<ToolCallResult> {
+        if !args.summarize.unwrap_or(false) {
+            return Ok(result);
+        }
+        let max_tokens = args.summary_max_tokens.unwrap_or(512);
+        let prompt = "You are a Linux SRE. Identify the top 3 anomalies in \
+                      the diagnostic output below. Be terse — bullet points \
+                      only, one line each, no preamble. Focus on disk \
+                      pressure, failed services, OOM kills, and unexpected \
+                      listeners.";
+        let Some(summary) = ctx.sample(prompt, output, max_tokens).await? else {
+            // Sampling unavailable — return raw result unchanged so the
+            // user still gets the full diagnostic.
+            return Ok(result);
+        };
+
+        // Concatenate the raw text content with the summary so both are
+        // visible in the response. App content / structured fields on
+        // the existing result are preserved by reusing the input as a
+        // base and only mutating the text body.
+        let mut text = String::new();
+        for content in &result.content {
+            if let ToolContent::Text { text: t } = content {
+                text.push_str(t);
+            }
+        }
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str("\n=== LLM SUMMARY ===\n");
+        text.push_str(&summary);
+        let mut enriched = ToolCallResult::text(text);
+        enriched.structured_content = result.structured_content;
+        enriched.is_error = result.is_error;
+        Ok(enriched)
     }
 }
 
@@ -162,6 +233,8 @@ mod tests {
             timeout_seconds: None,
             max_output: None,
             save_output: None,
+            summarize: None,
+            summary_max_tokens: None,
         };
         let cmd = DiagnoseTool::build_command(&args, &host_config).unwrap();
         assert!(cmd.contains("free -m"));
