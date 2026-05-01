@@ -85,6 +85,10 @@ pub struct McpServer {
     /// handshake. Used by `handle_tools_call` to gate destructive operations
     /// when `security.require_elicitation_on_destructive` is enabled.
     client_supports_elicitation: AtomicBool,
+    /// Whether the client advertised the `sampling` capability during initialize.
+    /// Read by `ToolContext::sample` to short-circuit when the client cannot
+    /// satisfy `sampling/createMessage` requests.
+    client_supports_sampling: AtomicBool,
     /// Application metrics for token consumption analytics.
     metrics: Arc<crate::metrics::Metrics>,
     /// Map of in-flight MCP request IDs to their `CancellationToken`.
@@ -202,6 +206,7 @@ impl McpServer {
             roots: Arc::new(RwLock::new(Vec::new())),
             client_supports_roots: AtomicBool::new(false),
             client_supports_elicitation: AtomicBool::new(false),
+            client_supports_sampling: AtomicBool::new(false),
             metrics: Arc::new(crate::metrics::Metrics::new()),
             active_requests: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
@@ -384,6 +389,7 @@ impl McpServer {
         ctx.pending_requests = Some(Arc::clone(&self.pending_requests));
         ctx.client_supports_elicitation =
             self.client_supports_elicitation.load(Ordering::Relaxed);
+        ctx.client_supports_sampling = self.client_supports_sampling.load(Ordering::Relaxed);
         ctx
     }
 
@@ -1044,6 +1050,13 @@ impl McpServer {
                         self.client_supports_elicitation
                             .store(true, Ordering::Relaxed);
                         info!("Client supports elicitation capability");
+                    }
+
+                    // Check if client supports sampling capability
+                    if init_params.capabilities.sampling.is_some() {
+                        self.client_supports_sampling
+                            .store(true, Ordering::Relaxed);
+                        info!("Client supports sampling capability");
                     }
 
                     *self.client_info.write().await = Some(init_params.client_info);

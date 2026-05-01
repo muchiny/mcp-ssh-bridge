@@ -106,6 +106,12 @@ pub struct ToolContext {
     /// request — saves a network round-trip for clients that do not
     /// advertise the elicitation capability.
     pub client_supports_elicitation: bool,
+    /// Snapshot of `MCPServer::client_supports_sampling` taken at the
+    /// time the request was dispatched. When `false`, the
+    /// [`Self::sample`] helper short-circuits without sending a
+    /// `sampling/createMessage` request — handlers can still proceed
+    /// with the raw output, just without the LLM-side summary.
+    pub client_supports_sampling: bool,
 }
 
 impl ToolContext {
@@ -142,6 +148,7 @@ impl ToolContext {
             progress_token: None,
             pending_requests: None,
             client_supports_elicitation: false,
+            client_supports_sampling: false,
         }
     }
 
@@ -228,6 +235,62 @@ impl ToolContext {
             Err(crate::mcp::client_requester::ClientRequestError::NotSupported) => Ok(None),
             Err(e) => Err(crate::error::BridgeError::McpInvalidRequest(format!(
                 "elicit_confirm failed: {e:?}"
+            ))),
+        }
+    }
+
+    /// Ask the MCP client's LLM to analyze the given content via
+    /// `sampling/createMessage`. Returns:
+    ///
+    /// - `Ok(Some(text))` — the LLM produced a textual response
+    /// - `Ok(None)` — sampling is unavailable (no notification channel,
+    ///   no pending-requests slot, or the client did not advertise the
+    ///   capability). Handlers should fall back to returning the raw
+    ///   data without an LLM-side summary.
+    /// - `Err(_)` — transport-level failure
+    ///
+    /// `prompt` is the system-style instruction (e.g. "Identify the top
+    /// 3 anomalies in this output"); `content` is the data to analyze
+    /// (e.g. the raw `ssh_diagnose` output). `max_tokens` caps the
+    /// response length.
+    ///
+    /// Designed for diagnostic / aggregation tools that opt-in to a
+    /// `summarize=true` parameter — handlers should always return the
+    /// raw data alongside the summary so the user can verify and so
+    /// downstream automation never depends on the LLM output alone.
+    ///
+    /// # Errors
+    ///
+    /// Returns `BridgeError::McpInvalidRequest` for transport errors.
+    pub async fn sample(
+        &self,
+        prompt: &str,
+        content: &str,
+        max_tokens: u32,
+    ) -> Result<Option<String>> {
+        let (Some(tx), Some(pending)) =
+            (self.notification_tx.clone(), self.pending_requests.clone())
+        else {
+            return Ok(None);
+        };
+        if !self.client_supports_sampling {
+            return Ok(None);
+        }
+        let requester = Arc::new(crate::mcp::client_requester::ClientRequester::new(
+            tx,
+            pending,
+            std::time::Duration::from_secs(120),
+        ));
+        let service = crate::mcp::sampling::SamplingService::new(requester);
+        service.set_supported(true);
+        match service.analyze(prompt, content, max_tokens).await {
+            Ok(result) => {
+                let crate::mcp::protocol::SamplingContent::Text { text } = result.content;
+                Ok(Some(text))
+            }
+            Err(crate::mcp::client_requester::ClientRequestError::NotSupported) => Ok(None),
+            Err(e) => Err(crate::error::BridgeError::McpInvalidRequest(format!(
+                "sample failed: {e:?}"
             ))),
         }
     }
@@ -439,6 +502,7 @@ pub mod mock {
             progress_token: None,
             pending_requests: None,
             client_supports_elicitation: false,
+            client_supports_sampling: false,
         }
     }
 
@@ -492,6 +556,7 @@ pub mod mock {
             progress_token: None,
             pending_requests: None,
             client_supports_elicitation: false,
+            client_supports_sampling: false,
         }
     }
 
@@ -544,6 +609,7 @@ pub mod mock {
             progress_token: None,
             pending_requests: None,
             client_supports_elicitation: false,
+            client_supports_sampling: false,
         }
     }
 
@@ -583,6 +649,7 @@ pub mod mock {
             progress_token: None,
             pending_requests: None,
             client_supports_elicitation: false,
+            client_supports_sampling: false,
         }
     }
 }
@@ -627,6 +694,58 @@ mod tests {
         // client_supports_elicitation stays false
         let result = ctx.elicit_confirm("ssh_test", "do thing").await.unwrap();
         assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_sample_returns_none_without_tx() {
+        let ctx = mock::create_test_context();
+        let result = ctx.sample("p", "c", 100).await.unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_sample_returns_none_when_unsupported() {
+        let (tx, _rx) = tokio::sync::mpsc::channel(8);
+        let mut ctx = mock::create_test_context();
+        ctx.notification_tx = Some(tx);
+        ctx.pending_requests =
+            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        // client_supports_sampling stays false
+        let result = ctx.sample("p", "c", 100).await.unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_sample_sends_request_when_supported() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let mut ctx = mock::create_test_context();
+        ctx.notification_tx = Some(tx);
+        ctx.pending_requests =
+            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        ctx.client_supports_sampling = true;
+
+        let handle = tokio::spawn(async move {
+            ctx.sample("Identify top 3 issues", "raw diagnostic output...", 256)
+                .await
+        });
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("notification within timeout")
+            .expect("channel open");
+
+        match msg {
+            crate::mcp::protocol::WriterMessage::Request(req) => {
+                assert_eq!(req.method, "sampling/createMessage");
+                let params = req.params.expect("params");
+                assert_eq!(params["maxTokens"], 256);
+                let text = params["messages"][0]["content"]["text"].as_str().unwrap();
+                assert!(text.contains("Identify top 3 issues"));
+                assert!(text.contains("raw diagnostic output..."));
+            }
+            _ => panic!("expected Request"),
+        }
+        handle.abort();
     }
 
     #[tokio::test]

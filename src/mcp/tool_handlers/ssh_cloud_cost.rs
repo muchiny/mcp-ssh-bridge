@@ -312,6 +312,7 @@ mod tests {
             progress_token: None,
             pending_requests: None,
             client_supports_elicitation: false,
+            client_supports_sampling: false,
         }
     }
 
