@@ -93,10 +93,9 @@ pub fn build_instructions(config: &Config, tool_count: usize) -> String {
     let _ = writeln!(out);
     let _ = writeln!(
         out,
-        "ROOTS: Client-declared workspace roots are forwarded to the server and \
-         exposed to tool handlers, but no tool currently enforces them — scoping is \
-         not active. Treat any path argument to ssh_ls, ssh_find, ssh_upload, or \
-         ssh_download as unrestricted on the remote host."
+        "ROOTS: If you declared workspace roots, file operations (ssh_ls, ssh_find, \
+         ssh_upload, ssh_download, and the ssh_file_* family) are scoped to those \
+         directories for safety."
     );
 
     // --- Static Guidance ---
