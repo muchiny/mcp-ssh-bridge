@@ -5,6 +5,9 @@ use crate::domain::use_cases::terraform::TerraformCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
+use crate::mcp::protocol::LogLevel;
+use crate::ports::ToolContext;
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshTerraformApplyArgs {
@@ -97,6 +100,75 @@ impl StandardTool for TerraformApplyTool {
             args.targets.as_deref(),
             args.plan_file.as_deref(),
         )
+    }
+
+    /// Parse the `terraform apply` output and emit one log per
+    /// resource transition (Plan/Creating/Modifying/Destroying/Apply
+    /// complete) so the client can render the apply progress live.
+    /// Errors surface at LogLevel::Error.
+    async fn enrich(
+        result: ToolCallResult,
+        args: &Self::Args,
+        output: &str,
+        ctx: &ToolContext,
+    ) -> Result<ToolCallResult> {
+        let Some(logger) = ctx.mcp_logger.as_ref() else {
+            return Ok(result);
+        };
+        logger.log(
+            LogLevel::Info,
+            "ssh_terraform_apply",
+            serde_json::json!({
+                "phase": "start",
+                "dir": args.dir,
+                "auto_approve": args.auto_approve.unwrap_or(false),
+                "targets": args.targets.as_ref().map_or(0, Vec::len),
+            }),
+        );
+        for line in output.lines() {
+            let trimmed = line.trim_start();
+            // terraform prints `<resource>: Creating...` / `Modifying...`
+            // / `Destroying...` / `Creation complete` / `Modifications
+            // complete` / `Destruction complete` style lines.
+            if trimmed.contains(": Creating...")
+                || trimmed.contains(": Modifying...")
+                || trimmed.contains(": Destroying...")
+            {
+                logger.log(
+                    LogLevel::Info,
+                    "ssh_terraform_apply",
+                    serde_json::json!({"phase": "resource_action", "line": trimmed}),
+                );
+            } else if trimmed.contains(": Creation complete")
+                || trimmed.contains(": Modifications complete")
+                || trimmed.contains(": Destruction complete")
+            {
+                logger.log(
+                    LogLevel::Info,
+                    "ssh_terraform_apply",
+                    serde_json::json!({"phase": "resource_done", "line": trimmed}),
+                );
+            } else if trimmed.starts_with("Apply complete!")
+                || trimmed.starts_with("Plan:")
+                || trimmed.starts_with("Outputs:")
+            {
+                logger.log(
+                    LogLevel::Info,
+                    "ssh_terraform_apply",
+                    serde_json::json!({"phase": "summary", "line": trimmed}),
+                );
+            } else if trimmed.starts_with("Error:")
+                || trimmed.starts_with("│ Error:")
+                || trimmed.contains("Error applying plan")
+            {
+                logger.log(
+                    LogLevel::Error,
+                    "ssh_terraform_apply",
+                    serde_json::json!({"phase": "error", "line": trimmed}),
+                );
+            }
+        }
+        Ok(result)
     }
 }
 

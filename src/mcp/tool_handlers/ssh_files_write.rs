@@ -209,13 +209,26 @@ impl ToolHandler for SshFilesWriteHandler {
             connect_with_jump(&args.host, host_config, &ctx.config.limits, &ctx.config).await?;
         let sftp = client.sftp_session().await?;
 
-        // Step 5: Process each file
+        // Step 5: Process each file. Per-entry `notifications/progress`
+        // when the client supplied a progressToken — no-op otherwise.
+        let progress = ctx.progress_reporter(Some(args.files.len() as u64));
         let mut output = String::new();
         let mut success_count: u32 = 0;
         let mut error_count: u32 = 0;
         let mut total_bytes: u64 = 0;
 
         for (i, entry) in args.files.iter().enumerate() {
+            if let Some(reporter) = progress.as_ref() {
+                reporter.report(
+                    (i + 1) as u64,
+                    Some(&format!(
+                        "{} ({}/{})",
+                        entry.remote_path,
+                        i + 1,
+                        args.files.len()
+                    )),
+                );
+            }
             let result = if let Some(content) = &entry.content {
                 let append = entry.append.unwrap_or(false);
                 sftp.write_bytes(

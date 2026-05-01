@@ -11,6 +11,9 @@ use crate::domain::use_cases::kubernetes::KubernetesCommandBuilder;
 use crate::error::Result;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
+use crate::mcp::protocol::LogLevel;
+use crate::ports::ToolContext;
+use crate::ports::protocol::ToolCallResult;
 
 #[derive(Debug, Deserialize)]
 pub struct SshK8sRolloutArgs {
@@ -108,6 +111,57 @@ impl StandardTool for K8sRolloutTool {
     fn validate(args: &SshK8sRolloutArgs, _host_config: &HostConfig) -> Result<()> {
         KubernetesCommandBuilder::validate_rollout_action(&args.action)?;
         Ok(())
+    }
+
+    /// Parse the `kubectl rollout` output and emit one log per
+    /// rollout state transition. kubectl prints lines like
+    /// `deployment "<name>" successfully rolled out`,
+    /// `Waiting for deployment "<name>" rollout to finish: N of M new
+    /// replicas have been updated...`, or
+    /// `error: deployment "<name>" exceeded its progress deadline`.
+    async fn enrich(
+        result: ToolCallResult,
+        args: &Self::Args,
+        output: &str,
+        ctx: &ToolContext,
+    ) -> Result<ToolCallResult> {
+        let Some(logger) = ctx.mcp_logger.as_ref() else {
+            return Ok(result);
+        };
+        logger.log(
+            LogLevel::Info,
+            "ssh_k8s_rollout",
+            serde_json::json!({
+                "phase": "start",
+                "action": args.action,
+                "resource": args.resource,
+                "namespace": args.namespace.clone().unwrap_or_else(|| "default".to_string()),
+                "to_revision": args.to_revision,
+            }),
+        );
+        for line in output.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.contains("successfully rolled out") {
+                logger.log(
+                    LogLevel::Info,
+                    "ssh_k8s_rollout",
+                    serde_json::json!({"phase": "complete", "line": trimmed}),
+                );
+            } else if trimmed.starts_with("Waiting for ") {
+                logger.log(
+                    LogLevel::Info,
+                    "ssh_k8s_rollout",
+                    serde_json::json!({"phase": "progress", "line": trimmed}),
+                );
+            } else if trimmed.starts_with("error:") || trimmed.starts_with("Error:") {
+                logger.log(
+                    LogLevel::Error,
+                    "ssh_k8s_rollout",
+                    serde_json::json!({"phase": "error", "line": trimmed}),
+                );
+            }
+        }
+        Ok(result)
     }
 }
 
