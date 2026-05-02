@@ -70,6 +70,12 @@ exclude_re = [
     # jq` mutants run.
     "replace DataReductionArgs::wants_tsv -> bool with true",
     "replace DataReductionArgs::wants_tsv -> bool with false",
+    # `Metrics::render_token_summary` guards (`total_calls > 0`,
+    # `before > 0`, `total_kind > 0`) operate on `u64`. The mutation
+    # `> -> <` is equivalent because no `u64` value satisfies `< 0`,
+    # so the guarded block never runs — same observable behavior as
+    # the original on the empty-state path.
+    "replace > with < in Metrics::render_token_summary",
 ]
 
 # Examine groups for focused mutation testing:

@@ -172,7 +172,8 @@ impl Metrics {
             let _ = writeln!(out, "  Before reduction: {before} chars");
             let _ = writeln!(out, "  After reduction:  {after} chars");
             let saved = before.saturating_sub(after);
-            let pct = if before > 0 { saved * 100 / before } else { 0 };
+            // Outer guard ensures `before > 0`, so the division is safe.
+            let pct = saved * 100 / before;
             let tokens_saved = saved * 10 / 35;
             let _ = writeln!(out, "  Savings: {pct}% (~{tokens_saved} tokens saved)");
             let _ = writeln!(out, "  Truncation events: {truncations}");
@@ -188,11 +189,10 @@ impl Metrics {
             let mut sorted: Vec<_> = kinds.iter().collect();
             sorted.sort_by(|a, b| b.1.cmp(a.1));
             for (kind, count) in &sorted {
-                let pct = if total_kind > 0 {
-                    *count * 100 / total_kind
-                } else {
-                    0
-                };
+                // Outer guard ensures `!kinds.is_empty()` and every
+                // `record_pipeline_stats` call increments a kind by 1,
+                // so `total_kind` is always > 0 here.
+                let pct = *count * 100 / total_kind;
                 let _ = writeln!(out, "  {kind:<10} {count} calls ({pct}%)");
             }
             out.push('\n');
@@ -343,6 +343,31 @@ mod tests {
         m.record_tool_call("ssh_exec", "prod-2");
         m.record_tool_call("ssh_ls", "prod-1");
         assert_eq!(m.tool_calls_total.load(Ordering::Relaxed), 3);
+
+        // Per-tool count must accumulate via `+=`, not `*=`. The
+        // `*= 1` mutation leaves the entry at 0 — assert the
+        // accumulated count is what we recorded.
+        let tool_counts = m.tool_counts.read().expect("tool_counts");
+        assert_eq!(
+            *tool_counts.get("ssh_exec").expect("ssh_exec recorded"),
+            2,
+            "ssh_exec must have been recorded twice"
+        );
+        assert_eq!(
+            *tool_counts.get("ssh_ls").expect("ssh_ls recorded"),
+            1
+        );
+
+        let host_counts = m.host_counts.read().expect("host_counts");
+        assert_eq!(
+            *host_counts.get("prod-1").expect("prod-1 recorded"),
+            2,
+            "prod-1 must have been recorded twice"
+        );
+        assert_eq!(
+            *host_counts.get("prod-2").expect("prod-2 recorded"),
+            1
+        );
     }
 
     #[test]
@@ -448,6 +473,115 @@ mod tests {
         assert!(summary.contains("ssh_exec"));
         assert!(summary.contains("Data Reduction:"));
         assert!(summary.contains("Tabular"));
+    }
+
+    /// Pin the *numeric* output of `render_token_summary` so that
+    /// arithmetic mutations on `/`, `*`, `+`, and `>` in the token /
+    /// percentage / tokens-saved formulas produce observably wrong
+    /// strings. The numbers below are chosen so each formula yields
+    /// a unique, easy-to-assert integer.
+    #[test]
+    fn render_token_summary_pins_arithmetic_results() {
+        let m = Metrics::new();
+        m.record_tool_call("ssh_exec", "prod");
+        m.record_tool_output("ssh_exec", 350); // 350*10/35 = 100 tokens
+        m.record_pipeline_stats(1000, 500, false, "Json");
+
+        let s = m.render_token_summary();
+        // total_chars
+        assert!(
+            s.contains("Total output chars: 350"),
+            "exact total_chars missing — got:\n{s}"
+        );
+        // total_tokens = 350*10/35 = 100 — kills line 105 token math
+        // (record_tool_output) and pins the Estimated tokens line.
+        assert!(
+            s.contains("Estimated tokens: 100"),
+            "Estimated tokens=100 missing — got:\n{s}"
+        );
+        // Avg chars/call = 350/1 = 350
+        assert!(
+            s.contains("Avg chars/call: 350"),
+            "Avg chars/call=350 missing — got:\n{s}"
+        );
+        // Avg tokens/call = 100/1 = 100
+        assert!(
+            s.contains("Avg tokens/call: 100"),
+            "Avg tokens/call=100 missing — got:\n{s}"
+        );
+        // Per-tool token line: 350 chars (~100 tokens, 1 calls) — kills
+        // line 155 mutations (`*` and `/` on `chars * 10 / 35`).
+        assert!(
+            s.contains("350 chars (~100 tokens, 1 calls)"),
+            "per-tool numbers wrong — got:\n{s}"
+        );
+        // Data reduction: before=1000, after=500, saved=500, pct=50%,
+        // tokens_saved = 500*10/35 = 142. Pins lines 175/176.
+        assert!(
+            s.contains("Savings: 50% (~142 tokens saved)"),
+            "savings/tokens_saved wrong — got:\n{s}"
+        );
+        // Output kind 100% — kills line 191/192 mutations on the
+        // `*count * 100 / total_kind` percentage formula.
+        assert!(
+            s.contains("Json       1 calls (100%)"),
+            "kind percentage wrong — got:\n{s}"
+        );
+    }
+
+    /// `render_token_summary` must NOT divide by zero when no calls
+    /// have been recorded. Mutations `> -> ==`, `> -> >=` on line 140
+    /// turn the `total_calls > 0` guard into "always enter" or
+    /// "enter when zero", which divides by zero.
+    #[test]
+    fn render_token_summary_handles_empty_state_safely() {
+        let m = Metrics::new();
+        let s = m.render_token_summary();
+        assert!(
+            s.contains("=== Token Consumption ==="),
+            "header still rendered on empty state"
+        );
+        // Avg lines are gated on `total_calls > 0` — must be absent.
+        assert!(
+            !s.contains("Avg chars/call:"),
+            "must not render Avg lines when no calls — got:\n{s}"
+        );
+        // Data Reduction block is gated on `before > 0` (line 170).
+        // The mutation `> -> >=` would render the section with
+        // all-zero stats; assert the marker is absent.
+        assert!(
+            !s.contains("Data Reduction:"),
+            "must not render Data Reduction block when before=0 — got:\n{s}"
+        );
+        // Output Format Distribution is gated on `!kinds.is_empty()`.
+        assert!(
+            !s.contains("Output Format Distribution:"),
+            "must not render Output Format block when no kinds — got:\n{s}"
+        );
+    }
+
+    /// Two-kind variant pins the percentage formula
+    /// `*count * 100 / total_kind`. With kinds {Json: 2, Tabular: 1},
+    /// total=3:
+    ///   * Json:    2*100/3 = 66
+    ///   * Tabular: 1*100/3 = 33
+    /// The mutation `/ -> *` would print `2*100*3 = 600` and
+    /// `1*100*3 = 300` instead.
+    #[test]
+    fn render_token_summary_kind_percentages_use_division() {
+        let m = Metrics::new();
+        m.record_pipeline_stats(100, 50, false, "Json");
+        m.record_pipeline_stats(100, 50, false, "Json");
+        m.record_pipeline_stats(100, 50, false, "Tabular");
+        let s = m.render_token_summary();
+        assert!(
+            s.contains("Json       2 calls (66%)"),
+            "Json must report 66% — got:\n{s}"
+        );
+        assert!(
+            s.contains("Tabular    1 calls (33%)"),
+            "Tabular must report 33% — got:\n{s}"
+        );
     }
 
     #[test]
