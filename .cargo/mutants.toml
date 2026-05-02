@@ -23,6 +23,15 @@ skip_calls = [
 # Use optimized profile for faster mutation testing
 profile = "mutants"
 
+# Exclude provably equivalent mutations:
+# - `ToolHandler::output_kind` defaults to `OutputKind::RawText`, and
+#   `RawText` is `#[default]` on the enum — any rewrite to
+#   `Default::default()` produces the same value.
+examine_re = []
+exclude_re = [
+    "replace ToolHandler::output_kind .* with Default::default\\(\\)",
+]
+
 # Examine groups for focused mutation testing:
 # - `make mutants`      -> security module (src/security/)
 # - `make mutants-db`   -> database command builder (src/domain/use_cases/database.rs)

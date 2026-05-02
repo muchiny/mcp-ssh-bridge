@@ -365,6 +365,11 @@ pub trait ToolHandler: Send + Sync {
     /// and by `StandardToolHandler` to apply the correct reduction pipeline.
     ///
     /// Custom handlers return `RawText` (default) — no params advertised.
+    ///
+    /// `RawText` is `#[default]` on `OutputKind`, so any cargo-mutants
+    /// rewrite to `Default::default()` is behaviorally identical
+    /// (equivalent mutant) — filtered via `exclude_re` in
+    /// `.cargo/mutants.toml`.
     fn output_kind(&self) -> crate::domain::output_kind::OutputKind {
         crate::domain::output_kind::OutputKind::RawText
     }
@@ -703,18 +708,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_elicit_confirm_returns_none_when_unsupported() {
-        let (tx, _rx) = tokio::sync::mpsc::channel(8);
-        let mut ctx = mock::create_test_context();
-        ctx.notification_tx = Some(tx);
-        ctx.pending_requests =
-            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
-        // client_supports_elicitation stays false
-        let result = ctx.elicit_confirm("ssh_test", "do thing").await.unwrap();
-        assert_eq!(result, None);
-    }
-
-    #[tokio::test]
     async fn test_mcp_logger_is_none_in_test_context() {
         let ctx = mock::create_test_context();
         assert!(ctx.mcp_logger.is_none());
@@ -750,18 +743,6 @@ mod tests {
     #[tokio::test]
     async fn test_sample_returns_none_without_tx() {
         let ctx = mock::create_test_context();
-        let result = ctx.sample("p", "c", 100).await.unwrap();
-        assert_eq!(result, None);
-    }
-
-    #[tokio::test]
-    async fn test_sample_returns_none_when_unsupported() {
-        let (tx, _rx) = tokio::sync::mpsc::channel(8);
-        let mut ctx = mock::create_test_context();
-        ctx.notification_tx = Some(tx);
-        ctx.pending_requests =
-            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
-        // client_supports_sampling stays false
         let result = ctx.sample("p", "c", 100).await.unwrap();
         assert_eq!(result, None);
     }
@@ -913,5 +894,40 @@ mod tests {
         let mut ctx = mock::create_test_context();
         ctx.roots = vec![root("file:///home/user/project", None)];
         assert!(ctx.validate_root_scope("/home/user/project").is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_elicit_confirm_returns_quickly_when_unsupported() {
+        let (tx, _rx) = tokio::sync::mpsc::channel(8);
+        let mut ctx = mock::create_test_context();
+        ctx.notification_tx = Some(tx);
+        ctx.pending_requests =
+            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        // client_supports_elicitation stays false — must short-circuit, not
+        // try to send a request that nothing will answer.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            ctx.elicit_confirm("ssh_test", "do thing"),
+        )
+        .await
+        .expect("must short-circuit and return without contacting the client");
+        assert_eq!(result.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn test_sample_returns_quickly_when_unsupported() {
+        let (tx, _rx) = tokio::sync::mpsc::channel(8);
+        let mut ctx = mock::create_test_context();
+        ctx.notification_tx = Some(tx);
+        ctx.pending_requests =
+            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        // client_supports_sampling stays false — must short-circuit.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            ctx.sample("p", "c", 100),
+        )
+        .await
+        .expect("must short-circuit and return without contacting the client");
+        assert_eq!(result.unwrap(), None);
     }
 }
