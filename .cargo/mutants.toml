@@ -64,6 +64,12 @@ exclude_re = [
     # timeout — both out of scope for this batch.
     "replace -= with /= in floor_char_boundary",
     "replace \\+= with \\*= in ceil_char_boundary",
+    # `DataReductionArgs::wants_tsv` is `#[cfg(feature = "jq")]`-gated.
+    # Mutations on the body are equivalent in default builds because
+    # the function is compiled out; killing them requires a `--features
+    # jq` mutants run.
+    "replace DataReductionArgs::wants_tsv -> bool with true",
+    "replace DataReductionArgs::wants_tsv -> bool with false",
 ]
 
 # Examine groups for focused mutation testing:

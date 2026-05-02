@@ -308,4 +308,18 @@ mod tests {
         history.clear();
         assert!(history.is_empty());
     }
+
+    /// `is_empty()` must return `false` after recording — kills the
+    /// `replace -> true` mutation on line 181 that the existing
+    /// post-clear assertion (which expects `true`) cannot detect.
+    #[test]
+    fn test_history_is_empty_false_after_record() {
+        let history = CommandHistory::with_defaults();
+        assert!(history.is_empty(), "fresh history is empty");
+        history.record_success("host", "cmd", 0, 100);
+        assert!(
+            !history.is_empty(),
+            "history with one entry must not be empty"
+        );
+    }
 }
