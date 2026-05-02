@@ -7,6 +7,7 @@ use serde::Deserialize;
 use crate::config::HostConfig;
 use crate::domain::use_cases::security_modules::SecurityModulesCommandBuilder;
 use crate::error::Result;
+use crate::mcp::protocol::LogLevel;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
 use crate::ports::ToolContext;
@@ -86,16 +87,38 @@ impl StandardTool for SecurityAuditTool {
         Ok(SecurityModulesCommandBuilder::build_security_audit_command())
     }
 
-    /// Optional LLM-side summary appended after the raw audit output.
-    /// Falls back to raw-only when the client does not advertise the
-    /// sampling capability — the source data is always preserved so
-    /// callers can verify the LLM's conclusions.
+    /// Combined enrichment hook:
+    ///
+    /// 1. Emit one structured `notifications/message` per audit
+    ///    section header (`=== ... ===`) so clients with a log panel
+    ///    (Claude Desktop) can render a section-by-section timeline.
+    /// 2. When `summarize=true` and sampling is supported, append an
+    ///    LLM-side summary appended after the raw audit output. Falls
+    ///    back to raw-only when sampling is unavailable — the source
+    ///    data is always preserved so callers can verify the LLM's
+    ///    conclusions.
     async fn enrich(
         result: ToolCallResult,
         args: &Self::Args,
         output: &str,
         ctx: &ToolContext,
     ) -> Result<ToolCallResult> {
+        // Step 1: structured logging (independent of summarize=true)
+        if let Some(logger) = ctx.mcp_logger.as_ref() {
+            for line in output.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("=== ") && trimmed.ends_with(" ===") {
+                    let section = trimmed.trim_matches('=').trim();
+                    logger.log(
+                        LogLevel::Info,
+                        "ssh_security_audit",
+                        serde_json::json!({"phase": "section", "name": section}),
+                    );
+                }
+            }
+        }
+
+        // Step 2: optional LLM summary
         if !args.summarize.unwrap_or(false) {
             return Ok(result);
         }
