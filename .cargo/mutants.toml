@@ -27,9 +27,17 @@ profile = "mutants"
 # - `ToolHandler::output_kind` defaults to `OutputKind::RawText`, and
 #   `RawText` is `#[default]` on the enum — any rewrite to
 #   `Default::default()` produces the same value.
+# - `StandardTool::scoped_paths` default returns `Vec::new()`; a `vec![]`
+#   literal is the exact same empty allocation, hence equivalent.
+# - `try_apply_yq`/`try_apply_jq` collapse to `let _ = ...; Ok(false)`
+#   when the `jq` feature is OFF (default build), so a mutation
+#   "replace ... with Ok(false)" produces an identical body.
 examine_re = []
 exclude_re = [
     "replace ToolHandler::output_kind .* with Default::default\\(\\)",
+    "replace StandardTool::scoped_paths -> Vec<&str> with vec!\\[\\]",
+    "replace try_apply_yq -> Result<bool> with Ok\\(false\\)",
+    "replace try_apply_jq -> Result<bool> with Ok\\(false\\)",
 ]
 
 # Examine groups for focused mutation testing:

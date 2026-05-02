@@ -904,10 +904,16 @@ mod tests {
             },
         );
         let ctx = crate::ports::mock::create_test_context_with_hosts(hosts);
-        let result = handler
-            .execute(Some(json!({"host": "winhost"})), &ctx)
-            .await
-            .unwrap();
+        // Wrap in `tokio::time::timeout` so a mutated guard that lets
+        // the call slip past the OS check fails fast instead of hanging
+        // on a real SSH dial to 10.0.0.1.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            handler.execute(Some(json!({"host": "winhost"})), &ctx),
+        )
+        .await
+        .expect("OS guard must reject without dialing the SSH host")
+        .unwrap();
         assert_eq!(result.is_error, Some(true));
         let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
             panic!("Expected text content")
@@ -1741,5 +1747,294 @@ mod tests {
         // With limit=1, should have header + 1 row max
         let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
         assert!(lines.len() <= 3); // header + 1 data row + possible exit info
+    }
+
+    // ============== Targeted mutation-killing tests ==============
+
+    /// `try_apply_json_limit` must NOT truncate when the array length
+    /// exactly equals the limit — only strict-greater triggers the cut.
+    /// Kills `> -> >=` and `> -> ==` / `> -> <` mutations on line 638.
+    #[test]
+    fn test_json_limit_no_op_at_exact_length() {
+        let original = r#"[{"a":1},{"a":2},{"a":3}]"#.to_string();
+        let mut stdout = original.clone();
+        let mut v = json!({"limit": 3});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        try_apply_json_limit(&mut stdout, &dr);
+        assert_eq!(
+            stdout, original,
+            "exact-length array must not be truncated"
+        );
+    }
+
+    /// `try_apply_yq` must report "not applied" when no `yq_filter` is
+    /// set, regardless of whether the `jq` feature is compiled in.
+    /// Kills `Ok(true)` and `Ok(false)` mutations on line 550 (the
+    /// `Ok(false)` mutation is equivalent on a feature-off build but
+    /// caught when the function is exercised under the `jq` feature).
+    #[test]
+    fn test_try_apply_yq_no_filter_returns_false() {
+        let mut stdout = "key: value\n".to_string();
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let applied = try_apply_yq(&mut stdout, &dr).unwrap();
+        assert!(
+            !applied,
+            "yq must not flag itself as applied without a yq_filter"
+        );
+        assert_eq!(stdout, "key: value\n", "stdout must be untouched");
+    }
+
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_try_apply_yq_with_filter_returns_true() {
+        let mut stdout = "name: test\nvalue: 42\n".to_string();
+        let mut v = json!({"yq_filter": ".name"});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        let applied = try_apply_yq(&mut stdout, &dr).unwrap();
+        assert!(applied, "yq must report applied when yq_filter is set");
+        assert!(stdout.contains("test"));
+    }
+
+    /// `<impl ToolHandler for StandardToolHandler<T>>::output_kind` must
+    /// dispatch to `T::OUTPUT_KIND`, not the trait default.
+    /// Kills the `Default::default()` mutation on line 213.
+    #[test]
+    fn test_handler_output_kind_dispatches_to_associated_const() {
+        use crate::domain::output_kind::OutputKind;
+        use crate::ports::ToolHandler;
+
+        struct MockJsonHandler;
+        impl StandardTool for MockJsonHandler {
+            type Args = MockArgs;
+            const NAME: &'static str = "mock_kind_json";
+            const DESCRIPTION: &'static str = "kind probe";
+            const SCHEMA: &'static str =
+                r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const OUTPUT_KIND: OutputKind = OutputKind::Json;
+            fn build_command(_a: &MockArgs, _h: &HostConfig) -> Result<String> {
+                Ok("echo".to_string())
+            }
+        }
+
+        let handler = StandardToolHandler::<MockJsonHandler>::new();
+        assert_eq!(
+            handler.output_kind(),
+            OutputKind::Json,
+            "must dispatch to T::OUTPUT_KIND, not Default::default() (=RawText)"
+        );
+    }
+
+    /// `apply_reduction` for `OutputKind::Auto` with no `jq_filter` must
+    /// fall through to tabular reduction. Kills `delete !` on line 530.
+    #[test]
+    fn test_apply_reduction_auto_falls_through_to_tabular_when_no_jq() {
+        use crate::domain::output_kind::OutputKind;
+        let mut stdout =
+            "NAME           STATUS\nrow1           ok\nrow2           ok\n".to_string();
+        let mut v = json!({"columns": ["NAME"]});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::Auto).unwrap();
+        assert!(!jq, "no jq_filter, jq must not be reported applied");
+        assert!(
+            !stdout.contains("STATUS"),
+            "Auto branch must fall through to tabular column selection"
+        );
+        assert!(stdout.contains("NAME"));
+    }
+
+    /// Default trait `scoped_paths` must return an empty vec — handlers
+    /// that opt out of root-scoping must NOT trigger validation. Kills
+    /// `vec![""]` and `vec!["xyzzy"]` mutations on line 102 (the
+    /// `vec![]` mutation is equivalent and excluded).
+    #[tokio::test]
+    async fn test_default_scoped_paths_does_not_validate_against_roots() {
+        // MockTool does NOT override scoped_paths — uses trait default.
+        // Even with non-empty roots, execute must succeed because the
+        // default scoped_paths is empty.
+        let handler = StandardToolHandler::<MockTool>::new();
+        let mut ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("hello"),
+        );
+        ctx.roots = vec![crate::mcp::protocol::RootEntry {
+            uri: "file:///nowhere/nothing".to_string(),
+            name: None,
+        }];
+        let result = handler
+            .execute(Some(json!({"host": "server1"})), &ctx)
+            .await;
+        assert!(
+            result.is_ok(),
+            "tool that does not override scoped_paths must not be \
+             scoped to client roots — got {result:?}"
+        );
+    }
+
+    /// `apply_reduction` for `OutputKind::Json` must apply the json_limit
+    /// fallback **only** when jq did not run. With both `jq_filter` and
+    /// `limit` present, jq wins and limit is skipped. Kills `delete !`
+    /// in the `if !jq_applied { try_apply_json_limit(...) }` line of
+    /// `apply_reduction` (Json branch, around line 517).
+    #[cfg(feature = "jq")]
+    #[test]
+    fn test_apply_reduction_json_jq_wins_over_limit() {
+        use crate::domain::output_kind::OutputKind;
+        let mut stdout = r#"[{"a":1},{"a":2},{"a":3},{"a":4},{"a":5}]"#.to_string();
+        let mut v = json!({"jq_filter": ".[0:1]", "limit": 2});
+        let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
+        let jq = apply_reduction(&mut stdout, &dr, OutputKind::Json).unwrap();
+        assert!(jq, "jq must be applied for Json kind with jq_filter");
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(
+            parsed.len(),
+            1,
+            "jq's `.[0:1]` slice (1 element) must win over limit=2"
+        );
+    }
+
+    /// The reduction step in the pipeline runs only when both
+    /// `exit_code == 0` AND `!dr.is_empty()`. A mutation that flips
+    /// the `&&` to `||` (line 417) makes reduction run on failed
+    /// commands too. Tabular reduction is feature-independent, so
+    /// this test holds in every default build.
+    #[tokio::test]
+    async fn test_tabular_reduction_skipped_on_non_zero_exit() {
+        struct MockTabExit;
+        impl StandardTool for MockTabExit {
+            type Args = MockArgs;
+            const NAME: &'static str = "mock_tab_exit";
+            const DESCRIPTION: &'static str = "Mock tabular tool with non-zero exit";
+            const SCHEMA: &'static str =
+                r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+                crate::domain::output_kind::OutputKind::Tabular;
+            fn build_command(_a: &MockArgs, _h: &HostConfig) -> Result<String> {
+                Ok("echo".to_string())
+            }
+        }
+
+        let handler = StandardToolHandler::<MockTabExit>::new();
+        let table = "NAME           STATUS\nrow1           ok\nrow2           ok\n";
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output_with_exit(table, 1),
+        );
+        let result = handler
+            .execute(
+                Some(json!({"host": "server1", "columns": ["NAME"]})),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        assert!(
+            text.contains("STATUS"),
+            "non-zero exit must preserve raw output even with `columns` — got {text:?}"
+        );
+    }
+
+    /// `truncated = truncated_stdout.len() < post_reduction_chars` is
+    /// the boolean fed into `metrics.record_pipeline_stats`. Mutations
+    /// `< -> ==`, `< -> >`, `< -> <=` survive coverage-only tests but
+    /// each produces an observably wrong `truncation_events` counter.
+    /// Two paths together kill all three:
+    /// * Output bigger than `max_output` (with enough margin so the
+    ///   truncation marker doesn't itself overshoot the original) →
+    ///   original increments by 1. `==` and `>` would skip; `<=`
+    ///   would still increment.
+    /// * Output exactly fits → original increments by 0. `<=` would
+    ///   increment; `==` would also increment.
+    #[tokio::test]
+    async fn test_truncation_event_counter_strict_less_than() {
+        use std::sync::atomic::Ordering;
+        use std::sync::Arc;
+
+        // ---- Path 1: forced truncation. Use a large input so the
+        // output is genuinely shorter than the source even after the
+        // verbose truncation marker is injected (`head + marker + tail`
+        // marker is ~150 chars, so we need a much larger original).
+        let big = "a".repeat(5_000);
+        let metrics_a = Arc::new(crate::metrics::Metrics::new());
+        let mut ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output(&big),
+        );
+        ctx.metrics = Some(metrics_a.clone());
+        let handler = StandardToolHandler::<MockTool>::new();
+        handler
+            .execute(
+                Some(json!({"host": "server1", "max_output": 200})),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            metrics_a.truncation_events.load(Ordering::Relaxed),
+            1,
+            "forced truncation must record exactly one event"
+        );
+
+        // ---- Path 2: output exactly fits ----
+        let metrics_b = Arc::new(crate::metrics::Metrics::new());
+        let mut ctx2 = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output("ok"),
+        );
+        ctx2.metrics = Some(metrics_b.clone());
+        handler
+            .execute(
+                Some(json!({"host": "server1", "max_output": 1024})),
+                &ctx2,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            metrics_b.truncation_events.load(Ordering::Relaxed),
+            0,
+            "output that fits must NOT record a truncation event"
+        );
+    }
+
+    /// jq variant of the same exit-code-gates-reduction invariant —
+    /// runs only when the `jq` feature is on.
+    #[cfg(feature = "jq")]
+    #[tokio::test]
+    async fn test_jq_skipped_on_non_zero_exit() {
+        struct MockJsonExit;
+        impl StandardTool for MockJsonExit {
+            type Args = MockArgs;
+            const NAME: &'static str = "mock_json_exit";
+            const DESCRIPTION: &'static str = "Mock JSON tool with non-zero exit";
+            const SCHEMA: &'static str =
+                r#"{"type":"object","properties":{"host":{"type":"string"}},"required":["host"]}"#;
+            const OUTPUT_KIND: crate::domain::output_kind::OutputKind =
+                crate::domain::output_kind::OutputKind::Json;
+            fn build_command(_a: &MockArgs, _h: &HostConfig) -> Result<String> {
+                Ok("echo".to_string())
+            }
+        }
+
+        let handler = StandardToolHandler::<MockJsonExit>::new();
+        let json_output = r#"{"name": "test", "extra": "preserved"}"#;
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(
+            server1_hosts(),
+            mock_output_with_exit(json_output, 1),
+        );
+        let result = handler
+            .execute(
+                Some(json!({"host": "server1", "jq_filter": ".name"})),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
+            panic!("Expected text content")
+        };
+        assert!(
+            text.contains("preserved"),
+            "non-zero exit must preserve raw output even with jq_filter — got {text:?}"
+        );
     }
 }
