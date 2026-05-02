@@ -367,4 +367,204 @@ mod tests {
         assert!(payload["input_schema"].is_object());
         assert!(payload["reduction_strategy"].is_string());
     }
+
+    // ============== Targeted mutation-killing tests for `search` ==============
+
+    /// `replace == with !=` on the group-filter equality test (line
+    /// ~185) — when a `group` filter is supplied, the helper must
+    /// only return tools whose group **equals** the filter.
+    #[test]
+    fn search_with_group_filter_returns_only_matching_group() {
+        let registry = create_default_registry();
+        let result = execute(
+            SEARCH_TOOLS,
+            Some(&json!({"query": "ps", "group": "docker", "limit": 50})),
+            &registry,
+        )
+        .expect("meta tool");
+        let payload = result.structured_content.expect("structured");
+        let results = payload["results"]
+            .as_array()
+            .expect("results is array");
+        assert!(
+            !results.is_empty(),
+            "docker group should have at least one tool matching 'ps'"
+        );
+        for entry in results {
+            assert_eq!(
+                entry["group"].as_str().unwrap(),
+                "docker",
+                "every result must be in the requested group, got {entry:?}"
+            );
+        }
+    }
+
+    /// `replace || with &&` on the name/description match (line ~187).
+    /// Build a synthetic registry where one tool has the substring in
+    /// its name only and another has it in its description only —
+    /// both must surface under `||`, but neither would under `&&`.
+    #[test]
+    fn search_or_match_covers_name_xor_description() {
+        use crate::ports::{ToolContext, ToolHandler, ToolSchema};
+        use crate::mcp::registry::ToolRegistry;
+        use std::sync::Arc;
+
+        struct StaticHandler {
+            name: &'static str,
+            description: &'static str,
+        }
+        #[async_trait::async_trait]
+        impl ToolHandler for StaticHandler {
+            fn name(&self) -> &'static str {
+                self.name
+            }
+            fn description(&self) -> &'static str {
+                self.description
+            }
+            fn schema(&self) -> ToolSchema {
+                ToolSchema {
+                    name: self.name,
+                    description: self.description,
+                    input_schema: r#"{"type":"object"}"#,
+                }
+            }
+            async fn execute(
+                &self,
+                _args: Option<Value>,
+                _ctx: &ToolContext,
+            ) -> crate::error::Result<ToolCallResult> {
+                Ok(ToolCallResult::text("ok"))
+            }
+        }
+
+        let mut registry = ToolRegistry::new();
+        registry.register(Arc::new(StaticHandler {
+            name: "ssh_xyzname",
+            description: "Run nothing in particular.",
+        }));
+        registry.register(Arc::new(StaticHandler {
+            name: "ssh_other_tool",
+            description: "Trigger the xyzname behaviour on remote.",
+        }));
+
+        let result = execute(
+            SEARCH_TOOLS,
+            Some(&json!({"query": "xyzname", "limit": 50})),
+            &registry,
+        )
+        .expect("meta tool");
+        let payload = result.structured_content.expect("structured");
+        let results = payload["results"].as_array().unwrap();
+        let names: Vec<&str> = results
+            .iter()
+            .map(|r| r["name"].as_str().unwrap())
+            .collect();
+        assert!(
+            names.contains(&"ssh_xyzname"),
+            "match in name only must surface — got {names:?}"
+        );
+        assert!(
+            names.contains(&"ssh_other_tool"),
+            "match in description only must surface — got {names:?}"
+        );
+    }
+
+    /// `replace > with ==` / `<` / `>=` on the truncation length check
+    /// (line ~191): descriptions longer than 160 chars must be
+    /// truncated, descriptions of exactly 160 chars must NOT be.
+    /// Build a synthetic registry to make both sides observable.
+    #[test]
+    fn search_truncates_strict_above_160_chars() {
+        use crate::ports::{ToolContext, ToolHandler, ToolSchema};
+        use crate::mcp::registry::ToolRegistry;
+        use std::sync::Arc;
+
+        // Static descriptions sized exactly 160 and 161 chars so we
+        // can pin the boundary behavior of `len() > 160`.
+        const DESC_160: &str = "0123456789012345678901234567890123456789\
+                                0123456789012345678901234567890123456789\
+                                0123456789012345678901234567890123456789\
+                                0123456789012345678901234567890123456789";
+        const DESC_161: &str = "0123456789012345678901234567890123456789\
+                                0123456789012345678901234567890123456789\
+                                0123456789012345678901234567890123456789\
+                                01234567890123456789012345678901234567890";
+        // Sanity at compile/test time.
+        assert_eq!(DESC_160.len(), 160, "DESC_160 must be exactly 160 bytes");
+        assert_eq!(DESC_161.len(), 161, "DESC_161 must be exactly 161 bytes");
+
+        struct StaticHandler {
+            name: &'static str,
+            description: &'static str,
+        }
+        #[async_trait::async_trait]
+        impl ToolHandler for StaticHandler {
+            fn name(&self) -> &'static str {
+                self.name
+            }
+            fn description(&self) -> &'static str {
+                self.description
+            }
+            fn schema(&self) -> ToolSchema {
+                ToolSchema {
+                    name: self.name,
+                    description: self.description,
+                    input_schema: r#"{"type":"object"}"#,
+                }
+            }
+            async fn execute(
+                &self,
+                _args: Option<Value>,
+                _ctx: &ToolContext,
+            ) -> crate::error::Result<ToolCallResult> {
+                Ok(ToolCallResult::text("ok"))
+            }
+        }
+
+        let mut registry = ToolRegistry::new();
+        registry.register(Arc::new(StaticHandler {
+            name: "ssh_match_160",
+            description: DESC_160,
+        }));
+        registry.register(Arc::new(StaticHandler {
+            name: "ssh_match_161",
+            description: DESC_161,
+        }));
+
+        // Use a query that hits both names (substring `match_`).
+        let result = execute(
+            SEARCH_TOOLS,
+            Some(&json!({"query": "match_", "limit": 50})),
+            &registry,
+        )
+        .expect("meta tool");
+        let payload = result.structured_content.expect("structured");
+        let results = payload["results"].as_array().unwrap();
+
+        let entry_160 = results
+            .iter()
+            .find(|r| r["name"] == "ssh_match_160")
+            .expect("160-char entry present");
+        let entry_161 = results
+            .iter()
+            .find(|r| r["name"] == "ssh_match_161")
+            .expect("161-char entry present");
+
+        let desc_160 = entry_160["description"].as_str().unwrap();
+        let desc_161 = entry_161["description"].as_str().unwrap();
+
+        assert!(
+            !desc_160.ends_with('…'),
+            "160-char description must NOT be truncated (kills `> -> >=`)"
+        );
+        assert_eq!(
+            desc_160.len(),
+            160,
+            "160-char description must be returned verbatim"
+        );
+        assert!(
+            desc_161.ends_with('…'),
+            "161-char description must be truncated (kills `> -> ==` and `> -> <`)"
+        );
+    }
 }
