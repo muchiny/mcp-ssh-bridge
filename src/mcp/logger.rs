@@ -116,6 +116,30 @@ mod tests {
         logger.error("test", "channel closed");
     }
 
+    /// `replace McpLogger::debug with ()` collapses the helper to a
+    /// no-op. Default min level is `Warning`, so a `debug()` call is
+    /// already filtered — to detect the mutation, lower the level to
+    /// `Debug` first and verify a notification lands on the channel.
+    #[test]
+    fn test_debug_emits_when_level_allows() {
+        let (logger, mut rx) = create_test_logger();
+        logger.set_level(LogLevel::Debug);
+        logger.debug("ssh", "trace details");
+        let msg = rx
+            .try_recv()
+            .expect("debug must emit a notification when min level is Debug");
+        match msg {
+            WriterMessage::Notification(n) => {
+                assert_eq!(n.method, "notifications/message");
+                let params = n.params.unwrap();
+                assert_eq!(params["level"], "debug");
+                assert_eq!(params["logger"], "ssh");
+                assert_eq!(params["data"], "trace details");
+            }
+            _ => panic!("Expected notification"),
+        }
+    }
+
     #[test]
     fn test_log_with_json_data() {
         let (logger, mut rx) = create_test_logger();
