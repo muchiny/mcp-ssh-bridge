@@ -401,4 +401,226 @@ mod tests {
         service.set_supported(true);
         assert!(service.is_supported());
     }
+
+    /// Helper that builds an `ElicitationService` with a shared
+    /// `PendingRequests` so tests can resolve the in-flight request
+    /// with a specific client response.
+    fn create_test_service_with_pending() -> (
+        ElicitationService,
+        mpsc::Receiver<super::super::protocol::WriterMessage>,
+        Arc<PendingRequests>,
+    ) {
+        let (tx, rx) = mpsc::channel(10);
+        let pending = Arc::new(PendingRequests::new());
+        let requester = Arc::new(ClientRequester::new(
+            tx,
+            pending.clone(),
+            Duration::from_secs(5),
+        ));
+        (ElicitationService::new(requester), rx, pending)
+    }
+
+    /// Resolve the most-recently-issued pending request with the given
+    /// JSON-RPC response value. Used by the decline/cancel tests.
+    fn resolve_only_pending(pending: &PendingRequests, response: Value) {
+        // The test never has more than one in-flight request at a time,
+        // so we discover the id by issuing a `create_request` and
+        // resolving the *previous* one. Cleaner: use the locked
+        // hashmap directly via `len()` and resolve "srv-1" since the
+        // counter starts at 1.
+        assert_eq!(pending.len(), 1, "exactly one request must be in flight");
+        let resolved = pending.resolve(
+            "srv-1",
+            crate::mcp::pending_requests::ClientResponse::Success(response),
+        );
+        assert!(resolved, "must resolve the pending request");
+    }
+
+    /// `delete match arm "decline"` on line 81 must change behavior:
+    /// without the arm, a `decline` action falls through to `Ok(result)`
+    /// instead of `Err(Declined)`. Kills the mutation by asserting
+    /// `Err(Declined)` after resolving with action=`decline`.
+    #[tokio::test]
+    async fn test_elicit_decline_action_returns_declined() {
+        let (service, mut rx, pending) = create_test_service_with_pending();
+        service.set_supported(true);
+
+        let handle =
+            tokio::spawn(async move { service.elicit("Confirm?", None).await });
+
+        // Drain the outgoing request so the requester registers the pending id.
+        let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("request sent")
+            .expect("channel open");
+
+        resolve_only_pending(&pending, serde_json::json!({"action": "decline"}));
+
+        let result = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .expect("handle joins")
+            .expect("no panic");
+        assert!(
+            matches!(result, Err(ClientRequestError::Declined)),
+            "decline action must surface as Declined — got {result:?}"
+        );
+    }
+
+    /// `delete match arm "cancel"` on line 82 — symmetric to the
+    /// decline case.
+    #[tokio::test]
+    async fn test_elicit_cancel_action_returns_cancelled() {
+        let (service, mut rx, pending) = create_test_service_with_pending();
+        service.set_supported(true);
+
+        let handle =
+            tokio::spawn(async move { service.elicit("Confirm?", None).await });
+
+        let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("request sent")
+            .expect("channel open");
+
+        resolve_only_pending(&pending, serde_json::json!({"action": "cancel"}));
+
+        let result = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .expect("handle joins")
+            .expect("no panic");
+        assert!(
+            matches!(result, Err(ClientRequestError::Cancelled)),
+            "cancel action must surface as Cancelled — got {result:?}"
+        );
+    }
+
+    /// `delete match arm "decline"` / `"cancel"` on lines 174/175 —
+    /// the URL-mode variants of the same invariant.
+    #[tokio::test]
+    async fn test_elicit_url_decline_action_returns_declined() {
+        let (service, mut rx, pending) = create_test_service_with_pending();
+        service.set_supported(true);
+
+        let handle = tokio::spawn(async move {
+            service.elicit_url("Open", "https://example.com").await
+        });
+
+        let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("request sent")
+            .expect("channel open");
+
+        resolve_only_pending(&pending, serde_json::json!({"action": "decline"}));
+
+        let result = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .expect("handle joins")
+            .expect("no panic");
+        assert!(
+            matches!(result, Err(ClientRequestError::Declined)),
+            "decline action must surface as Declined — got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_elicit_url_cancel_action_returns_cancelled() {
+        let (service, mut rx, pending) = create_test_service_with_pending();
+        service.set_supported(true);
+
+        let handle = tokio::spawn(async move {
+            service.elicit_url("Open", "https://example.com").await
+        });
+
+        let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("request sent")
+            .expect("channel open");
+
+        resolve_only_pending(&pending, serde_json::json!({"action": "cancel"}));
+
+        let result = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .expect("handle joins")
+            .expect("no panic");
+        assert!(
+            matches!(result, Err(ClientRequestError::Cancelled)),
+            "cancel action must surface as Cancelled — got {result:?}"
+        );
+    }
+
+    /// `delete -` on lines 76 / 148 / 169 flips the JSON-RPC error
+    /// `code` field from `-1` to `1`. Tests must assert the literal
+    /// value, not just the `RemoteError` variant.
+    #[tokio::test]
+    async fn test_elicit_url_non_https_error_code_is_neg_one() {
+        let (service, _rx) = create_test_service();
+        service.set_supported(true);
+        let result = service.elicit_url("test", "http://evil.com").await;
+        match result {
+            Err(ClientRequestError::RemoteError { code, .. }) => {
+                assert_eq!(code, -1, "non-https url must report code -1");
+            }
+            other => panic!("expected RemoteError, got {other:?}"),
+        }
+    }
+
+    /// Same `code: -1` invariant for the malformed-response paths in
+    /// both `elicit` (line 76) and `elicit_url` (line 169) — exercised
+    /// by resolving a pending request with a JSON value that fails the
+    /// `serde_json::from_value::<ElicitationCreateResult>` parse.
+    #[tokio::test]
+    async fn test_elicit_invalid_response_error_code_is_neg_one() {
+        let (service, mut rx, pending) = create_test_service_with_pending();
+        service.set_supported(true);
+
+        let handle =
+            tokio::spawn(async move { service.elicit("Confirm?", None).await });
+
+        let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("request sent")
+            .expect("channel open");
+
+        // `ElicitationCreateResult` requires an `action` string field;
+        // sending an integer makes `serde_json::from_value` fail.
+        resolve_only_pending(&pending, serde_json::json!(42));
+
+        let result = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .expect("handle joins")
+            .expect("no panic");
+        match result {
+            Err(ClientRequestError::RemoteError { code, .. }) => {
+                assert_eq!(code, -1, "parse failure must report code -1");
+            }
+            other => panic!("expected RemoteError, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_elicit_url_invalid_response_error_code_is_neg_one() {
+        let (service, mut rx, pending) = create_test_service_with_pending();
+        service.set_supported(true);
+
+        let handle = tokio::spawn(async move {
+            service.elicit_url("Open", "https://example.com").await
+        });
+
+        let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("request sent")
+            .expect("channel open");
+
+        resolve_only_pending(&pending, serde_json::json!(42));
+
+        let result = tokio::time::timeout(Duration::from_secs(2), handle)
+            .await
+            .expect("handle joins")
+            .expect("no panic");
+        match result {
+            Err(ClientRequestError::RemoteError { code, .. }) => {
+                assert_eq!(code, -1, "parse failure must report code -1");
+            }
+            other => panic!("expected RemoteError, got {other:?}"),
+        }
+    }
 }
