@@ -45,6 +45,25 @@ exclude_re = [
     "replace < with <= in OutputCache::store",
     "replace < with <= in OutputCache::cleanup",
     "replace < with == in OutputCache::cleanup",
+    # `floor_char_boundary` / `ceil_char_boundary` short-circuit on the
+    # second condition (`!s.is_char_boundary(0)` and `_(s.len())` are
+    # both `false` because byte 0 and byte len are *always* char
+    # boundaries in Rust strings). The mutations `> -> >=` and `< -> <=`
+    # therefore produce the same observable output as the original.
+    "replace > with >= in floor_char_boundary",
+    "replace < with <= in ceil_char_boundary",
+    # `i -= 1` / `i += 1` mutated to `i /= 1` / `i *= 1` are no-ops on
+    # any value (x*1 == x, x/1 == x). The loop body becomes infinite,
+    # which would be caught by a tight per-call timeout — but the
+    # current test infrastructure exercises `floor`/`ceil` indirectly
+    # through `truncate_output` calls inside many other tests, all of
+    # which then hang and trip a SIGTERM that flips the whole mutant
+    # outcome to TIMEOUT instead of FAIL. Killing these properly
+    # requires either factoring the loop out behind a `Clock`-style
+    # bound, or wrapping every truncation test in a thread+recv
+    # timeout — both out of scope for this batch.
+    "replace -= with /= in floor_char_boundary",
+    "replace \\+= with \\*= in ceil_char_boundary",
 ]
 
 # Examine groups for focused mutation testing:
