@@ -326,13 +326,13 @@ mod tests {
     /// `#[serde(default = "default_version")]` path.
     #[test]
     fn test_serde_default_version_is_one_dot_zero() {
-        let yaml = r#"
+        let yaml = r"
 name: minimal
 description: missing version field
 steps:
   - name: noop
     command: echo
-"#;
+";
         let rb: Runbook = serde_saphyr::from_str(yaml).expect("parse");
         assert_eq!(rb.version, "1.0", "default_version must return \"1.0\"");
     }
@@ -342,7 +342,7 @@ steps:
     /// path on a parameter that omits its `type:` key.
     #[test]
     fn test_serde_default_param_type_is_string() {
-        let yaml = r#"
+        let yaml = r"
 name: rb
 description: param without explicit type
 params:
@@ -351,7 +351,7 @@ params:
 steps:
   - name: noop
     command: echo
-"#;
+";
         let rb: Runbook = serde_saphyr::from_str(yaml).expect("parse");
         let p = rb.params.get("threshold").expect("param present");
         assert_eq!(
@@ -365,26 +365,25 @@ steps:
     /// the resulting field is `false`.
     #[test]
     fn test_serde_default_confirm_is_false() {
-        let yaml = r#"
+        let yaml = r"
 name: rb
 description: step without confirm
 steps:
   - name: silent
     command: echo
-"#;
+";
         let rb: Runbook = serde_saphyr::from_str(yaml).expect("parse");
-        assert!(
-            !rb.steps[0].confirm,
-            "default_confirm must return false"
-        );
+        assert!(!rb.steps[0].confirm, "default_confirm must return false");
     }
 
     /// `load_runbooks_from_dir` must load files with both `.yaml` and
     /// `.yml` extensions. Three mutations on line 138 corrupt the
     /// extension filter:
-    /// * `|| -> &&`: nothing matches (no extension is both at once)
-    /// * first `==` -> `!=`: `.yaml` rejected, `.yml` accepted
-    /// * second `==` -> `!=`: `.yml` rejected, `.yaml` accepted
+    ///
+    /// - `|| -> &&`: nothing matches (no extension is both at once)
+    /// - first `==` -> `!=`: `.yaml` rejected, `.yml` accepted
+    /// - second `==` -> `!=`: `.yml` rejected, `.yaml` accepted
+    ///
     /// Loading a tmp dir with one of each pins the OR semantics.
     #[test]
     fn test_load_runbooks_accepts_both_extensions() {
@@ -395,13 +394,13 @@ steps:
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).expect("mkdir tmp");
 
-        let body = r#"
+        let body = r"
 name: probe_yaml
 description: extension probe
 steps:
   - name: noop
     command: echo
-"#;
+";
         std::fs::write(tmp.join("a.yaml"), body.replace("probe_yaml", "probe_a"))
             .expect("write a.yaml");
         std::fs::write(tmp.join("b.yml"), body.replace("probe_yaml", "probe_b"))

@@ -96,13 +96,12 @@ impl StandardTool for ProcessKillTool {
     /// client does not advertise the elicitation capability — the
     /// global `security.require_elicitation_on_destructive` gate still
     /// applies in that case.
-    async fn pre_execute(
-        args: &Self::Args,
-        ctx: &ToolContext,
-    ) -> Result<Option<ToolCallResult>> {
+    async fn pre_execute(args: &Self::Args, ctx: &ToolContext) -> Result<Option<ToolCallResult>> {
         let summary = format!(
             "Send signal `{}` to PID `{}` on host `{}`",
-            args.signal.as_deref().unwrap_or("TERM"), args.pid, args.host,
+            args.signal.as_deref().unwrap_or("TERM"),
+            args.pid,
+            args.host,
         );
         match ctx.elicit_confirm(Self::NAME, &summary).await? {
             Some(false) => Ok(Some(ToolCallResult::error(

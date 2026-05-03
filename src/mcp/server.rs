@@ -387,8 +387,7 @@ impl McpServer {
         ctx.notification_tx = notification_tx;
         ctx.progress_token = progress_token;
         ctx.pending_requests = Some(Arc::clone(&self.pending_requests));
-        ctx.client_supports_elicitation =
-            self.client_supports_elicitation.load(Ordering::Relaxed);
+        ctx.client_supports_elicitation = self.client_supports_elicitation.load(Ordering::Relaxed);
         ctx.client_supports_sampling = self.client_supports_sampling.load(Ordering::Relaxed);
         ctx.mcp_logger = self.mcp_logger.read().await.as_ref().map(Arc::clone);
         ctx
@@ -1055,8 +1054,7 @@ impl McpServer {
 
                     // Check if client supports sampling capability
                     if init_params.capabilities.sampling.is_some() {
-                        self.client_supports_sampling
-                            .store(true, Ordering::Relaxed);
+                        self.client_supports_sampling.store(true, Ordering::Relaxed);
                         info!("Client supports sampling capability");
                     }
 

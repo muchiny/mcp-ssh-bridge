@@ -546,10 +546,7 @@ mod tests {
         let result = rx
             .recv_timeout(Duration::from_millis(500))
             .expect("floor_char_boundary must terminate within 500ms");
-        assert_eq!(
-            result, 0,
-            "must walk BACK to byte 0, not forward"
-        );
+        assert_eq!(result, 0, "must walk BACK to byte 0, not forward");
     }
 
     #[test]
@@ -617,10 +614,12 @@ mod tests {
 
     /// `head_budget = max_chars / 5; tail_budget = max_chars -
     /// head_budget`. Mutations `/ -> %`, `- -> +`, `- -> /` change
-    /// the head/tail split dramatically.
-    /// `/ -> %`: head_budget = max % 5 (0..4) → near-zero head.
-    /// `- -> +`: tail_budget = max + head (1.2× max) → tail grows.
-    /// `- -> /`: tail_budget = max / head (small) → tail shrinks.
+    /// the head/tail split dramatically:
+    ///
+    /// - `/ -> %`: `head_budget = max % 5` (0..4) → near-zero head.
+    /// - `- -> +`: `tail_budget = max + head` (1.2× max) → tail grows.
+    /// - `- -> /`: `tail_budget = max / head` (small) → tail shrinks.
+    ///
     /// The 80/20 ratio (tail > head by ~4×) is the observable
     /// invariant that fails under all three.
     #[test]
@@ -645,7 +644,7 @@ mod tests {
             tail_part.len()
         );
         assert!(
-            head_part.len() > 0,
+            !head_part.is_empty(),
             "head must be non-empty (mutation `/` -> `%` would zero it)"
         );
     }

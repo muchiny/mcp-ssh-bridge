@@ -383,9 +383,7 @@ mod tests {
         )
         .expect("meta tool");
         let payload = result.structured_content.expect("structured");
-        let results = payload["results"]
-            .as_array()
-            .expect("results is array");
+        let results = payload["results"].as_array().expect("results is array");
         assert!(
             !results.is_empty(),
             "docker group should have at least one tool matching 'ps'"
@@ -405,8 +403,8 @@ mod tests {
     /// both must surface under `||`, but neither would under `&&`.
     #[test]
     fn search_or_match_covers_name_xor_description() {
-        use crate::ports::{ToolContext, ToolHandler, ToolSchema};
         use crate::mcp::registry::ToolRegistry;
+        use crate::ports::{ToolContext, ToolHandler, ToolSchema};
         use std::sync::Arc;
 
         struct StaticHandler {
@@ -475,8 +473,8 @@ mod tests {
     /// Build a synthetic registry to make both sides observable.
     #[test]
     fn search_truncates_strict_above_160_chars() {
-        use crate::ports::{ToolContext, ToolHandler, ToolSchema};
         use crate::mcp::registry::ToolRegistry;
+        use crate::ports::{ToolContext, ToolHandler, ToolSchema};
         use std::sync::Arc;
 
         // Static descriptions sized exactly 160 and 161 chars so we
@@ -489,9 +487,6 @@ mod tests {
                                 0123456789012345678901234567890123456789\
                                 0123456789012345678901234567890123456789\
                                 01234567890123456789012345678901234567890";
-        // Sanity at compile/test time.
-        assert_eq!(DESC_160.len(), 160, "DESC_160 must be exactly 160 bytes");
-        assert_eq!(DESC_161.len(), 161, "DESC_161 must be exactly 161 bytes");
 
         struct StaticHandler {
             name: &'static str,
@@ -520,6 +515,10 @@ mod tests {
                 Ok(ToolCallResult::text("ok"))
             }
         }
+
+        // Sanity at compile/test time.
+        assert_eq!(DESC_160.len(), 160, "DESC_160 must be exactly 160 bytes");
+        assert_eq!(DESC_161.len(), 161, "DESC_161 must be exactly 161 bytes");
 
         let mut registry = ToolRegistry::new();
         registry.register(Arc::new(StaticHandler {

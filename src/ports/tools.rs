@@ -220,11 +220,7 @@ impl ToolContext {
     /// Propagates `BridgeError::McpInvalidRequest` for transport errors
     /// — the helper does not retry; handlers that need retry semantics
     /// should layer them on top.
-    pub async fn elicit_confirm(
-        &self,
-        tool_name: &str,
-        summary: &str,
-    ) -> Result<Option<bool>> {
+    pub async fn elicit_confirm(&self, tool_name: &str, summary: &str) -> Result<Option<bool>> {
         let (Some(tx), Some(pending)) =
             (self.notification_tx.clone(), self.pending_requests.clone())
         else {
@@ -242,10 +238,10 @@ impl ToolContext {
         service.set_supported(true);
         match service.confirm_destructive(tool_name, summary).await {
             Ok(confirmed) => Ok(Some(confirmed)),
-            Err(crate::mcp::client_requester::ClientRequestError::Declined)
-            | Err(crate::mcp::client_requester::ClientRequestError::Cancelled) => {
-                Ok(Some(false))
-            }
+            Err(
+                crate::mcp::client_requester::ClientRequestError::Declined
+                | crate::mcp::client_requester::ClientRequestError::Cancelled,
+            ) => Ok(Some(false)),
             Err(crate::mcp::client_requester::ClientRequestError::NotSupported) => Ok(None),
             Err(e) => Err(crate::error::BridgeError::McpInvalidRequest(format!(
                 "elicit_confirm failed: {e:?}"
@@ -752,8 +748,9 @@ mod tests {
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
         let mut ctx = mock::create_test_context();
         ctx.notification_tx = Some(tx);
-        ctx.pending_requests =
-            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        ctx.pending_requests = Some(Arc::new(
+            crate::mcp::pending_requests::PendingRequests::new(),
+        ));
         ctx.client_supports_sampling = true;
 
         let handle = tokio::spawn(async move {
@@ -785,8 +782,9 @@ mod tests {
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
         let mut ctx = mock::create_test_context();
         ctx.notification_tx = Some(tx);
-        ctx.pending_requests =
-            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        ctx.pending_requests = Some(Arc::new(
+            crate::mcp::pending_requests::PendingRequests::new(),
+        ));
         ctx.client_supports_elicitation = true;
 
         let handle = tokio::spawn(async move {
@@ -901,8 +899,9 @@ mod tests {
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
         let mut ctx = mock::create_test_context();
         ctx.notification_tx = Some(tx);
-        ctx.pending_requests =
-            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        ctx.pending_requests = Some(Arc::new(
+            crate::mcp::pending_requests::PendingRequests::new(),
+        ));
         // client_supports_elicitation stays false — must short-circuit, not
         // try to send a request that nothing will answer.
         let result = tokio::time::timeout(
@@ -919,8 +918,9 @@ mod tests {
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
         let mut ctx = mock::create_test_context();
         ctx.notification_tx = Some(tx);
-        ctx.pending_requests =
-            Some(Arc::new(crate::mcp::pending_requests::PendingRequests::new()));
+        ctx.pending_requests = Some(Arc::new(
+            crate::mcp::pending_requests::PendingRequests::new(),
+        ));
         // client_supports_sampling stays false — must short-circuit.
         let result = tokio::time::timeout(
             std::time::Duration::from_millis(500),

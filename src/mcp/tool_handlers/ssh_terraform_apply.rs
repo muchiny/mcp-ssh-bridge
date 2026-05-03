@@ -3,9 +3,9 @@ use serde::Deserialize;
 use crate::config::HostConfig;
 use crate::domain::use_cases::terraform::TerraformCommandBuilder;
 use crate::error::Result;
+use crate::mcp::protocol::LogLevel;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
-use crate::mcp::protocol::LogLevel;
 use crate::ports::ToolContext;
 use crate::ports::protocol::ToolCallResult;
 
@@ -105,7 +105,7 @@ impl StandardTool for TerraformApplyTool {
     /// Parse the `terraform apply` output and emit one log per
     /// resource transition (Plan/Creating/Modifying/Destroying/Apply
     /// complete) so the client can render the apply progress live.
-    /// Errors surface at LogLevel::Error.
+    /// Errors surface at `LogLevel::Error`.
     async fn enrich(
         result: ToolCallResult,
         args: &Self::Args,

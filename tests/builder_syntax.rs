@@ -47,12 +47,11 @@ fn assert_runtime_form_parses(cmd: &str, label: &str) {
         .args(["-n", "-c", &wrapped])
         .output()
         .expect("bash must be in PATH for builder_syntax tests");
-    if !out.status.success() {
-        panic!(
-            "{label}: bash -n rejected the command\n  CMD: {wrapped}\n  STDERR: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-    }
+    assert!(
+        out.status.success(),
+        "{label}: bash -n rejected the command\n  CMD: {wrapped}\n  STDERR: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 /// Assert that a `*_detect_prefix()` returns the post-fix shape (clear error
@@ -138,8 +137,7 @@ fn firewall_list_compound_parses() {
 #[test]
 fn firewall_allow_compound_parses() {
     validate_port("80").unwrap();
-    let cmd =
-        FirewallCommandBuilder::build_allow_command(None, "80", Some("tcp"), None).unwrap();
+    let cmd = FirewallCommandBuilder::build_allow_command(None, "80", Some("tcp"), None).unwrap();
     assert_runtime_form_parses(&cmd, "firewall_allow auto-detect");
 }
 

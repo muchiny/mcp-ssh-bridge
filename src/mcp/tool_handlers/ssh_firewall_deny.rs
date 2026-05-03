@@ -118,10 +118,7 @@ impl StandardTool for FirewallDenyTool {
     /// client does not advertise the elicitation capability — the
     /// global `security.require_elicitation_on_destructive` gate still
     /// applies in that case.
-    async fn pre_execute(
-        args: &Self::Args,
-        ctx: &ToolContext,
-    ) -> Result<Option<ToolCallResult>> {
+    async fn pre_execute(args: &Self::Args, ctx: &ToolContext) -> Result<Option<ToolCallResult>> {
         let summary = format!(
             "Add firewall DENY rule for port `{}` on host `{}`",
             args.port, args.host,

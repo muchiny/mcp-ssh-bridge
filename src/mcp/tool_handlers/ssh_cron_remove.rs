@@ -91,10 +91,7 @@ impl StandardTool for CronRemoveTool {
     /// client does not advertise the elicitation capability — the
     /// global `security.require_elicitation_on_destructive` gate still
     /// applies in that case.
-    async fn pre_execute(
-        args: &Self::Args,
-        ctx: &ToolContext,
-    ) -> Result<Option<ToolCallResult>> {
+    async fn pre_execute(args: &Self::Args, ctx: &ToolContext) -> Result<Option<ToolCallResult>> {
         let summary = format!(
             "Remove cron jobs matching pattern `{}` on host `{}`",
             args.pattern, args.host,

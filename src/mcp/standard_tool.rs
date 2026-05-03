@@ -1761,10 +1761,7 @@ mod tests {
         let mut v = json!({"limit": 3});
         let dr = crate::domain::data_reduction::DataReductionArgs::extract(&mut v);
         try_apply_json_limit(&mut stdout, &dr);
-        assert_eq!(
-            stdout, original,
-            "exact-length array must not be truncated"
-        );
+        assert_eq!(stdout, original, "exact-length array must not be truncated");
     }
 
     /// `try_apply_yq` must report "not applied" when no `yq_filter` is
@@ -1870,10 +1867,11 @@ mod tests {
         );
     }
 
-    /// `apply_reduction` for `OutputKind::Json` must apply the json_limit
-    /// fallback **only** when jq did not run. With both `jq_filter` and
-    /// `limit` present, jq wins and limit is skipped. Kills `delete !`
-    /// in the `if !jq_applied { try_apply_json_limit(...) }` line of
+    /// `apply_reduction` for `OutputKind::Json` must apply the
+    /// `try_apply_json_limit` fallback **only** when jq did not run.
+    /// With both `jq_filter` and `limit` present, jq wins and limit
+    /// is skipped. Kills `delete !` in the
+    /// `if !jq_applied { try_apply_json_limit(...) }` line of
     /// `apply_reduction` (Json branch, around line 517).
     #[cfg(feature = "jq")]
     #[test]
@@ -1920,10 +1918,7 @@ mod tests {
             mock_output_with_exit(table, 1),
         );
         let result = handler
-            .execute(
-                Some(json!({"host": "server1", "columns": ["NAME"]})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": "server1", "columns": ["NAME"]})), &ctx)
             .await
             .unwrap();
         let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {
@@ -1948,8 +1943,8 @@ mod tests {
     ///   increment; `==` would also increment.
     #[tokio::test]
     async fn test_truncation_event_counter_strict_less_than() {
-        use std::sync::atomic::Ordering;
         use std::sync::Arc;
+        use std::sync::atomic::Ordering;
 
         // ---- Path 1: forced truncation. Use a large input so the
         // output is genuinely shorter than the source even after the
@@ -1964,10 +1959,7 @@ mod tests {
         ctx.metrics = Some(metrics_a.clone());
         let handler = StandardToolHandler::<MockTool>::new();
         handler
-            .execute(
-                Some(json!({"host": "server1", "max_output": 200})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": "server1", "max_output": 200})), &ctx)
             .await
             .unwrap();
         assert_eq!(
@@ -1984,10 +1976,7 @@ mod tests {
         );
         ctx2.metrics = Some(metrics_b.clone());
         handler
-            .execute(
-                Some(json!({"host": "server1", "max_output": 1024})),
-                &ctx2,
-            )
+            .execute(Some(json!({"host": "server1", "max_output": 1024})), &ctx2)
             .await
             .unwrap();
         assert_eq!(
@@ -2023,10 +2012,7 @@ mod tests {
             mock_output_with_exit(json_output, 1),
         );
         let result = handler
-            .execute(
-                Some(json!({"host": "server1", "jq_filter": ".name"})),
-                &ctx,
-            )
+            .execute(Some(json!({"host": "server1", "jq_filter": ".name"})), &ctx)
             .await
             .unwrap();
         let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] else {

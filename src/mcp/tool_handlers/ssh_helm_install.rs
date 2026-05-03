@@ -11,9 +11,9 @@ use serde::Deserialize;
 use crate::config::HostConfig;
 use crate::domain::use_cases::kubernetes::{HelmCommandBuilder, KubernetesCommandBuilder};
 use crate::error::Result;
+use crate::mcp::protocol::LogLevel;
 use crate::mcp::standard_tool::{StandardTool, StandardToolHandler, impl_common_args};
 use crate::mcp_standard_tool;
-use crate::mcp::protocol::LogLevel;
 use crate::ports::ToolContext;
 use crate::ports::protocol::ToolCallResult;
 
@@ -156,7 +156,7 @@ impl StandardTool for HelmInstallTool {
 
     /// Mirror of `ssh_helm_upgrade::enrich`: emit a synthetic
     /// `phase=start` event then one log per helm status field. Errors
-    /// surface at LogLevel::Error.
+    /// surface at `LogLevel::Error`.
     async fn enrich(
         result: ToolCallResult,
         args: &Self::Args,

@@ -131,13 +131,13 @@ impl StandardTool for K8sDeleteTool {
     /// client does not advertise the elicitation capability — the
     /// global `security.require_elicitation_on_destructive` gate still
     /// applies in that case.
-    async fn pre_execute(
-        args: &Self::Args,
-        ctx: &ToolContext,
-    ) -> Result<Option<ToolCallResult>> {
+    async fn pre_execute(args: &Self::Args, ctx: &ToolContext) -> Result<Option<ToolCallResult>> {
         let summary = format!(
             "Delete kubernetes {} `{}` (namespace=`{}`) on host `{}`",
-            args.resource, args.name, args.namespace.as_deref().unwrap_or("default"), args.host,
+            args.resource,
+            args.name,
+            args.namespace.as_deref().unwrap_or("default"),
+            args.host,
         );
         match ctx.elicit_confirm(Self::NAME, &summary).await? {
             Some(false) => Ok(Some(ToolCallResult::error(

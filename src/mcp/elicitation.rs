@@ -445,8 +445,7 @@ mod tests {
         let (service, mut rx, pending) = create_test_service_with_pending();
         service.set_supported(true);
 
-        let handle =
-            tokio::spawn(async move { service.elicit("Confirm?", None).await });
+        let handle = tokio::spawn(async move { service.elicit("Confirm?", None).await });
 
         // Drain the outgoing request so the requester registers the pending id.
         let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
@@ -473,8 +472,7 @@ mod tests {
         let (service, mut rx, pending) = create_test_service_with_pending();
         service.set_supported(true);
 
-        let handle =
-            tokio::spawn(async move { service.elicit("Confirm?", None).await });
+        let handle = tokio::spawn(async move { service.elicit("Confirm?", None).await });
 
         let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
             .await
@@ -500,9 +498,8 @@ mod tests {
         let (service, mut rx, pending) = create_test_service_with_pending();
         service.set_supported(true);
 
-        let handle = tokio::spawn(async move {
-            service.elicit_url("Open", "https://example.com").await
-        });
+        let handle =
+            tokio::spawn(async move { service.elicit_url("Open", "https://example.com").await });
 
         let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
             .await
@@ -526,9 +523,8 @@ mod tests {
         let (service, mut rx, pending) = create_test_service_with_pending();
         service.set_supported(true);
 
-        let handle = tokio::spawn(async move {
-            service.elicit_url("Open", "https://example.com").await
-        });
+        let handle =
+            tokio::spawn(async move { service.elicit_url("Open", "https://example.com").await });
 
         let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
             .await
@@ -572,8 +568,7 @@ mod tests {
         let (service, mut rx, pending) = create_test_service_with_pending();
         service.set_supported(true);
 
-        let handle =
-            tokio::spawn(async move { service.elicit("Confirm?", None).await });
+        let handle = tokio::spawn(async move { service.elicit("Confirm?", None).await });
 
         let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
             .await
@@ -601,9 +596,8 @@ mod tests {
         let (service, mut rx, pending) = create_test_service_with_pending();
         service.set_supported(true);
 
-        let handle = tokio::spawn(async move {
-            service.elicit_url("Open", "https://example.com").await
-        });
+        let handle =
+            tokio::spawn(async move { service.elicit_url("Open", "https://example.com").await });
 
         let _ = tokio::time::timeout(Duration::from_secs(2), rx.recv())
             .await

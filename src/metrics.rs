@@ -353,10 +353,7 @@ mod tests {
             2,
             "ssh_exec must have been recorded twice"
         );
-        assert_eq!(
-            *tool_counts.get("ssh_ls").expect("ssh_ls recorded"),
-            1
-        );
+        assert_eq!(*tool_counts.get("ssh_ls").expect("ssh_ls recorded"), 1);
 
         let host_counts = m.host_counts.read().expect("host_counts");
         assert_eq!(
@@ -364,10 +361,7 @@ mod tests {
             2,
             "prod-1 must have been recorded twice"
         );
-        assert_eq!(
-            *host_counts.get("prod-2").expect("prod-2 recorded"),
-            1
-        );
+        assert_eq!(*host_counts.get("prod-2").expect("prod-2 recorded"), 1);
     }
 
     #[test]
@@ -561,12 +555,14 @@ mod tests {
     }
 
     /// Two-kind variant pins the percentage formula
-    /// `*count * 100 / total_kind`. With kinds {Json: 2, Tabular: 1},
-    /// total=3:
-    ///   * Json:    2*100/3 = 66
-    ///   * Tabular: 1*100/3 = 33
-    /// The mutation `/ -> *` would print `2*100*3 = 600` and
-    /// `1*100*3 = 300` instead.
+    /// `*count * 100 / total_kind`. With kinds `{Json: 2, Tabular: 1}`,
+    /// `total = 3`:
+    ///
+    /// - Json:    `2 * 100 / 3 = 66`
+    /// - Tabular: `1 * 100 / 3 = 33`
+    ///
+    /// The mutation `/ -> *` would print `2 * 100 * 3 = 600` and
+    /// `1 * 100 * 3 = 300` instead.
     #[test]
     fn render_token_summary_kind_percentages_use_division() {
         let m = Metrics::new();

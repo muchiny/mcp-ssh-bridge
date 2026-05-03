@@ -83,10 +83,7 @@ impl StandardTool for ServiceStopTool {
     /// client does not advertise the elicitation capability — the
     /// global `security.require_elicitation_on_destructive` gate still
     /// applies in that case.
-    async fn pre_execute(
-        args: &Self::Args,
-        ctx: &ToolContext,
-    ) -> Result<Option<ToolCallResult>> {
+    async fn pre_execute(args: &Self::Args, ctx: &ToolContext) -> Result<Option<ToolCallResult>> {
         let summary = format!(
             "Stop systemd service `{}` on host `{}`",
             args.service, args.host,
