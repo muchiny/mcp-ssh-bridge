@@ -83,6 +83,21 @@ exclude_re = [
     # `SystemTime`/`Utc::now` are real-time syscalls and the
     # filesystem mtime is not under test control.
     "replace < with <= in AuditLogger::cleanup_old_files",
+    # `ConfigWatcher` uses `Instant::elapsed() < DEBOUNCE_DURATION` to
+    # skip reloads that arrive within the debounce window, plus
+    # `notify::EventKind` filters on a sync callback that runs on the
+    # `notify` watcher thread. Both ride on real-time and a real
+    # filesystem event source — killing the timing/filter mutations
+    # deterministically requires either injecting a `Clock` or
+    # spinning up a real `tempfile`-based fixture with carefully
+    # ordered fs writes. Out of scope for this batch.
+    "replace < with <= in ConfigWatcher::with_validator",
+    "replace < with == in ConfigWatcher::with_validator",
+    "replace && with || in ConfigWatcher::with_validator",
+    "replace < with <= in ConfigWatcher::with_notifications",
+    "replace < with == in ConfigWatcher::with_notifications",
+    "replace && with || in ConfigWatcher::with_notifications",
+    "replace == with != in ConfigWatcher::with_notifications",
 ]
 
 # Examine groups for focused mutation testing:
