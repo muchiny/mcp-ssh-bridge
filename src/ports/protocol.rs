@@ -411,6 +411,51 @@ mod tests {
         assert!(!ann.is_empty());
     }
 
+    /// `is_empty` is `title.is_none() && read_only.is_none() &&
+    /// destructive.is_none() && idempotent.is_none() &&
+    /// open_world.is_none()`. Mutations `&& -> ||` at each `&&`
+    /// turn the conjunction at that position into a disjunction —
+    /// only catchable by exercising each field *in isolation* (every
+    /// other field `None`). The constructor helpers all set all five
+    /// fields, so the existing tests miss these mutants.
+    #[test]
+    fn test_single_field_some_is_not_empty() {
+        // title only
+        let ann = ToolAnnotations {
+            title: Some("t".to_string()),
+            ..ToolAnnotations::default()
+        };
+        assert!(!ann.is_empty(), "title=Some must not be empty");
+
+        // read_only_hint only
+        let ann = ToolAnnotations {
+            read_only_hint: Some(true),
+            ..ToolAnnotations::default()
+        };
+        assert!(!ann.is_empty(), "read_only_hint=Some must not be empty");
+
+        // destructive_hint only
+        let ann = ToolAnnotations {
+            destructive_hint: Some(true),
+            ..ToolAnnotations::default()
+        };
+        assert!(!ann.is_empty(), "destructive_hint=Some must not be empty");
+
+        // idempotent_hint only
+        let ann = ToolAnnotations {
+            idempotent_hint: Some(true),
+            ..ToolAnnotations::default()
+        };
+        assert!(!ann.is_empty(), "idempotent_hint=Some must not be empty");
+
+        // open_world_hint only
+        let ann = ToolAnnotations {
+            open_world_hint: Some(true),
+            ..ToolAnnotations::default()
+        };
+        assert!(!ann.is_empty(), "open_world_hint=Some must not be empty");
+    }
+
     #[test]
     fn test_annotations_json_serialization_camel_case() {
         let ann = ToolAnnotations::read_only("Test tool");
