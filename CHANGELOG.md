@@ -5,6 +5,102 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-05-03
+
+### Summary
+
+**MCP interactive integration: Phase D/E/F/G across 38 handlers + mutation
+testing harden across 27 modules.** Long-running tools now stream
+per-step progress, destructive tools confirm via elicitation, diagnostic
+tools optionally enrich output via LLM sampling, and multi-step tools
+emit structured logs through `notifications/message`. Test suite grew
+from 6,934 to 6,973 tests; mutation kill rate is now 99 %+ on the
+testable surface across 27 hot files.
+
+### Added
+
+- **Phase D — Per-step progress notifications.** Long-running multi-host
+  tools (`ssh_exec_multi`, `ssh_metrics_multi`, `ssh_runbook_execute`,
+  `ssh_log_search_multi`, `ssh_log_tail_multi`) now emit
+  `notifications/progress` for each host or step, so clients with a
+  progress UI can render real-time completion instead of a single
+  black-box wait.
+- **Phase E — Elicitation on destructive tools.** 18 destructive
+  handlers gain a `security.require_elicitation_on_destructive`
+  opt-in: when enabled and the client advertises the elicitation
+  capability, the server sends `elicitation/create` and short-circuits
+  with a structured error if the user declines. Affected tools include
+  `ssh_cron_remove`, `ssh_file_patch`, `ssh_file_write`,
+  `ssh_files_write`, `ssh_firewall_deny`, `ssh_group_delete`,
+  `ssh_helm_uninstall`, `ssh_hyperv_vm_stop`, `ssh_k8s_delete`,
+  `ssh_net_equip_config`, `ssh_process_kill`, `ssh_reg_delete`,
+  `ssh_service_stop`, `ssh_template_apply`, `ssh_win_feature_remove`,
+  `ssh_win_firewall_remove`, `ssh_win_process_kill`,
+  `ssh_win_service_stop`.
+- **Phase F — Optional LLM sampling on diagnostic tools.** 13
+  diagnostic handlers add a `summarize=true` flag (with
+  `summary_max_tokens` cap) that asks the client's LLM to analyse the
+  raw output via `sampling/createMessage` and appends the summary
+  alongside the raw data. Falls through to raw-only when the client
+  doesn't advertise sampling. Tools: `ssh_diagnose`,
+  `ssh_security_audit`, `ssh_log_aggregate`, `ssh_compliance_check`,
+  `ssh_compliance_score`, `ssh_compliance_report`, `ssh_vuln_scan`,
+  `ssh_journal_query`, `ssh_compare_state`, `ssh_env_diff`,
+  `ssh_env_drift`, `ssh_incident_correlate`, `ssh_incident_triage`.
+- **Phase G — MCP-side structured logging.** 8 long-running tools
+  (`ssh_runbook_execute`, `ssh_ansible_playbook`, `ssh_helm_install`,
+  `ssh_helm_upgrade`, `ssh_helm_rollback`, `ssh_terraform_apply`,
+  `ssh_k8s_rollout`, `ssh_security_audit`) emit per-step
+  `notifications/message` so clients can stream the playbook /
+  rollout / audit log to their UI instead of waiting for the bulk
+  result.
+- **Async pre-execute and enrich hooks** on `StandardTool` so handlers
+  can drive elicitation / sampling / logging without re-implementing
+  the 16-step pipeline.
+
+### Changed
+
+- **Tool count: 338 → 357 across 75 groups** (was 74). The
+  `total_tools` and `total_groups` fields on the `mcp_list_tool_groups`
+  response, the DXT manifest, and the `.well-known/mcp/server-card.json`
+  all reflect the new totals.
+- **`Metrics::render_token_summary` arithmetic refactor.** The two
+  inner `if before > 0 { saved * 100 / before } else { 0 }` and
+  `if total_kind > 0 { *count * 100 / total_kind } else { 0 }` checks
+  are now removed — the outer guards already prove both denominators
+  positive, so the dead branches are inlined as direct divisions.
+  Behaviour identical, surface for arithmetic mutations reduced.
+
+### Tests
+
+- **Mutation testing: 27 modules, ~99 % kill rate on viable mutants.**
+  Files now at 100 % kill rate (excluding provably-equivalent or
+  feature-gated mutants): `mcp/{elicitation, sampling, progress,
+  logger, meta_tools, pending_requests, client_requester,
+  instructions, protocol}.rs`, `domain/{output_kind, output_cache,
+  diff, output_truncator, runbook, history, task_store,
+  data_reduction}.rs`, `metrics.rs`, `security/{rbac, validator,
+  audit, rate_limiter}.rs`, `ports/{tools, executor, protocol}.rs`.
+  Two mutants on `mcp/standard_tool.rs` (audit-log content + warn
+  tracing) remain — killing them needs a tracing-subscriber and
+  audit-log file harness, deferred.
+- **Test count: 6 934 → 6 973 lib tests** (+39 net new). New tests
+  include `tokio::time::timeout`-bounded shortcuts on
+  `ToolContext::elicit_confirm` / `sample`, async-cache twins of the
+  truncator arithmetic invariants, two-kind percentage assertions on
+  `render_token_summary`, single-field `is_empty` cases on
+  `ToolAnnotations`, exact-byte 160/161-char truncation cases, and a
+  threaded `floor_char_boundary` / `ceil_char_boundary` termination
+  check that catches `i /= 1` / `i *= 1` infinite-loop mutants.
+- **`.cargo/mutants.toml` `exclude_re`** now lists ten classes of
+  provably equivalent or untestable-without-Clock-injection
+  mutations: `ToolHandler::output_kind` defaults, empty-vec
+  `scoped_paths`, jq-feature-gated bodies, OutputCache TTL
+  boundaries, `floor`/`ceil` short-circuit equivalents, infinite-loop
+  arithmetic on the boundary scanners, ConfigWatcher fs-timing /
+  filter mutations, AuditLogger TTL boundary, and the `> -> <`
+  `u64`-zero comparison family in `render_token_summary`.
+
 ## [1.15.1] - 2026-04-30
 
 ### Summary

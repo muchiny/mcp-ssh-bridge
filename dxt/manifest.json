@@ -2,8 +2,8 @@
   "dxt_version": "0.1",
   "name": "mcp-ssh-bridge",
   "display_name": "MCP SSH Bridge",
-  "version": "1.14.0",
-  "description": "Execute commands securely on remote servers via SSH. 338 tools for Linux, Windows, Docker, Kubernetes, and more.",
+  "version": "1.16.0",
+  "description": "Execute commands securely on remote servers via SSH. 357 tools for Linux, Windows, Docker, Kubernetes, and more, with progress / elicitation / sampling / logger MCP integration.",
   "author": {
     "name": "muchiny"
   },
