@@ -249,7 +249,9 @@ impl ToolHandler for SshFilesWriteHandler {
                 )
                 .await
             } else {
-                unreachable!("validated above");
+                return Err(BridgeError::McpInvalidRequest(format!(
+                    "files[{i}]: missing both 'content' and 'local_path' (validation invariant violated)"
+                )));
             };
 
             let action = if entry.content.is_some() {

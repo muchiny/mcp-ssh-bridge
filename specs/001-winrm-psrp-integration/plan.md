@@ -21,7 +21,7 @@ the fundamental bug where 44 Windows handlers generate PowerShell but WinRM send
 **Project Type**: CLI + MCP server (library + binary)  
 **Performance Goals**: Connection pooling amortizes TLS/auth overhead; sub-100ms warm calls  
 **Constraints**: 24GB WSL2 VM (OOM-prone), air-gapped deployments, `#![forbid(unsafe_code)]`  
-**Scale/Scope**: 338 tools, 74 groups, 13 protocols, 44 Windows handlers affected
+**Scale/Scope**: 357 tools, 75 groups, 9 protocols, 44 Windows handlers affected
 
 ### Key Version Concern
 

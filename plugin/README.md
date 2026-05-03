@@ -1,6 +1,6 @@
 # MCP SSH Bridge -- Claude Code Plugin
 
-This plugin integrates [mcp-ssh-bridge](https://github.com/muchiny/mcp-ssh-bridge) into Claude Code, giving you access to **338 tools** for managing remote servers via SSH.
+This plugin integrates [mcp-ssh-bridge](https://github.com/muchiny/mcp-ssh-bridge) into Claude Code, giving you access to **357 tools** for managing remote servers via SSH.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ hosts:
 
 ### MCP Server
 
-The plugin registers `mcp-ssh-bridge` as an MCP server, exposing all 338 tools
+The plugin registers `mcp-ssh-bridge` as an MCP server, exposing all 357 tools
 directly to Claude Code for remote server management.
 
 ### Skills
@@ -35,13 +35,13 @@ directly to Claude Code for remote server management.
 | Skill | Description |
 |-------|-------------|
 | `/mcp-ssh-bridge:bridge` | Manage remote hosts -- status, config, tool execution |
-| `/mcp-ssh-bridge:discover` | Explore 338 tools across 74 groups with progressive discovery |
+| `/mcp-ssh-bridge:discover` | Explore 357 tools across 75 groups with progressive discovery |
 
 ### Capabilities
 
-- **Linux** (59 groups): systemd, Docker, Kubernetes, networking, filesystems, logs, packages, users, cron, firewall, etc.
+- **Linux** (60 groups): systemd, Docker, Kubernetes, networking, filesystems, logs, packages, users, cron, firewall, etc.
 - **Windows** (13 groups): PowerShell, services, registry, IIS, Active Directory, EventLog, etc.
-- **13 protocols**: SSH, WinRM, Telnet, K8s Exec, Serial, AWS SSM, Azure, GCP, ZeroMQ, NATS, MQTT, SNMP, NETCONF
+- **9 protocols**: SSH, WinRM, PSRP, Telnet, K8s Exec, Serial, AWS SSM, Azure, GCP
 - **Token-efficient**: server-side output filtering (jq/yq, columns, limit, pagination)
 - **Secure**: command validation, input sanitization, rate limiting, audit logging
 

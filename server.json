@@ -2,7 +2,7 @@
   "$schema": "https://registry.modelcontextprotocol.io/schemas/server.json",
   "name": "io.github.muchiny/mcp-ssh-bridge",
   "version": "1.14.0",
-  "description": "Secure SSH bridge for AI-powered remote server management. 338 tools across 74 groups for Linux, Windows, Docker, Kubernetes, and more.",
+  "description": "Secure SSH bridge for AI-powered remote server management. 357 tools across 75 groups for Linux, Windows, Docker, Kubernetes, and more.",
   "repository": {
     "url": "https://github.com/muchiny/mcp-ssh-bridge",
     "source": "github"
