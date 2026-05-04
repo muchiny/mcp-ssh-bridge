@@ -1,0 +1,173 @@
+//! Annotation/Group audit — guards against silent regressions where a
+//! tool is registered with an annotation that doesn't match its name.
+//!
+//! Rules are based on suffixes in the tool name. They are intentionally
+//! coarse and ride a small allowlist for legitimate exceptions
+//! (`*_show_run` is a CLI command that READS the running config — read-only
+//! despite the `_run` suffix).
+//!
+//! When you add a tool that violates a rule, fix the annotation. If the
+//! tool is a true exception, add it to ALLOWLIST with a comment explaining
+//! why.
+
+use mcp_ssh_bridge::mcp::registry::{ToolAnnotationKind, ToolRegistryEntry};
+
+const MUTATION_SUFFIXES: &[&str] = &[
+    "_apply",
+    "_set",
+    "_enable",
+    "_disable",
+    "_install",
+    "_remove",
+    "_restart",
+    "_reload",
+    "_start",
+    "_write",
+    "_chmod",
+    "_chown",
+    "_patch",
+    "_create",
+    "_add",
+    "_modify",
+    "_update",
+    "_distribute",
+    "_trigger",
+    "_allow",
+    "_deny",
+    "_mount",
+    "_umount",
+];
+
+const DESTRUCTIVE_SUFFIXES: &[&str] = &["_delete", "_kill", "_uninstall", "_rollback", "_destroy"];
+
+const ALLOWLIST: &[(&str, ToolAnnotationKind)] = &[
+    ("ssh_net_equip_show_run", ToolAnnotationKind::ReadOnly),
+    ("ssh_recording_start", ToolAnnotationKind::Mutating),
+    ("ssh_recording_stop", ToolAnnotationKind::Mutating),
+    ("ssh_session_create", ToolAnnotationKind::Mutating),
+    ("ssh_session_close", ToolAnnotationKind::Mutating),
+    ("ssh_tunnel_create", ToolAnnotationKind::Mutating),
+    ("ssh_tunnel_close", ToolAnnotationKind::Mutating),
+    ("ssh_runbook_execute", ToolAnnotationKind::Mutating),
+    ("ssh_backup_restore", ToolAnnotationKind::MutatingIdempotent),
+    ("ssh_db_restore", ToolAnnotationKind::MutatingIdempotent),
+    ("ssh_helm_rollback", ToolAnnotationKind::Destructive),
+    ("ssh_helm_uninstall", ToolAnnotationKind::Destructive),
+    ("ssh_helm_install", ToolAnnotationKind::Mutating),
+    ("ssh_pkg_install", ToolAnnotationKind::Mutating),
+    ("ssh_pkg_remove", ToolAnnotationKind::Destructive),
+    ("ssh_user_delete", ToolAnnotationKind::Destructive),
+    ("ssh_group_delete", ToolAnnotationKind::Destructive),
+    ("ssh_process_kill", ToolAnnotationKind::Destructive),
+    ("ssh_win_process_kill", ToolAnnotationKind::Destructive),
+    ("ssh_storage_umount", ToolAnnotationKind::Mutating),
+    ("ssh_storage_mount", ToolAnnotationKind::Mutating),
+];
+
+fn allowed(name: &str, kind: ToolAnnotationKind) -> bool {
+    ALLOWLIST
+        .iter()
+        .any(|(allowed_name, allowed_kind)| *allowed_name == name && *allowed_kind == kind)
+}
+
+fn matches_suffix(name: &str, suffixes: &[&str]) -> bool {
+    suffixes.iter().any(|suf| name.ends_with(suf))
+}
+
+#[test]
+fn no_tool_has_empty_group() {
+    let mut violations = vec![];
+    for entry in inventory::iter::<ToolRegistryEntry>() {
+        if entry.group.is_empty() {
+            violations.push(entry.name);
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "tools registered with empty group: {violations:?}"
+    );
+}
+
+#[test]
+fn no_tool_has_empty_name() {
+    let mut violations = vec![];
+    for entry in inventory::iter::<ToolRegistryEntry>() {
+        if entry.name.is_empty() {
+            violations.push(entry.group);
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "tools registered with empty name in groups: {violations:?}"
+    );
+}
+
+#[test]
+fn mutation_suffix_implies_not_read_only() {
+    let mut violations = vec![];
+    for entry in inventory::iter::<ToolRegistryEntry>() {
+        if entry.annotation_kind != ToolAnnotationKind::ReadOnly {
+            continue;
+        }
+        if matches_suffix(entry.name, MUTATION_SUFFIXES)
+            && !allowed(entry.name, ToolAnnotationKind::ReadOnly)
+        {
+            violations.push(entry.name);
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "tools with mutation-suffixed names but `read_only` annotation \
+         (should be `mutating` or `mutating_idempotent`): {violations:#?}\n\
+         If a tool is a legitimate exception, add it to ALLOWLIST in \
+         tests/annotation_audit.rs with a justification."
+    );
+}
+
+#[test]
+fn destructive_suffix_implies_destructive() {
+    let mut violations = vec![];
+    for entry in inventory::iter::<ToolRegistryEntry>() {
+        if entry.annotation_kind == ToolAnnotationKind::Destructive {
+            continue;
+        }
+        if matches_suffix(entry.name, DESTRUCTIVE_SUFFIXES)
+            && !allowed(entry.name, entry.annotation_kind)
+        {
+            violations.push((entry.name, entry.annotation_kind));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "tools with destructive-suffixed names but non-destructive annotation: {violations:#?}\n\
+         If a tool is reversible/idempotent, add it to ALLOWLIST in \
+         tests/annotation_audit.rs with a justification."
+    );
+}
+
+#[test]
+fn report_annotation_distribution() {
+    let mut read_only = 0usize;
+    let mut mutating = 0usize;
+    let mut mutating_idempotent = 0usize;
+    let mut destructive = 0usize;
+    let mut total = 0usize;
+    for entry in inventory::iter::<ToolRegistryEntry>() {
+        total += 1;
+        match entry.annotation_kind {
+            ToolAnnotationKind::ReadOnly => read_only += 1,
+            ToolAnnotationKind::Mutating => mutating += 1,
+            ToolAnnotationKind::MutatingIdempotent => mutating_idempotent += 1,
+            ToolAnnotationKind::Destructive => destructive += 1,
+        }
+    }
+    assert_eq!(
+        read_only + mutating + mutating_idempotent + destructive,
+        total,
+        "annotation kinds must sum to total tool count"
+    );
+    eprintln!(
+        "annotation distribution: read_only={read_only} mutating={mutating} \
+         mutating_idempotent={mutating_idempotent} destructive={destructive} total={total}"
+    );
+}
