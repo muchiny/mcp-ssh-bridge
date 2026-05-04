@@ -25,6 +25,7 @@ Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──9 protocols─
 ## Table of Contents
 
 - [Features](#features)
+- [Hero Workflows](#hero-workflows)
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
 - [Configuration](#configuration)
@@ -50,6 +51,70 @@ Claude Code  ◄──JSON-RPC──►  MCP SSH Bridge  ◄──9 protocols─
 - **CLI + MCP** — all tools available as CLI commands (10-32x token savings) or via MCP JSON-RPC
 - **Daemon mode** — Unix-socket transport for multi-client local usage; built-in `WinRmPool` (120 s TTL) and `K8sExecPool` (300 s TTL) amortize TLS handshakes across calls
 - **7500+ tests** — `#![forbid(unsafe_code)]`, Rust 2024 edition, strict clippy
+
+---
+
+## Hero Workflows
+
+Four end-to-end recipes that show why this exists. Every command runs through one CLI binary; all 357 tools sit behind the same flag conventions (`--jq`, `--columns`, `--limit`, `--output-format`).
+
+### 1. Diagnose a Linux service in 4 commands
+
+```bash
+mcp-ssh-bridge status                                       # check host reachability
+mcp-ssh-bridge tool ssh_service_status host=web1 service=nginx
+mcp-ssh-bridge tool ssh_service_logs   host=web1 service=nginx lines=200
+mcp-ssh-bridge tool ssh_journal_query  host=web1 unit=nginx priority=err since="-1h"
+```
+
+Built-in validation rejects unknown hosts before any SSH bytes leave your machine; outputs are sanitized through 62 secret-redaction patterns + entropy detection.
+
+### 2. Inspect Kubernetes with 80% fewer tokens
+
+```bash
+# Dump all pods → 50 KB JSON. Pipe through server-side jq → ~6 KB TSV.
+mcp-ssh-bridge --jq '.items[] | [.metadata.name, .status.phase, .spec.nodeName]' \
+  --output-format=tsv \
+  tool ssh_k8s_get host=k8s resource=pods namespace=default
+
+mcp-ssh-bridge tool ssh_k8s_describe host=k8s resource=pod name=api-7d-xyz namespace=default
+mcp-ssh-bridge tool ssh_k8s_logs     host=k8s pod=api-7d-xyz container=app tail=100
+```
+
+Filtering happens **server-side, before truncation** — you never lose data to the output cap. Same pattern works for `ssh_docker_inspect`, `ssh_helm_status`, `ssh_awx_*`, etc.
+
+### 3. Cross-platform: Windows + Linux from one CLI
+
+```bash
+# Linux host
+mcp-ssh-bridge tool ssh_service_status   host=web1 service=postgres
+# Windows host (WinRM/PSRP under the hood — no agent install on the target)
+mcp-ssh-bridge tool ssh_win_service_status host=appsrv service=W3SVC
+mcp-ssh-bridge tool ssh_iis_restart        host=appsrv name=DefaultAppPool
+mcp-ssh-bridge tool ssh_win_event_query    host=appsrv log=System level=Error since="-1h"
+```
+
+13 Windows tool groups (services, events, AD, IIS, scheduled tasks, registry, Hyper-V, …) map cleanly onto the same `ssh_*` namespace, no protocol switch in your prompts.
+
+### 4. Audited destructive ops with elicitation
+
+```yaml
+# config.yaml
+security:
+  require_elicitation_on_destructive: true   # MCP elicitation/create before any destructive_hint:true tool
+  recording:
+    enabled: true                            # tamper-proof asciinema recordings
+audit:
+  log_path: /var/log/mcp-ssh-bridge/audit.jsonl
+```
+
+```bash
+mcp-ssh-bridge tool ssh_helm_rollback host=k8s release=api revision=7
+# → MCP client (Claude Code etc.) shows a confirmation dialog before the call leaves the bridge.
+# → Audit log records the prompt, args, sanitized stdout, exit code, duration.
+```
+
+The dispatcher distinguishes `read_only` vs `mutating` vs `mutating_idempotent` vs `destructive` per tool (audited via `tests/annotation_audit.rs`), so confirmations only fire when state actually changes.
 
 ---
 
