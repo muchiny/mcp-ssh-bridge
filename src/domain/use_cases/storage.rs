@@ -13,19 +13,29 @@ pub struct StorageCommandBuilder;
 
 impl StorageCommandBuilder {
     /// Build lsblk command.
+    ///
+    /// `LC_ALL=C` forces stable English column names so the columnar parser
+    /// in `tool_handlers/utils.rs` can match user-supplied `columns=[...]`
+    /// case-insensitively. `--list` disables the default tree-drawing
+    /// branch glyphs (`└─`, `├─`) — those Unicode box-drawing characters
+    /// shift byte alignment vs the header line and break gutter detection.
     #[must_use]
     pub fn build_lsblk_command(json: bool) -> String {
         if json {
-            "lsblk -J -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,UUID,MODEL".to_string()
+            "LC_ALL=C lsblk -J -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,UUID,MODEL".to_string()
         } else {
-            "lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,UUID,MODEL".to_string()
+            "LC_ALL=C lsblk --list -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,UUID,MODEL".to_string()
         }
     }
 
     /// Build detailed df command.
+    ///
+    /// `LC_ALL=C` forces stable English column names (`Filesystem`, `Size`,
+    /// `Use%`, `Mounted on`) so the columnar parser can match user-supplied
+    /// `columns=[...]` regardless of the host locale.
     #[must_use]
     pub fn build_df_command(path: Option<&str>, inodes: bool) -> String {
-        let mut cmd = String::from("df -h");
+        let mut cmd = String::from("LC_ALL=C df -h");
         if inodes {
             cmd.push_str(" -i");
         }
@@ -103,6 +113,7 @@ mod tests {
     fn test_lsblk_json() {
         let cmd = StorageCommandBuilder::build_lsblk_command(true);
         assert!(cmd.contains("-J"));
+        assert!(cmd.starts_with("LC_ALL=C"));
     }
 
     #[test]
@@ -110,6 +121,9 @@ mod tests {
         let cmd = StorageCommandBuilder::build_lsblk_command(false);
         assert!(!cmd.contains("-J"));
         assert!(cmd.contains("lsblk"));
+        // --list disables tree-drawing glyphs that break columnar parsing.
+        assert!(cmd.contains("--list"));
+        assert!(cmd.starts_with("LC_ALL=C"));
     }
 
     #[test]
@@ -117,6 +131,8 @@ mod tests {
         let cmd = StorageCommandBuilder::build_df_command(None, false);
         assert!(cmd.contains("df -h"));
         assert!(cmd.contains("-T"));
+        // LC_ALL=C ensures English column headers regardless of host locale.
+        assert!(cmd.starts_with("LC_ALL=C"));
     }
 
     #[test]

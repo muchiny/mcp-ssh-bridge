@@ -19,6 +19,11 @@ impl ProcessCommandBuilder {
     /// Build a `ps` command to list processes.
     ///
     /// Constructs: `ps aux [--sort=-{field}]` with optional user/grep filtering.
+    ///
+    /// When `filter` is set, the pipeline preserves the `ps` header line so
+    /// downstream columnar parsing (and `columns=[...]` selection) keeps
+    /// working. `awk` matches the header by line number (`NR==1`) plus rows
+    /// matching the user pattern, while excluding the awk/grep self-process.
     #[must_use]
     pub fn build_list_command(
         user: Option<&str>,
@@ -42,7 +47,15 @@ impl ProcessCommandBuilder {
         }
 
         if let Some(f) = filter {
-            let _ = write!(cmd, " | grep -i {} | grep -v grep", shell_escape(f));
+            let lower = f.to_lowercase();
+            let escaped_pattern = shell_escape(&lower);
+            // awk -v passes the pattern as a variable, avoiding regex injection
+            // and quote-escaping pitfalls. `tolower($0)` makes the match
+            // case-insensitive without needing portable IGNORECASE flags.
+            let _ = write!(
+                cmd,
+                " | awk -v p={escaped_pattern} 'NR==1 {{print; next}} index(tolower($0), p) > 0 && !/awk -v p=/ && !/grep -v/ {{print}}'"
+            );
         }
 
         cmd
@@ -147,8 +160,11 @@ mod tests {
     #[test]
     fn test_list_with_filter() {
         let cmd = ProcessCommandBuilder::build_list_command(None, None, Some("nginx"));
-        assert!(cmd.contains("grep -i 'nginx'"));
-        assert!(cmd.contains("grep -v grep"));
+        // awk preserves the ps header (NR==1) so columnar parsing keeps working,
+        // and matches rows containing the lowercased pattern (case-insensitive).
+        assert!(cmd.contains("awk -v p='nginx'"));
+        assert!(cmd.contains("NR==1"));
+        assert!(cmd.contains("index(tolower($0), p)"));
     }
 
     // ── build_kill_command ──────────────────────────────────────────
@@ -232,7 +248,9 @@ mod tests {
     fn test_list_injection_in_filter() {
         let cmd =
             ProcessCommandBuilder::build_list_command(None, None, Some("nginx | cat /etc/passwd"));
-        assert!(cmd.contains("grep -i 'nginx | cat /etc/passwd'"));
+        // The filter is shell-escaped and passed via awk -v as a literal
+        // string variable, so pipe metacharacters cannot inject commands.
+        assert!(cmd.contains("awk -v p='nginx | cat /etc/passwd'"));
     }
 
     #[test]
@@ -258,8 +276,7 @@ mod tests {
         );
         assert!(cmd.contains("-u 'www-data'"));
         assert!(cmd.contains("--sort=-'%mem'"));
-        assert!(cmd.contains("grep -i 'apache'"));
-        assert!(cmd.contains("grep -v grep"));
+        assert!(cmd.contains("awk -v p='apache'"));
     }
 
     #[test]
