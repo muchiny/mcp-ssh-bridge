@@ -824,6 +824,10 @@ impl McpServer {
             self.handle_cancellation_notification(message.params.as_ref());
             return None;
         }
+        if message.method.as_deref() == Some("notifications/initialized") {
+            self.handle_initialized_notification(tx).await;
+            return None;
+        }
 
         // It's a client request — convert to JsonRpcRequest
         Some(JsonRpcRequest {
@@ -862,6 +866,13 @@ impl McpServer {
     /// Handle `notifications/roots/list_changed` — re-fetch roots.
     async fn handle_roots_changed(&self, tx: &mpsc::Sender<WriterMessage>) {
         info!("Client roots changed, re-fetching");
+        self.fetch_roots(tx).await;
+    }
+
+    /// Handle `notifications/initialized` — fetch client roots if supported.
+    /// No response is emitted (per JSON-RPC 2.0 notification semantics).
+    async fn handle_initialized_notification(&self, tx: &mpsc::Sender<WriterMessage>) {
+        info!("Client sent notifications/initialized; fetching roots");
         self.fetch_roots(tx).await;
     }
 
@@ -907,49 +918,6 @@ impl McpServer {
 
         match request.method.as_str() {
             "initialize" => self.handle_initialize(id, request.params).await,
-            "initialized" => {
-                // After handshake, fetch roots if client supports them.
-                // Spawn as background task since we can't block the response.
-                if self.client_supports_roots.load(Ordering::Relaxed) {
-                    // Prefer the per-session tx passed through the request,
-                    // fall back to the global slot for handlers invoked
-                    // outside a session (e.g. unit tests).
-                    let tx_opt = notification_tx.clone().or_else(|| {
-                        // blocking_read is avoided — we're in async context
-                        None
-                    });
-                    let tx_opt = if tx_opt.is_some() {
-                        tx_opt
-                    } else {
-                        self.notification_tx.read().await.clone()
-                    };
-                    if let Some(tx) = tx_opt {
-                        let roots = Arc::clone(&self.roots);
-                        let pending = Arc::clone(&self.pending_requests);
-                        tokio::spawn(async move {
-                            let requester = super::client_requester::ClientRequester::new(
-                                tx,
-                                pending,
-                                std::time::Duration::from_secs(10),
-                            );
-                            match requester.send_request("roots/list", json!({})).await {
-                                Ok(value) => {
-                                    if let Ok(result) =
-                                        serde_json::from_value::<RootsListResult>(value)
-                                    {
-                                        info!(count = result.roots.len(), "Fetched client roots");
-                                        *roots.write().await = result.roots;
-                                    }
-                                }
-                                Err(e) => {
-                                    debug!(error = %e, "Failed to fetch roots");
-                                }
-                            }
-                        });
-                    }
-                }
-                JsonRpcResponse::success(id, json!({}))
-            }
             "tools/list" => self.handle_tools_list(id, request.params.as_ref()),
             "tools/call" => {
                 self.handle_tools_call(id, request.params, cancel_token, notification_tx)
@@ -2374,18 +2342,69 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_request_initialized_notification() {
+    async fn test_route_initialized_notification_emits_no_response() {
+        // Per JSON-RPC 2.0 / MCP spec, notifications carry no `id` and MUST NOT
+        // receive a response. `route_incoming_message` must short-circuit
+        // `notifications/initialized` so it never reaches the dispatcher.
         let server = create_test_server();
-        let request = JsonRpcRequest {
+        let (tx, mut rx) = mpsc::channel::<WriterMessage>(8);
+        let message = super::super::protocol::JsonRpcMessage {
             jsonrpc: "2.0".to_string(),
-            id: Some(json!(1)),
-            method: "initialized".to_string(),
+            id: None,
+            method: Some("notifications/initialized".to_string()),
             params: None,
+            result: None,
+            error: None,
         };
 
-        let response = server.handle_request(request).await;
+        let routed = server.route_incoming_message(message, &tx).await;
 
-        assert!(response.error.is_none());
+        assert!(routed.is_none(), "notification must not be dispatched");
+        assert!(
+            rx.try_recv().is_err(),
+            "no JSON-RPC response must be emitted for a notification"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_route_initialized_notification_fetches_roots_when_supported() {
+        // When the client advertised roots support during initialize,
+        // receiving `notifications/initialized` must trigger a server-initiated
+        // `roots/list` request on the writer channel.
+        //
+        // `fetch_roots` awaits the (never-arriving) client response, so we
+        // drive `route_incoming_message` in a background task and just verify
+        // the outbound `roots/list` shows up on tx.
+        let server = Arc::new(create_test_server());
+        server
+            .client_supports_roots
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let (tx, mut rx) = mpsc::channel::<WriterMessage>(8);
+        let message = super::super::protocol::JsonRpcMessage {
+            jsonrpc: "2.0".to_string(),
+            id: None,
+            method: Some("notifications/initialized".to_string()),
+            params: None,
+            result: None,
+            error: None,
+        };
+
+        let server_bg = Arc::clone(&server);
+        let route_handle =
+            tokio::spawn(async move { server_bg.route_incoming_message(message, &tx).await });
+
+        let sent = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("expected a roots/list request within 2s")
+            .expect("channel closed unexpectedly");
+        match sent {
+            WriterMessage::Request(req) => {
+                assert_eq!(req.method, "roots/list");
+            }
+            _ => panic!("expected WriterMessage::Request(roots/list)"),
+        }
+
+        route_handle.abort();
     }
 
     #[tokio::test]
