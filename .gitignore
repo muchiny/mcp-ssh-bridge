@@ -124,3 +124,4 @@ trivy-results.*
 bench-history.json
 scripts/tool_metadata.json
 .gitnexus
+.serena/
