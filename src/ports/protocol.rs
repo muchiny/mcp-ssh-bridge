@@ -73,6 +73,20 @@ impl ToolAnnotations {
         }
     }
 
+    /// Mutating tool whose effect is convergent — repeating the same call
+    /// with the same args leaves the system in the same final state
+    /// (e.g. `kubectl apply`, `systemctl restart`, `nginx reload`).
+    #[must_use]
+    pub fn mutating_idempotent(title: impl Into<String>) -> Self {
+        Self {
+            title: Some(title.into()),
+            read_only_hint: Some(false),
+            destructive_hint: Some(false),
+            idempotent_hint: Some(true),
+            open_world_hint: Some(true),
+        }
+    }
+
     /// Destructive tool: triggers confirmation dialogs in clients.
     #[must_use]
     pub fn destructive(title: impl Into<String>) -> Self {

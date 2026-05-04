@@ -26,7 +26,7 @@ impl_common_args!(SshServiceRestartArgs);
 #[mcp_standard_tool(
     name = "ssh_service_restart",
     group = "systemd",
-    annotation = "read_only"
+    annotation = "mutating_idempotent"
 )]
 pub struct ServiceRestartTool;
 

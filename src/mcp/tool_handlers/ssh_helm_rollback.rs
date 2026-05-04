@@ -42,7 +42,7 @@ impl_common_args!(SshHelmRollbackArgs);
 #[mcp_standard_tool(
     name = "ssh_helm_rollback",
     group = "kubernetes",
-    annotation = "mutating"
+    annotation = "destructive"
 )]
 pub struct HelmRollbackTool;
 

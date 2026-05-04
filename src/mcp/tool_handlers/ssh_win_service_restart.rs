@@ -27,7 +27,7 @@ impl_common_args!(SshWinServiceRestartArgs);
 #[mcp_standard_tool(
     name = "ssh_win_service_restart",
     group = "windows_services",
-    annotation = "read_only"
+    annotation = "mutating_idempotent"
 )]
 pub struct WinServiceRestartTool;
 

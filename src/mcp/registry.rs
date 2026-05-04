@@ -36,6 +36,10 @@ pub enum ToolAnnotationKind {
     ReadOnly,
     /// Mutating; modifies state on the remote host.
     Mutating,
+    /// Mutating but convergent — repeating the same call leaves the
+    /// system in the same final state (e.g. `kubectl apply`,
+    /// `systemctl restart`, `nginx reload`).
+    MutatingIdempotent,
     /// Destructive; irreversible side effects (rm -rf, drop table).
     Destructive,
 }
@@ -49,6 +53,7 @@ impl ToolAnnotationKind {
         match self {
             Self::ReadOnly => ToolAnnotations::read_only(tool_name),
             Self::Mutating => ToolAnnotations::mutating(tool_name),
+            Self::MutatingIdempotent => ToolAnnotations::mutating_idempotent(tool_name),
             Self::Destructive => ToolAnnotations::destructive(tool_name),
         }
     }

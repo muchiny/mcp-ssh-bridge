@@ -35,7 +35,11 @@ pub struct SshK8sApplyArgs {
 
 impl_common_args!(SshK8sApplyArgs);
 
-#[mcp_standard_tool(name = "ssh_k8s_apply", group = "kubernetes", annotation = "read_only")]
+#[mcp_standard_tool(
+    name = "ssh_k8s_apply",
+    group = "kubernetes",
+    annotation = "mutating_idempotent"
+)]
 pub struct K8sApplyTool;
 
 impl StandardTool for K8sApplyTool {

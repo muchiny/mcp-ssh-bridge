@@ -24,7 +24,7 @@ impl_common_args!(SshServiceDaemonReloadArgs);
 #[mcp_standard_tool(
     name = "ssh_service_daemon_reload",
     group = "systemd",
-    annotation = "read_only"
+    annotation = "mutating_idempotent"
 )]
 pub struct ServiceDaemonReloadTool;
 

@@ -85,12 +85,12 @@ impl syn::parse::Parse for McpToolArgs {
         // Validate annotation kind at compile time so typos are caught
         // right at the macro site instead of during registry lookup.
         match annotation.as_str() {
-            "read_only" | "mutating" | "destructive" => {}
+            "read_only" | "mutating" | "mutating_idempotent" | "destructive" => {}
             other => {
                 return Err(syn::Error::new(
                     proc_macro2::Span::call_site(),
                     format!(
-                        "invalid annotation `{other}` — expected one of: read_only, mutating, destructive"
+                        "invalid annotation `{other}` — expected one of: read_only, mutating, mutating_idempotent, destructive"
                     ),
                 ));
             }
@@ -167,6 +167,9 @@ fn expand_mcp_tool(attr: TokenStream, item: TokenStream, wrap_standard: bool) ->
     let annotation_ident = match args.annotation.as_str() {
         "read_only" => quote! { ::mcp_ssh_bridge::mcp::registry::ToolAnnotationKind::ReadOnly },
         "mutating" => quote! { ::mcp_ssh_bridge::mcp::registry::ToolAnnotationKind::Mutating },
+        "mutating_idempotent" => {
+            quote! { ::mcp_ssh_bridge::mcp::registry::ToolAnnotationKind::MutatingIdempotent }
+        }
         "destructive" => {
             quote! { ::mcp_ssh_bridge::mcp::registry::ToolAnnotationKind::Destructive }
         }

@@ -22,7 +22,11 @@ pub struct SshIisRestartArgs {
 
 impl_common_args!(SshIisRestartArgs);
 
-#[mcp_standard_tool(name = "ssh_iis_restart", group = "iis", annotation = "read_only")]
+#[mcp_standard_tool(
+    name = "ssh_iis_restart",
+    group = "iis",
+    annotation = "mutating_idempotent"
+)]
 pub struct IisRestartTool;
 
 impl StandardTool for IisRestartTool {

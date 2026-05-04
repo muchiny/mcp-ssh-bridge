@@ -21,7 +21,11 @@ pub struct SshNginxReloadArgs {
 
 impl_common_args!(SshNginxReloadArgs);
 
-#[mcp_standard_tool(name = "ssh_nginx_reload", group = "nginx", annotation = "read_only")]
+#[mcp_standard_tool(
+    name = "ssh_nginx_reload",
+    group = "nginx",
+    annotation = "mutating_idempotent"
+)]
 pub struct NginxReloadTool;
 
 impl StandardTool for NginxReloadTool {
