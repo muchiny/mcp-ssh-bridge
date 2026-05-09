@@ -2643,6 +2643,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonwebtoken"
+version = "9.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a87cc7a48537badeae96744432de36f4be2b4a34a05a5ef32e9dd8a1c169dde"
+dependencies = [
+ "base64",
+ "js-sys",
+ "pem",
+ "ring",
+ "serde",
+ "serde_json",
+ "simple_asn1",
+]
+
+[[package]]
 name = "k8s-openapi"
 version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2865,7 +2880,7 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "mcp-ssh-bridge"
-version = "1.16.1"
+version = "1.17.0"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2873,6 +2888,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-ssm",
  "axum",
+ "base64",
  "chrono",
  "clap",
  "clap_complete",
@@ -2886,6 +2902,7 @@ dependencies = [
  "jaq-core",
  "jaq-json",
  "jaq-std",
+ "jsonwebtoken",
  "k8s-openapi",
  "kube",
  "mcp-ssh-bridge-macros",
@@ -2905,7 +2922,6 @@ dependencies = [
  "serde-saphyr",
  "serde_json",
  "sha2 0.10.9",
- "shellexpand",
  "similar",
  "tempfile",
  "thiserror 2.0.18",
@@ -4836,15 +4852,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shellexpand"
-version = "3.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32824fab5e16e6c4d86dc1ba84489390419a39f97699852b66480bb87d297ed8"
-dependencies = [
- "dirs",
-]
-
-[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4891,6 +4898,18 @@ name = "similar"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
+
+[[package]]
+name = "simple_asn1"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d585997b0ac10be3c5ee635f1bab02d512760d14b7c468801ac8a01d9ae5f1d"
+dependencies = [
+ "num-bigint",
+ "num-traits",
+ "thiserror 2.0.18",
+ "time",
+]
 
 [[package]]
 name = "slab"
@@ -5097,6 +5116,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743bd48c283afc0388f9b8827b976905fb217ad9e647fae3a379a9283c4def2c"
 dependencies = [
  "deranged",
+ "itoa",
  "num-conv",
  "powerfmt",
  "serde_core",
@@ -5346,10 +5366,12 @@ dependencies = [
  "iri-string",
  "mime",
  "pin-project-lite",
+ "tokio",
  "tower",
  "tower-layer",
  "tower-service",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -6423,3 +6445,8 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+
+[[patch.unused]]
+name = "winrm-rs"
+version = "1.1.0"
+source = "git+https://github.com/muchiny/winrm-rs.git?rev=573dadf5abcaed681f65999f216164c9f33a6250#573dadf5abcaed681f65999f216164c9f33a6250"

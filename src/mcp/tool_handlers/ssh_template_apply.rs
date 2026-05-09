@@ -303,7 +303,12 @@ mod tests {
             save_output: None,
         };
         let cmd = TemplateApplyTool::build_command(&args, &host_config).unwrap();
-        assert!(cmd.contains("TEMPLATE_EOF"));
+        // Heredoc terminator is randomized per call (Vuln 4 fix); extract it dynamically.
+        let start = cmd.find("<< '").expect("heredoc opening present") + 4;
+        let end = cmd[start..].find('\'').expect("terminator close quote") + start;
+        let terminator = &cmd[start..end];
+        assert!(terminator.starts_with("MCP_EOF_"));
+        assert!(cmd.contains(terminator));
         assert!(!cmd.contains(".bak"));
     }
 
@@ -348,7 +353,12 @@ mod tests {
             save_output: None,
         };
         let cmd = TemplateApplyTool::build_command(&args, &host_config).unwrap();
+        // Heredoc terminator is randomized per call (Vuln 4 fix); extract it dynamically.
+        let start = cmd.find("<< '").expect("heredoc opening present") + 4;
+        let end = cmd[start..].find('\'').expect("terminator close quote") + start;
+        let terminator = &cmd[start..end];
+        assert!(terminator.starts_with("MCP_EOF_"));
         assert!(cmd.contains(".bak"));
-        assert!(cmd.contains("TEMPLATE_EOF"));
+        assert!(cmd.contains(terminator));
     }
 }

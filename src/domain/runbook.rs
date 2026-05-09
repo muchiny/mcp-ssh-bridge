@@ -11,6 +11,7 @@ use tracing::{info, warn};
 
 /// A runbook definition loaded from YAML
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Runbook {
     pub name: String,
     pub description: String,
@@ -27,6 +28,7 @@ fn default_version() -> String {
 
 /// Runbook parameter definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RunbookParam {
     #[serde(rename = "type", default = "default_param_type")]
     pub param_type: String,
@@ -42,6 +44,7 @@ fn default_param_type() -> String {
 
 /// A single step in a runbook
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RunbookStep {
     pub name: String,
     #[serde(default)]
@@ -157,7 +160,7 @@ pub fn load_runbook(path: &Path) -> Result<Runbook, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
 
-    let runbook: Runbook = serde_saphyr::from_str(&content)
+    let runbook: Runbook = super::yaml::parse_yaml(&content)
         .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
 
     validate_runbook(&runbook)?;
@@ -185,7 +188,7 @@ pub fn builtin_runbooks() -> Vec<Runbook> {
     definitions
         .iter()
         .filter_map(|yaml| {
-            serde_saphyr::from_str(yaml)
+            super::yaml::parse_yaml(yaml)
                 .map_err(|e| warn!(error = %e, "Failed to parse built-in runbook"))
                 .ok()
         })

@@ -22,7 +22,8 @@ use super::completion_provider::DefaultCompletionProvider;
 use super::logger::McpLogger;
 use super::pending_requests::{ClientResponse, PendingRequests};
 use super::progress::ProgressReporter;
-use super::protocol::{IncomingMessage, JsonRpcMessage, RootEntry, RootsListResult};
+use super::protocol::{IncomingMessage, JsonRpcMessage, RootsListResult};
+use super::session_context::{NotificationFanout, SessionContext};
 use super::transport::{Session, Transport, stdio::StdioTransport};
 
 use super::history::CommandHistory;
@@ -61,10 +62,19 @@ pub struct McpServer {
     initialized: AtomicBool,
     concurrent_limit: Arc<Semaphore>,
     client_info: RwLock<Option<ClientInfo>>,
-    runtime_max_output_chars: Arc<RwLock<Option<usize>>>,
-    /// Writer channel for sending task status notifications from background workers.
-    /// Initialized in `run()` before the main loop starts.
-    notification_tx: Arc<RwLock<Option<mpsc::Sender<WriterMessage>>>>,
+    /// Server-wide fanout registry of live session writer channels.
+    ///
+    /// Used by the config watcher (and any other server-wide event
+    /// source) to broadcast `list_changed` notifications to ALL live
+    /// sessions. Per-session direct delivery (progress, elicitation,
+    /// sampling, logging) goes through [`SessionContext::notification_tx`]
+    /// instead — the per-session tx is the only correct routing for
+    /// messages addressed to one specific client.
+    ///
+    /// FIND-034 (audit 2026-05-09) replaced the previous single
+    /// last-writer-wins `notification_tx` slot with this fanout
+    /// registry plus per-session `SessionContext` senders.
+    notification_fanout: NotificationFanout,
     /// Current minimum log level for MCP logging notifications.
     log_level: Arc<AtomicU8>,
     /// MCP logger for sending `notifications/message` to the client.
@@ -72,35 +82,94 @@ pub struct McpServer {
     mcp_logger: Arc<RwLock<Option<Arc<McpLogger>>>>,
     /// Completion provider for argument auto-completion.
     completion_provider: DefaultCompletionProvider,
-    /// Pending server-to-client requests (elicitation, sampling).
-    pending_requests: Arc<PendingRequests>,
-    /// Active resource subscriptions (uri -> list of subscription IDs).
-    resource_subscriptions: Arc<RwLock<HashMap<String, Vec<String>>>>,
-    /// Client-declared roots (MCP Roots capability).
-    roots: Arc<RwLock<Vec<RootEntry>>>,
-    /// Whether the client supports `roots/list`.
-    client_supports_roots: AtomicBool,
-    /// Whether the client supports `elicitation/create` (MCP 2025-06-18+).
-    /// Populated from `InitializeParams.capabilities.elicitation` during the
-    /// handshake. Used by `handle_tools_call` to gate destructive operations
-    /// when `security.require_elicitation_on_destructive` is enabled.
-    client_supports_elicitation: AtomicBool,
-    /// Whether the client advertised the `sampling` capability during initialize.
-    /// Read by `ToolContext::sample` to short-circuit when the client cannot
-    /// satisfy `sampling/createMessage` requests.
-    client_supports_sampling: AtomicBool,
     /// Application metrics for token consumption analytics.
     metrics: Arc<crate::metrics::Metrics>,
-    /// Map of in-flight MCP request IDs to their `CancellationToken`.
+}
+
+/// Per-session map of in-flight JSON-RPC request ids to their
+/// `CancellationToken`.
+///
+/// FIND-038 (audit 2026-05-09): the previous implementation kept a
+/// server-singleton map keyed on the JSON-RPC `id` alone. Because the
+/// `id` is caller-chosen and is NOT scoped to a session, a concurrent
+/// client B could send `notifications/cancelled { requestId: "<A's id>" }`
+/// and cancel an in-flight request belonging to client A.
+///
+/// Allocating a fresh `ActiveRequests` per session in
+/// `serve_session()` makes lookups session-local: a cancel notification
+/// arriving on session B can only ever drain session B's map.
+///
+/// `std::sync::Mutex` (not `tokio::sync::Mutex`) because we only hold the
+/// lock for hashmap insert/remove — no `.await` inside the critical
+/// section.
+#[derive(Clone, Default)]
+pub struct ActiveRequests(
+    Arc<std::sync::Mutex<HashMap<String, tokio_util::sync::CancellationToken>>>,
+);
+
+impl ActiveRequests {
+    /// Build a fresh empty active-requests map.
+    #[must_use]
+    pub fn new() -> Self {
+        Self(Arc::new(std::sync::Mutex::new(HashMap::new())))
+    }
+
+    /// Register a new in-flight request and return its `CancellationToken`.
     ///
-    /// Populated at request spawn and drained when the request completes
-    /// (success or error). The `notifications/cancelled` handler looks up
-    /// a request by ID and calls `token.cancel()` to honor MCP 2025-11-25
-    /// `notifications/cancelled`.
+    /// The caller must call [`Self::unregister`] when the request completes
+    /// (success or error) to avoid the map growing unbounded.
+    #[must_use]
+    pub fn register(&self, request_id: String) -> tokio_util::sync::CancellationToken {
+        let token = tokio_util::sync::CancellationToken::new();
+        if let Ok(mut map) = self.0.lock() {
+            map.insert(request_id, token.clone());
+        }
+        token
+    }
+
+    /// Remove a request from the in-flight map.
     ///
-    /// `std::sync::Mutex` (not `tokio::sync::Mutex`) because we only hold it
-    /// for hashmap insert/remove — no `.await` inside the critical section.
-    active_requests: Arc<std::sync::Mutex<HashMap<String, tokio_util::sync::CancellationToken>>>,
+    /// No-op if the request was already removed (e.g. cancelled before
+    /// completion). Tolerates a poisoned mutex silently — losing track of
+    /// one request is not worth a panic in a long-running server.
+    pub fn unregister(&self, request_id: &str) {
+        if let Ok(mut map) = self.0.lock() {
+            map.remove(request_id);
+        }
+    }
+
+    /// Cancel an in-flight request by ID.
+    ///
+    /// Returns `true` if a matching request was found and cancelled,
+    /// `false` if the ID is unknown (already completed or never existed).
+    ///
+    /// The map entry is removed atomically with the cancel signal so a
+    /// follow-up [`Self::unregister`] call from the spawned task becomes
+    /// a no-op.
+    pub fn cancel(&self, request_id: &str) -> bool {
+        let token = match self.0.lock() {
+            Ok(mut map) => map.remove(request_id),
+            Err(_) => return false,
+        };
+        if let Some(token) = token {
+            token.cancel();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Number of currently-registered in-flight requests. Test helper.
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.0.lock().map(|m| m.len()).unwrap_or(0)
+    }
+
+    /// Snapshot of currently-registered request ids. Test helper.
+    #[cfg(test)]
+    fn contains(&self, id: &str) -> bool {
+        self.0.lock().map(|m| m.contains_key(id)).unwrap_or(false)
+    }
 }
 
 impl McpServer {
@@ -119,13 +188,19 @@ impl McpServer {
         ));
 
         // Create audit logger (async with background writer task)
-        let (audit_logger, audit_task) = match AuditLogger::new(&config.audit) {
-            Ok((logger, task)) => (logger, task),
-            Err(e) => {
-                warn!(error = %e, "Failed to create audit logger, using disabled logger");
-                (AuditLogger::disabled(), None)
-            }
-        };
+        // Vuln 3 (audit 2026-05-09): wire a sanitizer so `event.command` is
+        // masked before tracing emission AND before file write — the audit
+        // log used to leak MYSQL_PWD/PGPASSWORD/Bearer tokens/webhook URLs.
+        let sanitizer_for_audit =
+            crate::security::Sanitizer::from_config(&config.security.sanitize);
+        let (audit_logger, audit_task) =
+            match AuditLogger::new_with_sanitizer(&config.audit, sanitizer_for_audit) {
+                Ok((logger, task)) => (logger, task),
+                Err(e) => {
+                    warn!(error = %e, "Failed to create audit logger, using disabled logger");
+                    (AuditLogger::disabled(), None)
+                }
+            };
         let audit_logger = Arc::new(audit_logger);
 
         // Create command history
@@ -196,70 +271,95 @@ impl McpServer {
             initialized: AtomicBool::new(false),
             concurrent_limit,
             client_info: RwLock::new(None),
-            runtime_max_output_chars: Arc::new(RwLock::new(None)),
-            notification_tx: Arc::new(RwLock::new(None)),
+            notification_fanout: NotificationFanout::new(),
             log_level: Arc::new(AtomicU8::new(LogLevel::Warning.severity())),
             mcp_logger: Arc::new(RwLock::new(None)),
             completion_provider: DefaultCompletionProvider,
-            pending_requests: Arc::new(PendingRequests::new()),
-            resource_subscriptions: Arc::new(RwLock::new(HashMap::new())),
-            roots: Arc::new(RwLock::new(Vec::new())),
-            client_supports_roots: AtomicBool::new(false),
-            client_supports_elicitation: AtomicBool::new(false),
-            client_supports_sampling: AtomicBool::new(false),
             metrics: Arc::new(crate::metrics::Metrics::new()),
-            active_requests: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
 
         (server, audit_task)
     }
 
-    /// Register a new in-flight request and return its `CancellationToken`.
+    /// Allocate a fresh per-session pending-requests handle.
     ///
-    /// The caller must call [`Self::unregister_request`] when the request
-    /// completes (success or error) to avoid the map growing unbounded.
+    /// Test helper used by `tests/multisession_isolation.rs` to verify
+    /// that two sessions on the same `McpServer` instance get independent
+    /// `Arc<PendingRequests>` instances (Vuln 8 audit 2026-05-09).
+    /// Integration tests live in their own crate so this helper cannot
+    /// be `#[cfg(test)]`; it is gated `#[doc(hidden)]` instead so it
+    /// stays out of the public docs.
+    #[doc(hidden)]
     #[must_use]
-    pub(crate) fn register_request(
+    pub fn allocate_session_pending_for_test(&self) -> Arc<PendingRequests> {
+        Arc::new(PendingRequests::new())
+    }
+
+    /// Allocate a fresh per-session capabilities handle.
+    ///
+    /// Test helper used by `tests/multisession_isolation.rs` to verify
+    /// that two sessions on the same `McpServer` instance get independent
+    /// `Arc<SessionCapabilities>` instances (Vuln 9 audit 2026-05-09).
+    /// Integration tests live in their own crate so this helper cannot
+    /// be `#[cfg(test)]`; it is gated `#[doc(hidden)]` instead so it
+    /// stays out of the public docs.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn allocate_session_capabilities_for_test(
         &self,
-        request_id: String,
-    ) -> tokio_util::sync::CancellationToken {
-        let token = tokio_util::sync::CancellationToken::new();
-        if let Ok(mut map) = self.active_requests.lock() {
-            map.insert(request_id, token.clone());
-        }
-        token
+    ) -> Arc<crate::mcp::session_capabilities::SessionCapabilities> {
+        Arc::new(crate::mcp::session_capabilities::SessionCapabilities::new())
     }
 
-    /// Remove a request from the in-flight map.
+    /// Allocate a fresh per-session `ActiveRequests` handle.
     ///
-    /// No-op if the request was already removed (e.g. cancelled before
-    /// completion). Tolerates a poisoned mutex silently — losing track of
-    /// one request is not worth a panic in a long-running server.
-    pub(crate) fn unregister_request(&self, request_id: &str) {
-        if let Ok(mut map) = self.active_requests.lock() {
-            map.remove(request_id);
-        }
+    /// Test helper used by `tests/cross_session_cancel.rs` to verify
+    /// that two sessions on the same `McpServer` instance get independent
+    /// `ActiveRequests` instances (FIND-038 audit 2026-05-09).
+    /// Integration tests live in their own crate so this helper cannot
+    /// be `#[cfg(test)]`; it is gated `#[doc(hidden)]` instead so it
+    /// stays out of the public docs.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn allocate_session_active_requests_for_test(&self) -> ActiveRequests {
+        ActiveRequests::new()
     }
 
-    /// Cancel an in-flight request by ID.
+    /// Allocate a fresh per-session `runtime_max_output_chars` slot.
     ///
-    /// Returns `true` if a matching request was found and cancelled,
-    /// `false` if the ID is unknown (already completed or never existed).
+    /// Test helper used by `tests/per_session_state.rs` to verify
+    /// that two sessions on the same `McpServer` instance get independent
+    /// runtime override slots (FIND-033 audit 2026-05-09).
+    #[doc(hidden)]
+    #[must_use]
+    pub fn allocate_session_runtime_max_output_for_test(&self) -> Arc<RwLock<Option<usize>>> {
+        Arc::new(RwLock::new(None))
+    }
+
+    /// Allocate a fresh per-session resource-subscriptions map.
     ///
-    /// The map entry is removed atomically with the cancel signal so a
-    /// follow-up `unregister_request` call from the spawned task becomes
-    /// a no-op.
-    pub(crate) fn cancel_request(&self, request_id: &str) -> bool {
-        let token = match self.active_requests.lock() {
-            Ok(mut map) => map.remove(request_id),
-            Err(_) => return false,
-        };
-        if let Some(token) = token {
-            token.cancel();
-            true
-        } else {
-            false
-        }
+    /// Test helper used by `tests/per_session_state.rs` to verify
+    /// that two sessions on the same `McpServer` instance get independent
+    /// subscription maps (FIND-036 audit 2026-05-09).
+    #[doc(hidden)]
+    #[must_use]
+    pub fn allocate_session_resource_subs_for_test(
+        &self,
+    ) -> Arc<RwLock<HashMap<String, Vec<String>>>> {
+        Arc::new(RwLock::new(HashMap::new()))
+    }
+
+    /// Allocate a fresh per-session roots vec.
+    ///
+    /// Test helper used by `tests/per_session_state.rs` to verify
+    /// that two sessions on the same `McpServer` instance get independent
+    /// `Vec<RootEntry>` instances (FIND-037 audit 2026-05-09).
+    #[doc(hidden)]
+    #[must_use]
+    pub fn allocate_session_roots_for_test(
+        &self,
+    ) -> Arc<RwLock<Vec<crate::mcp::protocol::RootEntry>>> {
+        Arc::new(RwLock::new(Vec::new()))
     }
 
     /// Create a `ToolContext` for tool execution
@@ -282,7 +382,7 @@ impl McpServer {
         &self,
         tool_name: &str,
         arguments: Option<&Value>,
-        notification_tx: Option<&mpsc::Sender<WriterMessage>>,
+        session: Option<&SessionContext>,
     ) -> std::result::Result<(), String> {
         let require = {
             let cfg = self.config.read().await;
@@ -299,22 +399,27 @@ impl McpServer {
             return Ok(());
         }
 
-        if !self.client_supports_elicitation.load(Ordering::Relaxed) {
+        // Per-session capabilities (Vuln 9 audit 2026-05-09): the server no
+        // longer keeps a global `client_supports_elicitation` AtomicBool, so
+        // the gate MUST consult THIS session's `SessionCapabilities`. Without
+        // a session handle (legacy non-MCP code paths), refuse the operation
+        // since we cannot prove the connected client advertised the capability.
+        let Some(session) = session else {
+            return Err(format!(
+                "Tool `{tool_name}` is destructive and `require_elicitation_on_destructive` is enabled, but no session context is available — the operation cannot be confirmed."
+            ));
+        };
+        if !session.caps.supports_elicitation() {
             return Err(format!(
                 "Tool `{tool_name}` is destructive and `require_elicitation_on_destructive` is enabled, but the client does not support elicitation. Either upgrade the client or set `security.require_elicitation_on_destructive: false`."
             ));
         }
 
-        let Some(tx) = notification_tx.cloned().or_else(|| {
-            self.notification_tx
-                .try_read()
-                .ok()
-                .and_then(|g| g.as_ref().cloned())
-        }) else {
-            return Err(format!(
-                "Tool `{tool_name}` requires user confirmation but no notification channel is available."
-            ));
-        };
+        let tx = session.notification_tx.clone();
+        // Per-session pending-requests map (Vuln 8 audit 2026-05-09): the
+        // server no longer keeps a global handle, so the elicitation
+        // round-trip MUST run against the session-local map.
+        let pending = Arc::clone(&session.pending);
 
         let summary = arguments.map_or_else(
             || "(no arguments)".to_string(),
@@ -330,7 +435,7 @@ impl McpServer {
 
         let requester = Arc::new(super::client_requester::ClientRequester::new(
             tx,
-            Arc::clone(&self.pending_requests),
+            pending,
             std::time::Duration::from_secs(120),
         ));
         let elicitation = super::elicitation::ElicitationService::new(requester);
@@ -353,8 +458,8 @@ impl McpServer {
     async fn create_tool_context(
         &self,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
-        notification_tx: Option<mpsc::Sender<WriterMessage>>,
         progress_token: Option<Value>,
+        session: Option<&SessionContext>,
     ) -> ToolContext {
         // Read config snapshot
         let mut config_snapshot = {
@@ -362,8 +467,11 @@ impl McpServer {
             guard.clone()
         };
 
-        // Apply runtime override to the snapshot so handlers see the effective value
-        if let Some(runtime_val) = *self.runtime_max_output_chars.read().await {
+        // Apply per-session runtime override to the snapshot so handlers
+        // see THIS session's effective value (FIND-033 audit 2026-05-09).
+        if let Some(s) = session
+            && let Some(runtime_val) = *s.runtime_max_output.read().await
+        {
             config_snapshot.limits.max_output_chars = runtime_val;
         }
 
@@ -380,15 +488,26 @@ impl McpServer {
         );
         ctx.tunnel_manager = Arc::clone(&self.tunnel_manager);
         ctx.output_cache = Some(Arc::clone(&self.output_cache));
-        ctx.runtime_max_output_chars = Some(Arc::clone(&self.runtime_max_output_chars));
-        ctx.roots = self.roots.read().await.to_vec();
+        // Per-session runtime override slot exposed to `ssh_config_set`
+        // (FIND-033 audit 2026-05-09). When the writer mutates this slot,
+        // subsequent `create_tool_context` calls on the SAME session pick
+        // up the new value — and only this session's tool calls are
+        // affected.
+        if let Some(s) = session {
+            ctx.runtime_max_output_chars = Some(Arc::clone(&s.runtime_max_output));
+            ctx.roots.clone_from(&*s.roots.read().await);
+        }
         ctx.metrics = Some(Arc::clone(&self.metrics));
         ctx.cancel_token = cancel_token;
-        ctx.notification_tx = notification_tx;
+        ctx.notification_tx = session.map(|s| s.notification_tx.clone());
         ctx.progress_token = progress_token;
-        ctx.pending_requests = Some(Arc::clone(&self.pending_requests));
-        ctx.client_supports_elicitation = self.client_supports_elicitation.load(Ordering::Relaxed);
-        ctx.client_supports_sampling = self.client_supports_sampling.load(Ordering::Relaxed);
+        ctx.pending_requests = session.map(|s| Arc::clone(&s.pending));
+        // Per-session capabilities (Vuln 9 audit 2026-05-09): the server no
+        // longer holds global `client_supports_*` flags. Snapshot the
+        // current session's flags into `ToolContext`; default to `false`
+        // when no session handle is available (legacy non-MCP code paths).
+        ctx.client_supports_elicitation = session.is_some_and(|s| s.caps.supports_elicitation());
+        ctx.client_supports_sampling = session.is_some_and(|s| s.caps.supports_sampling());
         ctx.mcp_logger = self.mcp_logger.read().await.as_ref().map(Arc::clone);
         ctx
     }
@@ -544,26 +663,20 @@ impl McpServer {
     /// Start a config file watcher that broadcasts `list_changed`
     /// notifications on reload.
     ///
-    /// The watcher reads `self.notification_tx` at callback time rather
-    /// than capturing a specific session's sender, so it continues to
-    /// work as sessions come and go. Last-writer-wins semantics are
-    /// acceptable for stdio (single session) and are replaced by a
-    /// per-session fanout in A.3.
+    /// FIND-034 (audit 2026-05-09): the previous topology read a single
+    /// global `notification_tx` slot at callback time, so the broadcast
+    /// reached only the most recently registered session. The watcher
+    /// now uses [`NotificationFanout::broadcast`], which fans the
+    /// notifications out to every live session's per-session sender.
     fn spawn_config_watcher(&self, path: &Path) -> Option<ConfigWatcher> {
-        let notification_tx_slot = Arc::clone(&self.notification_tx);
+        let fanout = self.notification_fanout.clone();
         let on_reload: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
-            // `blocking_read` is fine here: the slot is only written
-            // once per session start (held briefly) and the reload
-            // callback runs on a background thread owned by notify.
-            let guard = notification_tx_slot.blocking_read();
-            if let Some(tx) = guard.as_ref() {
-                let _ = tx.try_send(WriterMessage::Notification(
-                    JsonRpcNotification::tools_list_changed(),
-                ));
-                let _ = tx.try_send(WriterMessage::Notification(
-                    JsonRpcNotification::resources_list_changed(),
-                ));
-            }
+            fanout.broadcast(&WriterMessage::Notification(
+                JsonRpcNotification::tools_list_changed(),
+            ));
+            fanout.broadcast(&WriterMessage::Notification(
+                JsonRpcNotification::resources_list_changed(),
+            ));
         });
 
         ConfigWatcher::with_notifications(
@@ -590,16 +703,29 @@ impl McpServer {
     async fn serve_session(self: Arc<Self>, session: Session) {
         let (tx, mut rx) = mpsc::channel::<WriterMessage>(100);
 
-        // Store the per-session writer channel globally so config
-        // watcher + background workers can find a live sender. With
-        // stdio this is set once and cleared on exit; with multi-
-        // session transports A.3 will replace this with a per-session
-        // fanout that tracks every live session.
-        *self.notification_tx.write().await = Some(tx.clone());
+        // Allocate the per-session bundle: pending-requests map (Vuln 8),
+        // capability flags (Vuln 9), active-requests map (FIND-038),
+        // notification tx, runtime override slot (FIND-033), resource
+        // subscriptions map (FIND-036), and roots vec (FIND-037). Every
+        // field is Arc-wrapped so cloning the bundle into spawned tasks
+        // is cheap.
+        let session_ctx = SessionContext::new(tx.clone());
+
+        // Register this session's tx with the server-wide fanout so the
+        // config watcher (and any other broadcaster) reaches us. The
+        // returned guard removes the registration on drop — including
+        // panics — so dead senders never accumulate (FIND-034).
+        let fanout_guard = self.notification_fanout.register(tx.clone());
 
         // Create / refresh MCP logger (writes `notifications/message`
         // to the client) now that we have a tx for this session.
-        let mcp_logger = Arc::new(McpLogger::new(Arc::clone(&self.log_level), tx.clone()));
+        // FIND-035: McpLogger is gated by the SESSION's log_level so
+        // `notifications/setLevel` from this client cannot mute another
+        // client's notifications.
+        let mcp_logger = Arc::new(McpLogger::new(
+            Arc::clone(&session_ctx.log_level),
+            tx.clone(),
+        ));
         *self.mcp_logger.write().await = Some(Arc::clone(&mcp_logger));
 
         // Writer task: consume the channel, forward every message to
@@ -636,7 +762,8 @@ impl McpServer {
 
             match incoming {
                 IncomingMessage::Single(message) => {
-                    let Some(request) = self.route_incoming_message(message, &tx).await else {
+                    let Some(request) = self.route_incoming_message(message, &session_ctx).await
+                    else {
                         continue;
                     };
 
@@ -659,8 +786,9 @@ impl McpServer {
                     });
                     let cancel_token = request_id
                         .as_ref()
-                        .map(|id| server.register_request(id.clone()));
+                        .map(|id| session_ctx.active_requests.register(id.clone()));
                     let rid_cleanup = request_id;
+                    let session_ctx_for_task = session_ctx.clone();
 
                     // Attach request-scoped tracing fields. `.instrument()`
                     // (not `.entered()`) because `EnteredSpan` is not
@@ -671,15 +799,18 @@ impl McpServer {
                         id = ?rid_cleanup,
                         method = %request.method,
                     );
-                    let session_tx = tx.clone();
                     tokio::spawn(
                         async move {
                             let response = server
-                                .handle_request_with_cancel(request, cancel_token, Some(session_tx))
+                                .handle_request_with_cancel(
+                                    request,
+                                    cancel_token,
+                                    Some(&session_ctx_for_task),
+                                )
                                 .await;
                             let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
                             if let Some(rid) = rid_cleanup {
-                                server.unregister_request(&rid);
+                                session_ctx_for_task.active_requests.unregister(&rid);
                             }
                             drop(permit);
                         }
@@ -753,20 +884,18 @@ impl McpServer {
 
         info!("Client disconnected, session ending");
 
-        // Clear the per-session writer channel from the global slot so
-        // the config watcher stops trying to send into a dead channel.
-        // Only clear if it still points at our tx (another session may
-        // have overwritten it in the meantime).
-        {
-            let mut slot = self.notification_tx.write().await;
-            if slot.as_ref().is_some_and(|cur| cur.same_channel(&tx)) {
-                *slot = None;
-            }
-        }
+        // The fanout guard removes our tx from the broadcast registry on
+        // drop (end of this function), so the config watcher stops
+        // trying to send into a dead channel without us touching any
+        // shared state here.
 
-        // Signal writer to stop and wait for it.
+        // Signal writer to stop and wait for it. Then explicitly drop
+        // the fanout guard so the session's tx is removed from the
+        // broadcast registry — the lexical drop at end-of-scope would
+        // do this too, but being explicit documents the contract.
         drop(tx);
         let _ = writer_handle.await;
+        drop(fanout_guard);
     }
 
     /// Parse an incoming line as a single JSON-RPC message or a batch.
@@ -787,10 +916,22 @@ impl McpServer {
     ///
     /// Returns `Some(JsonRpcRequest)` if it's a request to be dispatched,
     /// or `None` if it was handled inline (e.g., a client response or notification).
+    ///
+    /// The `session_pending` argument is the per-session pending-requests
+    /// map (Vuln 8 audit 2026-05-09). Client responses to server-initiated
+    /// requests are resolved against THIS session's map only — a different
+    /// client on the same daemon cannot resolve a request another session
+    /// initiated.
+    ///
+    /// The `session_active_requests` argument is the per-session
+    /// active-requests map (FIND-038 audit 2026-05-09). Client cancel
+    /// notifications are dispatched against THIS session's map only — a
+    /// different client cannot cancel a request another session is
+    /// running.
     async fn route_incoming_message(
         &self,
         message: JsonRpcMessage,
-        tx: &mpsc::Sender<WriterMessage>,
+        session: &SessionContext,
     ) -> Option<JsonRpcRequest> {
         // If no method, it's a response to a server-initiated request (elicitation/sampling)
         if message.method.is_none() {
@@ -808,7 +949,7 @@ impl McpServer {
                 } else {
                     ClientResponse::Success(message.result.unwrap_or(Value::Null))
                 };
-                if !self.pending_requests.resolve(&id_str, response) {
+                if !session.pending.resolve(&id_str, response) {
                     debug!(id = %id_str, "Received response for unknown request ID");
                 }
             }
@@ -817,15 +958,18 @@ impl McpServer {
 
         // Handle client notifications (no response needed per JSON-RPC 2.0)
         if message.method.as_deref() == Some("notifications/roots/list_changed") {
-            self.handle_roots_changed(tx).await;
+            self.handle_roots_changed(session).await;
             return None;
         }
         if message.method.as_deref() == Some("notifications/cancelled") {
-            self.handle_cancellation_notification(message.params.as_ref());
+            Self::handle_cancellation_notification(
+                &session.active_requests,
+                message.params.as_ref(),
+            );
             return None;
         }
         if message.method.as_deref() == Some("notifications/initialized") {
-            self.handle_initialized_notification(tx).await;
+            self.handle_initialized_notification(session).await;
             return None;
         }
 
@@ -839,14 +983,21 @@ impl McpServer {
     }
 
     /// Fetch roots from the client after initialization.
-    async fn fetch_roots(&self, tx: &mpsc::Sender<WriterMessage>) {
-        if !self.client_supports_roots.load(Ordering::Relaxed) {
+    ///
+    /// Uses the SESSION-LOCAL pending-requests map so a `roots/list`
+    /// response coming back from the client is resolved against this
+    /// session only (Vuln 8 audit 2026-05-09). The fetched roots are
+    /// stored on the session-local roots slot (FIND-037 audit
+    /// 2026-05-09): a different client's `roots/list` response cannot
+    /// overwrite this session's roots.
+    async fn fetch_roots(&self, session: &SessionContext) {
+        if !session.caps.supports_roots() {
             return;
         }
 
         let requester = super::client_requester::ClientRequester::new(
-            tx.clone(),
-            Arc::clone(&self.pending_requests),
+            session.notification_tx.clone(),
+            Arc::clone(&session.pending),
             std::time::Duration::from_secs(10),
         );
 
@@ -854,7 +1005,7 @@ impl McpServer {
             Ok(value) => {
                 if let Ok(result) = serde_json::from_value::<RootsListResult>(value) {
                     info!(count = result.roots.len(), "Received client roots");
-                    *self.roots.write().await = result.roots;
+                    *session.roots.write().await = result.roots;
                 }
             }
             Err(e) => {
@@ -864,21 +1015,16 @@ impl McpServer {
     }
 
     /// Handle `notifications/roots/list_changed` — re-fetch roots.
-    async fn handle_roots_changed(&self, tx: &mpsc::Sender<WriterMessage>) {
+    async fn handle_roots_changed(&self, session: &SessionContext) {
         info!("Client roots changed, re-fetching");
-        self.fetch_roots(tx).await;
+        self.fetch_roots(session).await;
     }
 
     /// Handle `notifications/initialized` — fetch client roots if supported.
     /// No response is emitted (per JSON-RPC 2.0 notification semantics).
-    async fn handle_initialized_notification(&self, tx: &mpsc::Sender<WriterMessage>) {
+    async fn handle_initialized_notification(&self, session: &SessionContext) {
         info!("Client sent notifications/initialized; fetching roots");
-        self.fetch_roots(tx).await;
-    }
-
-    /// Get the current client roots (for path validation).
-    pub async fn get_roots(&self) -> Vec<RootEntry> {
-        self.roots.read().await.clone()
+        self.fetch_roots(session).await;
     }
 
     /// Handle a single JSON-RPC request and return the response.
@@ -888,6 +1034,11 @@ impl McpServer {
     /// request. The stdio `run()` loop uses the internal
     /// `handle_request_with_cancel` variant to honor MCP
     /// `notifications/cancelled`.
+    ///
+    /// Server-to-client features (elicitation, sampling) are unavailable on
+    /// this code path because no per-session pending-requests map is
+    /// supplied. Use [`Self::serve`] / [`Self::serve_session`] for full
+    /// MCP feature support.
     pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
         self.handle_request_with_cancel(request, None, None).await
     }
@@ -912,15 +1063,15 @@ impl McpServer {
         &self,
         request: JsonRpcRequest,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
-        notification_tx: Option<mpsc::Sender<WriterMessage>>,
+        session: Option<&SessionContext>,
     ) -> JsonRpcResponse {
         let id = request.id.clone();
 
         match request.method.as_str() {
-            "initialize" => self.handle_initialize(id, request.params).await,
+            "initialize" => self.handle_initialize(id, request.params, session).await,
             "tools/list" => self.handle_tools_list(id, request.params.as_ref()),
             "tools/call" => {
-                self.handle_tools_call(id, request.params, cancel_token, notification_tx)
+                self.handle_tools_call(id, request.params, cancel_token, session)
                     .await
             }
             "prompts/list" => self.handle_prompts_list(id),
@@ -932,10 +1083,16 @@ impl McpServer {
             "tasks/list" => self.handle_tasks_list(id, request.params).await,
             "tasks/cancel" => self.handle_tasks_cancel(id, request.params).await,
             "completions/complete" => self.handle_completions_complete(id, request.params),
-            "logging/setLevel" => self.handle_logging_set_level(id, request.params),
+            "logging/setLevel" => self.handle_logging_set_level(id, request.params, session),
             "resources/templates/list" => self.handle_resource_templates_list(id),
-            "resources/subscribe" => self.handle_resource_subscribe(id, request.params).await,
-            "resources/unsubscribe" => self.handle_resource_unsubscribe(id, request.params).await,
+            "resources/subscribe" => {
+                self.handle_resource_subscribe(id, request.params, session)
+                    .await
+            }
+            "resources/unsubscribe" => {
+                self.handle_resource_unsubscribe(id, request.params, session)
+                    .await
+            }
             "ping" => JsonRpcResponse::success(id, json!({})),
             _ => {
                 error!(method = %request.method, "Unknown method");
@@ -967,7 +1124,12 @@ impl McpServer {
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn handle_initialize(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
+    async fn handle_initialize(
+        &self,
+        id: Option<Value>,
+        params: Option<Value>,
+        session: Option<&SessionContext>,
+    ) -> JsonRpcResponse {
         // Parse initialize params, negotiate version, and store client info
         let mut negotiated_version = PROTOCOL_VERSION.to_string();
 
@@ -1004,25 +1166,39 @@ impl McpServer {
                             max_output_chars = effective,
                             "Applied client-specific max_output_chars override"
                         );
-                        *self.runtime_max_output_chars.write().await = Some(effective);
+                        // Per-session runtime override (FIND-033 audit 2026-05-09):
+                        // write to THIS session's slot only; concurrent clients
+                        // with different `client_overrides` profiles do not
+                        // contaminate each other.
+                        if let Some(s) = session {
+                            *s.runtime_max_output.write().await = Some(effective);
+                        }
                     }
 
-                    // Check if client supports roots capability
+                    // Per-session capabilities (Vuln 9 audit 2026-05-09): write
+                    // each client's advertised flags to its OWN
+                    // `SessionCapabilities`, not a server-wide AtomicBool. The
+                    // legacy non-MCP code paths (`handle_request`) pass `None`
+                    // and silently drop these flags — that's fine because they
+                    // also can't initiate elicitation/sampling/roots.
                     if init_params.capabilities.roots.is_some() {
-                        self.client_supports_roots.store(true, Ordering::Relaxed);
+                        if let Some(s) = session {
+                            s.caps.set_supports_roots(true);
+                        }
                         info!("Client supports roots capability");
                     }
 
-                    // Check if client supports elicitation capability
                     if init_params.capabilities.elicitation.is_some() {
-                        self.client_supports_elicitation
-                            .store(true, Ordering::Relaxed);
+                        if let Some(s) = session {
+                            s.caps.set_supports_elicitation(true);
+                        }
                         info!("Client supports elicitation capability");
                     }
 
-                    // Check if client supports sampling capability
                     if init_params.capabilities.sampling.is_some() {
-                        self.client_supports_sampling.store(true, Ordering::Relaxed);
+                        if let Some(s) = session {
+                            s.caps.set_supports_sampling(true);
+                        }
                         info!("Client supports sampling capability");
                     }
 
@@ -1158,7 +1334,7 @@ impl McpServer {
         id: Option<Value>,
         params: Option<Value>,
         cancel_token: Option<tokio_util::sync::CancellationToken>,
-        notification_tx: Option<mpsc::Sender<WriterMessage>>,
+        session: Option<&SessionContext>,
     ) -> JsonRpcResponse {
         let Some(params) = params else {
             return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
@@ -1191,17 +1367,14 @@ impl McpServer {
         }
 
         // Create progress reporter if the client sent a progressToken.
-        // Prefer the per-session `notification_tx`; fall back to the
-        // global slot for legacy call sites (unit tests mostly).
+        // Use the per-session `notification_tx` only — there is no
+        // cross-session fallback (FIND-034 audit 2026-05-09).
         let progress_reporter = call_params
             .meta
             .as_ref()
             .and_then(|m| m.progress_token.clone())
             .and_then(|token| {
-                let tx = notification_tx.clone().or_else(|| {
-                    let tx_guard = self.notification_tx.try_read().ok()?;
-                    tx_guard.as_ref().cloned()
-                })?;
+                let tx = session.map(|s| s.notification_tx.clone())?;
                 Some(ProgressReporter::new(token, tx, Some(3)))
             });
 
@@ -1213,7 +1386,7 @@ impl McpServer {
             .check_destructive_elicitation(
                 &call_params.name,
                 call_params.arguments.as_ref(),
-                notification_tx.as_ref(),
+                session,
             )
             .await
         {
@@ -1231,11 +1404,11 @@ impl McpServer {
                     call_params.arguments,
                     task_request,
                     id,
-                    notification_tx,
                     call_params
                         .meta
                         .as_ref()
                         .and_then(|m| m.progress_token.clone()),
+                    session,
                 )
                 .await;
         }
@@ -1248,11 +1421,11 @@ impl McpServer {
         let ctx = self
             .create_tool_context(
                 cancel_token,
-                notification_tx,
                 call_params
                     .meta
                     .as_ref()
                     .and_then(|m| m.progress_token.clone()),
+                session,
             )
             .await;
 
@@ -1366,8 +1539,8 @@ impl McpServer {
         arguments: Option<Value>,
         task_request: super::protocol::TaskRequest,
         id: Option<Value>,
-        notification_tx: Option<mpsc::Sender<WriterMessage>>,
         progress_token: Option<Value>,
+        session: Option<&SessionContext>,
     ) -> JsonRpcResponse {
         // Get the handler first to validate the tool exists
         let Some(handler) = self.registry.get(&tool_name) else {
@@ -1393,34 +1566,28 @@ impl McpServer {
             );
         };
 
-        // Clone dependencies for the background worker
+        // Clone dependencies for the background worker.
         let task_store = Arc::clone(&self.task_store);
-        // Prefer the per-session tx for the task-completion notification
-        // so it reaches the originating daemon client; fall back to the
-        // legacy global slot for code paths that don't have a session.
-        let task_notification_tx = notification_tx.clone();
-        let global_notification_tx = Arc::clone(&self.notification_tx);
+        // Per-session tx ONLY (FIND-034 audit 2026-05-09): the task
+        // notification must reach the SAME client that created the task,
+        // never any other live session. If no session is attached
+        // (legacy non-MCP code path), the notification is silently
+        // dropped — same effect as before.
+        let task_notification_tx = session.map(|s| s.notification_tx.clone());
 
         // SEP-1686: emit `notifications/tasks/status` for the initial
         // non-existent → working transition. The worker emits the matching
         // terminal notification on completion/failure/cancellation.
-        {
+        if let Some(tx) = task_notification_tx.as_ref() {
             let msg = WriterMessage::Notification(JsonRpcNotification::task_status(&task_info));
-            if let Some(tx) = task_notification_tx.as_ref() {
-                let _ = tx.try_send(msg);
-            } else {
-                let tx_guard = global_notification_tx.read().await;
-                if let Some(tx) = tx_guard.as_ref() {
-                    let _ = tx.try_send(msg);
-                }
-            }
+            let _ = tx.try_send(msg);
         }
 
         // Propagate the task's cancel_token into the ToolContext so the
         // handler can do clean shutdown (e.g. evicting the SSH connection
         // from the pool) when the task is cancelled via `tasks/cancel`.
         let ctx = self
-            .create_tool_context(Some(cancel_token.clone()), notification_tx, progress_token)
+            .create_tool_context(Some(cancel_token.clone()), progress_token, session)
             .await;
 
         // Spawn the background worker
@@ -1457,19 +1624,13 @@ impl McpServer {
                 }
             };
 
-            // Send status notification (best-effort). Prefer the
-            // per-session tx so the message reaches the originating
-            // client.
-            if let Some(info) = info {
+            // Send status notification (best-effort) on the per-session
+            // tx so it reaches the originating client only.
+            if let Some(info) = info
+                && let Some(tx) = task_notification_tx.as_ref()
+            {
                 let msg = WriterMessage::Notification(JsonRpcNotification::task_status(&info));
-                if let Some(tx) = task_notification_tx.as_ref() {
-                    let _ = tx.try_send(msg);
-                } else {
-                    let tx_guard = global_notification_tx.read().await;
-                    if let Some(tx) = tx_guard.as_ref() {
-                        let _ = tx.try_send(msg);
-                    }
-                }
+                let _ = tx.try_send(msg);
             }
         });
 
@@ -1602,10 +1763,19 @@ impl McpServer {
         JsonRpcResponse::success_or_serialize_error(id, &json!({ "resourceTemplates": templates }))
     }
 
+    /// Subscribe to resource notifications.
+    ///
+    /// FIND-036 (audit 2026-05-09): subscriptions are now per-session.
+    /// The previous server-wide `HashMap<String, Vec<String>>` keyed on
+    /// URI alone leaked sub-ids across clients — two clients subscribing
+    /// to the same URI shared the Vec, and one client's `unsubscribe`
+    /// could remove the other's entries. Each session now has its own
+    /// map, so there is no cross-session interference.
     async fn handle_resource_subscribe(
         &self,
         id: Option<Value>,
         params: Option<Value>,
+        session: Option<&SessionContext>,
     ) -> JsonRpcResponse {
         let uri = params
             .as_ref()
@@ -1615,9 +1785,18 @@ impl McpServer {
         if uri.is_empty() {
             return JsonRpcResponse::error(id, JsonRpcError::invalid_params("uri is required"));
         }
+        let Some(session) = session else {
+            // Without a session there's no per-session subscription map
+            // to write into. Subscriptions are only meaningful in a live
+            // session anyway.
+            return JsonRpcResponse::error(
+                id,
+                JsonRpcError::invalid_request("resources/subscribe requires an active MCP session"),
+            );
+        };
         let sub_id = uuid::Uuid::new_v4().to_string();
         {
-            let mut subs = self.resource_subscriptions.write().await;
+            let mut subs = session.resource_subs.write().await;
             subs.entry(uri.to_string())
                 .or_default()
                 .push(sub_id.clone());
@@ -1625,18 +1804,24 @@ impl McpServer {
         JsonRpcResponse::success(id, json!({"subscriptionId": sub_id}))
     }
 
+    /// Unsubscribe from resource notifications.
+    ///
+    /// FIND-036 (audit 2026-05-09): operates on this session's map only.
     async fn handle_resource_unsubscribe(
         &self,
         id: Option<Value>,
         params: Option<Value>,
+        session: Option<&SessionContext>,
     ) -> JsonRpcResponse {
         let uri = params
             .as_ref()
             .and_then(|p| p.get("uri"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        if !uri.is_empty() {
-            let mut subs = self.resource_subscriptions.write().await;
+        if !uri.is_empty()
+            && let Some(session) = session
+        {
+            let mut subs = session.resource_subs.write().await;
             subs.remove(uri);
         }
         JsonRpcResponse::success(id, json!({}))
@@ -1648,21 +1833,33 @@ impl McpServer {
 
     /// Handle a `notifications/cancelled` notification from the client.
     ///
-    /// Looks up the `requestId` in [`Self::active_requests`] and fires the
-    /// associated `CancellationToken`. Long-running tool handlers see the
-    /// fired token and bail out cleanly via their `tokio::select!` branch
-    /// (see [`crate::mcp::standard_tool::StandardToolHandler::execute`]).
+    /// Looks up the `requestId` in the **session-local** [`ActiveRequests`]
+    /// map and fires the associated `CancellationToken`. Long-running tool
+    /// handlers see the fired token and bail out cleanly via their
+    /// `tokio::select!` branch (see
+    /// [`crate::mcp::standard_tool::StandardToolHandler::execute`]).
+    ///
+    /// FIND-038 (audit 2026-05-09): the previous implementation looked up
+    /// the request in a server-singleton map, allowing a concurrent client
+    /// to cancel any other client's in-flight request by guessing or
+    /// observing the JSON-RPC `id`. The lookup is now scoped to
+    /// `session_active_requests`, the per-session map allocated in
+    /// `serve_session()`.
     ///
     /// Silently ignores:
     /// - Notifications with no `requestId` (malformed).
-    /// - Notifications for unknown request IDs (already completed, or
-    ///   referring to a task's `taskId` which is the wrong field to use —
-    ///   tasks are cancelled via the separate `tasks/cancel` request).
+    /// - Notifications for unknown request IDs (already completed, the
+    ///   request belongs to a different session, or the caller mistakenly
+    ///   used a task `taskId` — tasks are cancelled via the separate
+    ///   `tasks/cancel` request).
     ///
     /// This follows MCP 2025-11-25 spec guidance:
     /// *"Invalid cancellation notifications SHOULD be ignored by the
     ///  receiver."*
-    fn handle_cancellation_notification(&self, params: Option<&Value>) {
+    fn handle_cancellation_notification(
+        session_active_requests: &ActiveRequests,
+        params: Option<&Value>,
+    ) {
         let Some(request_id_val) = params.and_then(|p| p.get("requestId")) else {
             debug!("notifications/cancelled with no requestId, ignoring");
             return;
@@ -1680,7 +1877,7 @@ impl McpServer {
             .and_then(Value::as_str)
             .unwrap_or("");
 
-        if self.cancel_request(&request_id) {
+        if session_active_requests.cancel(&request_id) {
             info!(
                 request_id = %request_id,
                 reason = %reason,
@@ -1907,6 +2104,7 @@ impl McpServer {
         &self,
         id: Option<Value>,
         params: Option<Value>,
+        session: Option<&SessionContext>,
     ) -> JsonRpcResponse {
         let Some(params) = params else {
             return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing params"));
@@ -1922,8 +2120,16 @@ impl McpServer {
             }
         };
 
-        self.log_level
-            .store(level_params.level.severity(), Ordering::Relaxed);
+        // FIND-035: write to the SESSION's log_level so that
+        // `notifications/setLevel` from this client cannot mute another
+        // session's `notifications/message` stream. Falls back to the
+        // server-wide field for legacy non-session call paths (tests).
+        let target = if let Some(s) = session {
+            Arc::clone(&s.log_level)
+        } else {
+            Arc::clone(&self.log_level)
+        };
+        target.store(level_params.level.severity(), Ordering::Relaxed);
         info!(level = ?level_params.level, "MCP log level updated");
 
         JsonRpcResponse::success(id, json!({}))
@@ -1941,13 +2147,18 @@ mod tests {
     use std::collections::HashMap;
 
     fn create_test_server() -> McpServer {
+        // Tests in this module exercise the full handler inventory
+        // (pagination, group filters, etc.). FIND-024 changed the
+        // default profile to a minimal 8-group set, so we explicitly
+        // opt every group in for the test fixture. Production code paths
+        // continue to use whatever the operator put in `tool_groups`.
         let config = Config {
             hosts: HashMap::new(),
             security: SecurityConfig::default(),
             limits: LimitsConfig::default(),
             audit: AuditConfig::default(),
             sessions: SessionConfig::default(),
-            tool_groups: ToolGroupsConfig::default(),
+            tool_groups: crate::mcp::registry::all_enabled_tool_groups_config_for_test(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
@@ -1969,7 +2180,9 @@ mod tests {
             }
         });
 
-        let response = server.handle_initialize(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_initialize(Some(json!(1)), Some(params), None)
+            .await;
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
@@ -1992,7 +2205,9 @@ mod tests {
             }
         });
 
-        let response = server.handle_initialize(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_initialize(Some(json!(1)), Some(params), None)
+            .await;
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
@@ -2012,7 +2227,9 @@ mod tests {
             }
         });
 
-        let response = server.handle_initialize(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_initialize(Some(json!(1)), Some(params), None)
+            .await;
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
@@ -2024,7 +2241,7 @@ mod tests {
     async fn test_handle_initialize_no_params_uses_default_version() {
         let server = create_test_server();
 
-        let response = server.handle_initialize(Some(json!(1)), None).await;
+        let response = server.handle_initialize(Some(json!(1)), None, None).await;
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
@@ -2043,7 +2260,9 @@ mod tests {
             }
         });
 
-        let response = server.handle_initialize(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_initialize(Some(json!(1)), Some(params), None)
+            .await;
         let result = response.result.unwrap();
 
         assert!(result["serverInfo"]["description"].is_string());
@@ -2056,7 +2275,7 @@ mod tests {
         let server = create_test_server();
         assert!(!server.initialized.load(Ordering::SeqCst));
 
-        server.handle_initialize(Some(json!(1)), None).await;
+        server.handle_initialize(Some(json!(1)), None, None).await;
 
         assert!(server.initialized.load(Ordering::SeqCst));
     }
@@ -2064,7 +2283,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_initialize_includes_extensions() {
         let server = create_test_server();
-        let response = server.handle_initialize(Some(json!(1)), None).await;
+        let response = server.handle_initialize(Some(json!(1)), None, None).await;
         let result = response.result.unwrap();
         let caps = &result["capabilities"];
 
@@ -2172,13 +2391,15 @@ mod tests {
     #[tokio::test]
     async fn test_destructive_gate_blocks_when_elicitation_unsupported() {
         // Enable the gate; client has not advertised elicitation support.
+        // Use all-enabled tool groups to keep `ssh_cron_remove` registered
+        // (FIND-024 default profile excludes the `cron` group).
         let mut config = Config {
             hosts: HashMap::new(),
             security: SecurityConfig::default(),
             limits: LimitsConfig::default(),
             audit: AuditConfig::default(),
             sessions: SessionConfig::default(),
-            tool_groups: ToolGroupsConfig::default(),
+            tool_groups: crate::mcp::registry::all_enabled_tool_groups_config_for_test(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
@@ -2186,6 +2407,9 @@ mod tests {
         };
         config.security.require_elicitation_on_destructive = true;
         let (server, _task) = McpServer::new(config);
+        let (tx, _rx) = mpsc::channel::<WriterMessage>(8);
+        let session_ctx = SessionContext::new(tx);
+        // session_ctx.caps.supports_elicitation() defaults to false.
 
         // ssh_cron_remove is annotated destructive
         let params = json!({
@@ -2193,7 +2417,7 @@ mod tests {
             "arguments": {"host": "prod", "name": "backup"}
         });
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None, None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, Some(&session_ctx))
             .await;
 
         assert!(response.error.is_none());
@@ -2286,24 +2510,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_destructive_gate_disabled_by_default() {
-        // Default config: require_elicitation_on_destructive = false.
-        // A destructive tool call should not be blocked by the gate
-        // (it will still fail for other reasons, e.g. unknown host),
-        // but the error must not be the elicitation-refusal error.
+    async fn test_destructive_gate_enabled_by_default() {
+        // FIND-022: default config now sets
+        // `require_elicitation_on_destructive = true` (security-first).
+        // A destructive tool call from a session whose client did NOT
+        // advertise elicitation MUST be rejected by the gate before
+        // execution.
         let server = create_test_server();
+        let (tx, _rx) = mpsc::channel::<WriterMessage>(8);
+        let session_ctx = SessionContext::new(tx);
+        // session_ctx.caps.supports_elicitation() defaults to false —
+        // the gate should refuse.
         let params = json!({
             "name": "ssh_cron_remove",
             "arguments": {"host": "nonexistent", "name": "x"}
         });
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None, None)
+            .handle_tools_call(Some(json!(1)), Some(params), None, Some(&session_ctx))
             .await;
         let result = response.result.unwrap();
         let text = result["content"][0]["text"].as_str().unwrap_or_default();
         assert!(
-            !text.contains("does not support elicitation"),
-            "gate fired with feature disabled: {text}"
+            text.contains("does not support elicitation"),
+            "gate must fire by default (FIND-022): {text}"
         );
     }
 
@@ -2357,7 +2586,8 @@ mod tests {
             error: None,
         };
 
-        let routed = server.route_incoming_message(message, &tx).await;
+        let session_ctx = SessionContext::new(tx);
+        let routed = server.route_incoming_message(message, &session_ctx).await;
 
         assert!(routed.is_none(), "notification must not be dispatched");
         assert!(
@@ -2376,10 +2606,9 @@ mod tests {
         // drive `route_incoming_message` in a background task and just verify
         // the outbound `roots/list` shows up on tx.
         let server = Arc::new(create_test_server());
-        server
-            .client_supports_roots
-            .store(true, std::sync::atomic::Ordering::Relaxed);
         let (tx, mut rx) = mpsc::channel::<WriterMessage>(8);
+        let session_ctx = SessionContext::new(tx);
+        session_ctx.caps.set_supports_roots(true);
         let message = super::super::protocol::JsonRpcMessage {
             jsonrpc: "2.0".to_string(),
             id: None,
@@ -2390,8 +2619,12 @@ mod tests {
         };
 
         let server_bg = Arc::clone(&server);
-        let route_handle =
-            tokio::spawn(async move { server_bg.route_incoming_message(message, &tx).await });
+        let session_ctx_bg = session_ctx.clone();
+        let route_handle = tokio::spawn(async move {
+            server_bg
+                .route_incoming_message(message, &session_ctx_bg)
+                .await
+        });
 
         let sent = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
             .await
@@ -2536,7 +2769,9 @@ mod tests {
             }
         });
 
-        let response = server.handle_initialize(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_initialize(Some(json!(1)), Some(params), None)
+            .await;
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
@@ -2548,7 +2783,7 @@ mod tests {
     #[tokio::test]
     async fn test_initialize_with_null_id() {
         let server = create_test_server();
-        let response = server.handle_initialize(None, None).await;
+        let response = server.handle_initialize(None, None, None).await;
 
         assert!(response.error.is_none());
         assert!(response.id.is_none());
@@ -2558,7 +2793,7 @@ mod tests {
     async fn test_initialize_with_string_id() {
         let server = create_test_server();
         let response = server
-            .handle_initialize(Some(json!("request-1")), None)
+            .handle_initialize(Some(json!("request-1")), None, None)
             .await;
 
         assert!(response.error.is_none());
@@ -2568,7 +2803,7 @@ mod tests {
     #[tokio::test]
     async fn test_initialize_includes_resources_capability() {
         let server = create_test_server();
-        let response = server.handle_initialize(Some(json!(1)), None).await;
+        let response = server.handle_initialize(Some(json!(1)), None, None).await;
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
@@ -2579,8 +2814,8 @@ mod tests {
     async fn test_initialize_multiple_times() {
         let server = create_test_server();
 
-        let response1 = server.handle_initialize(Some(json!(1)), None).await;
-        let response2 = server.handle_initialize(Some(json!(2)), None).await;
+        let response1 = server.handle_initialize(Some(json!(1)), None, None).await;
+        let response2 = server.handle_initialize(Some(json!(2)), None, None).await;
 
         // Both should succeed (no state prevents re-initialization)
         assert!(response1.error.is_none());
@@ -2595,7 +2830,9 @@ mod tests {
             "completely": "wrong"
         });
 
-        let response = server.handle_initialize(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_initialize(Some(json!(1)), Some(params), None)
+            .await;
 
         // Should still succeed (params are optional/best-effort)
         assert!(response.error.is_none());
@@ -2847,7 +3084,7 @@ mod tests {
         assert!(!server.initialized.load(std::sync::atomic::Ordering::SeqCst));
 
         // After initialize call
-        server.handle_initialize(Some(json!(1)), None).await;
+        server.handle_initialize(Some(json!(1)), None, None).await;
 
         // Should be initialized
         assert!(server.initialized.load(std::sync::atomic::Ordering::SeqCst));
@@ -2901,7 +3138,9 @@ mod tests {
             }
         });
 
-        let response = server.handle_initialize(Some(json!(1)), Some(params)).await;
+        let response = server
+            .handle_initialize(Some(json!(1)), Some(params), None)
+            .await;
 
         let result = response.result.unwrap();
         assert!(result["capabilities"]["tasks"].is_object());
@@ -2974,6 +3213,7 @@ mod tests {
         // the task lifecycle without polling.
         let server = create_test_server();
         let (tx, mut rx) = mpsc::channel::<WriterMessage>(8);
+        let session_ctx = SessionContext::new(tx);
         let params = json!({
             "name": "ssh_status",
             "arguments": {},
@@ -2981,7 +3221,7 @@ mod tests {
         });
 
         let response = server
-            .handle_tools_call(Some(json!(1)), Some(params), None, Some(tx))
+            .handle_tools_call(Some(json!(1)), Some(params), None, Some(&session_ctx))
             .await;
 
         assert!(response.error.is_none());
@@ -3502,24 +3742,32 @@ mod tests {
     #[tokio::test]
     async fn test_resource_subscribe_valid() {
         let server = create_test_server();
+        let (tx, _rx) = mpsc::channel::<WriterMessage>(8);
+        let session_ctx = SessionContext::new(tx);
         let params = json!({ "uri": "health://server" });
 
         let response = server
-            .handle_resource_subscribe(Some(json!(1)), Some(params))
+            .handle_resource_subscribe(Some(json!(1)), Some(params), Some(&session_ctx))
             .await;
 
         assert!(response.error.is_none());
         let result = response.result.unwrap();
         assert!(result["subscriptionId"].is_string());
+        // The subscription must land in THIS session's per-session map
+        // (FIND-036) — verify it's there.
+        let subs = session_ctx.resource_subs.read().await;
+        assert!(subs.contains_key("health://server"));
     }
 
     #[tokio::test]
     async fn test_resource_subscribe_missing_uri() {
         let server = create_test_server();
+        let (tx, _rx) = mpsc::channel::<WriterMessage>(8);
+        let session_ctx = SessionContext::new(tx);
         let params = json!({});
 
         let response = server
-            .handle_resource_subscribe(Some(json!(1)), Some(params))
+            .handle_resource_subscribe(Some(json!(1)), Some(params), Some(&session_ctx))
             .await;
 
         assert!(response.error.is_some());
@@ -3530,19 +3778,37 @@ mod tests {
     #[tokio::test]
     async fn test_resource_unsubscribe() {
         let server = create_test_server();
+        let (tx, _rx) = mpsc::channel::<WriterMessage>(8);
+        let session_ctx = SessionContext::new(tx);
         // First subscribe
         let sub_params = json!({ "uri": "health://server" });
         server
-            .handle_resource_subscribe(Some(json!(1)), Some(sub_params))
+            .handle_resource_subscribe(Some(json!(1)), Some(sub_params), Some(&session_ctx))
             .await;
 
         // Then unsubscribe
         let unsub_params = json!({ "uri": "health://server" });
         let response = server
-            .handle_resource_unsubscribe(Some(json!(2)), Some(unsub_params))
+            .handle_resource_unsubscribe(Some(json!(2)), Some(unsub_params), Some(&session_ctx))
             .await;
 
         assert!(response.error.is_none());
+        // Map must now be empty for that URI (FIND-036).
+        let subs = session_ctx.resource_subs.read().await;
+        assert!(!subs.contains_key("health://server"));
+    }
+
+    #[tokio::test]
+    async fn test_resource_subscribe_without_session_rejected() {
+        // FIND-036: subscription is per-session and meaningless without
+        // a live session. Calls from non-MCP code paths must be refused
+        // rather than silently forced through a non-existent global map.
+        let server = create_test_server();
+        let params = json!({ "uri": "health://server" });
+        let response = server
+            .handle_resource_subscribe(Some(json!(1)), Some(params), None)
+            .await;
+        assert!(response.error.is_some());
     }
 
     // ============== Completions Tests ==============
@@ -3617,7 +3883,7 @@ mod tests {
     #[test]
     fn test_logging_set_level_missing_params() {
         let server = create_test_server();
-        let response = server.handle_logging_set_level(Some(json!(1)), None);
+        let response = server.handle_logging_set_level(Some(json!(1)), None, None);
 
         assert!(response.error.is_some());
         assert_eq!(response.error.unwrap().code, -32602);
@@ -3627,7 +3893,7 @@ mod tests {
     fn test_logging_set_level_invalid_params() {
         let server = create_test_server();
         let params = json!({ "level": "nonexistent" });
-        let response = server.handle_logging_set_level(Some(json!(1)), Some(params));
+        let response = server.handle_logging_set_level(Some(json!(1)), Some(params), None);
 
         assert!(response.error.is_some());
         assert_eq!(response.error.unwrap().code, -32602);
@@ -3637,7 +3903,7 @@ mod tests {
     fn test_logging_set_level_debug() {
         let server = create_test_server();
         let params = json!({ "level": "debug" });
-        let response = server.handle_logging_set_level(Some(json!(1)), Some(params));
+        let response = server.handle_logging_set_level(Some(json!(1)), Some(params), None);
 
         assert!(response.error.is_none());
         assert_eq!(server.log_level.load(Ordering::Relaxed), 0); // debug = 0
@@ -3647,7 +3913,7 @@ mod tests {
     fn test_logging_set_level_error() {
         let server = create_test_server();
         let params = json!({ "level": "error" });
-        let response = server.handle_logging_set_level(Some(json!(1)), Some(params));
+        let response = server.handle_logging_set_level(Some(json!(1)), Some(params), None);
 
         assert!(response.error.is_none());
         assert_eq!(server.log_level.load(Ordering::Relaxed), 4); // error = 4
@@ -3808,6 +4074,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_request_resources_subscribe_dispatch() {
+        // FIND-036 (audit 2026-05-09): `resources/subscribe` is a
+        // per-session operation. Calling it through the legacy
+        // session-less `handle_request` path now produces an error
+        // rather than silently writing to a non-existent shared map.
         let server = create_test_server();
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -3818,7 +4088,10 @@ mod tests {
 
         let response = server.handle_request(request).await;
 
-        assert!(response.error.is_none());
+        assert!(
+            response.error.is_some(),
+            "session-less subscribe must be refused (FIND-036)"
+        );
     }
 
     #[tokio::test]
@@ -3879,44 +4152,41 @@ mod tests {
 
     #[test]
     fn test_active_requests_starts_empty() {
-        let server = create_test_server();
-        let map = server.active_requests.lock().unwrap();
-        assert!(map.is_empty());
+        let active = ActiveRequests::new();
+        assert_eq!(active.len(), 0);
     }
 
     #[test]
     fn test_register_request_stores_token_in_map() {
-        let server = create_test_server();
-        let token = server.register_request("req-1".to_string());
+        let active = ActiveRequests::new();
+        let token = active.register("req-1".to_string());
 
         assert!(!token.is_cancelled(), "fresh token must not be cancelled");
-        let map = server.active_requests.lock().unwrap();
-        assert_eq!(map.len(), 1);
-        assert!(map.contains_key("req-1"));
+        assert_eq!(active.len(), 1);
+        assert!(active.contains("req-1"));
     }
 
     #[test]
     fn test_unregister_request_removes_from_map() {
-        let server = create_test_server();
-        let _ = server.register_request("req-2".to_string());
-        server.unregister_request("req-2");
-        let map = server.active_requests.lock().unwrap();
-        assert!(map.is_empty());
+        let active = ActiveRequests::new();
+        let _ = active.register("req-2".to_string());
+        active.unregister("req-2");
+        assert_eq!(active.len(), 0);
     }
 
     #[test]
     fn test_unregister_unknown_request_is_noop() {
-        let server = create_test_server();
+        let active = ActiveRequests::new();
         // Must not panic when the id is not present.
-        server.unregister_request("never-existed");
+        active.unregister("never-existed");
     }
 
     #[test]
     fn test_cancel_request_fires_token_and_returns_true() {
-        let server = create_test_server();
-        let token = server.register_request("req-3".to_string());
+        let active = ActiveRequests::new();
+        let token = active.register("req-3".to_string());
 
-        let cancelled = server.cancel_request("req-3");
+        let cancelled = active.cancel("req-3");
 
         assert!(cancelled);
         assert!(
@@ -3924,25 +4194,56 @@ mod tests {
             "token must be cancelled after cancel_request"
         );
         // Map entry should be removed as part of cancel.
-        let map = server.active_requests.lock().unwrap();
-        assert!(map.is_empty());
+        assert_eq!(active.len(), 0);
     }
 
     #[test]
     fn test_cancel_unknown_request_returns_false() {
-        let server = create_test_server();
-        assert!(!server.cancel_request("unknown"));
+        let active = ActiveRequests::new();
+        assert!(!active.cancel("unknown"));
     }
 
     #[test]
     fn test_cancel_request_removes_entry_to_prevent_double_cancel() {
-        let server = create_test_server();
-        let _ = server.register_request("req-4".to_string());
+        let active = ActiveRequests::new();
+        let _ = active.register("req-4".to_string());
 
         // First cancel fires and removes.
-        assert!(server.cancel_request("req-4"));
+        assert!(active.cancel("req-4"));
         // Second cancel finds nothing.
-        assert!(!server.cancel_request("req-4"));
+        assert!(!active.cancel("req-4"));
+    }
+
+    /// FIND-038: a cancel notification arriving on session B must NOT
+    /// touch session A's in-flight requests, even if it carries A's id.
+    #[test]
+    fn test_cancel_does_not_cross_sessions() {
+        let session_a = ActiveRequests::new();
+        let session_b = ActiveRequests::new();
+
+        // Session A registers an in-flight request id "42".
+        let token_a = session_a.register("42".to_string());
+
+        // Session B receives notifications/cancelled { requestId: "42" }.
+        // The handler runs against B's local map only.
+        McpServer::handle_cancellation_notification(
+            &session_b,
+            Some(&json!({ "requestId": "42", "reason": "cross-session attack" })),
+        );
+
+        assert!(
+            !token_a.is_cancelled(),
+            "session B must not be able to cancel session A's request"
+        );
+        assert!(
+            session_a.contains("42"),
+            "session A's map must still contain its request"
+        );
+        assert_eq!(
+            session_b.len(),
+            0,
+            "session B's map remains empty (no matching id locally)"
+        );
     }
 
     /// End-to-end: verifies that `handle_request_with_cancel` propagates
@@ -3995,45 +4296,45 @@ mod tests {
 
     #[test]
     fn test_handle_cancellation_notification_fires_token_for_known_id() {
-        let server = create_test_server();
-        let token = server.register_request("req-42".to_string());
+        let active = ActiveRequests::new();
+        let token = active.register("req-42".to_string());
         assert!(!token.is_cancelled());
 
         let params = json!({ "requestId": "req-42", "reason": "user abort" });
-        server.handle_cancellation_notification(Some(&params));
+        McpServer::handle_cancellation_notification(&active, Some(&params));
 
         assert!(token.is_cancelled(), "token must fire after notification");
     }
 
     #[test]
     fn test_handle_cancellation_notification_ignores_unknown_id() {
-        let server = create_test_server();
+        let active = ActiveRequests::new();
         // No panic, no observable side effect.
         let params = json!({ "requestId": "never-registered" });
-        server.handle_cancellation_notification(Some(&params));
+        McpServer::handle_cancellation_notification(&active, Some(&params));
     }
 
     #[test]
     fn test_handle_cancellation_notification_ignores_missing_request_id() {
-        let server = create_test_server();
+        let active = ActiveRequests::new();
         // Malformed notification (no requestId) must be silently ignored
         // per MCP spec.
         let params = json!({ "reason": "nothing specific" });
-        server.handle_cancellation_notification(Some(&params));
+        McpServer::handle_cancellation_notification(&active, Some(&params));
     }
 
     #[test]
     fn test_handle_cancellation_notification_accepts_numeric_request_id() {
         // JSON-RPC allows numeric IDs; the normalization to String must
-        // match what register_request stores for the raw ::Number case.
-        let server = create_test_server();
+        // match what register stores for the raw ::Number case.
+        let active = ActiveRequests::new();
         // The spawn path in run() uses `other.to_string()` for non-string
         // ids, which yields "7" for Value::Number(7). Test that the
         // notification handler applies the same normalization.
-        let token = server.register_request("7".to_string());
+        let token = active.register("7".to_string());
 
         let params = json!({ "requestId": 7 });
-        server.handle_cancellation_notification(Some(&params));
+        McpServer::handle_cancellation_notification(&active, Some(&params));
 
         assert!(token.is_cancelled());
     }

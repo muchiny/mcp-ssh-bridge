@@ -14,6 +14,9 @@ exclude-dev = false
 # =============================================================================
 [advisories]
 version = 2
+# Audit 2026-05-09 (FIND-026): yanked releases break CI so a maintainer
+# pulling a backdoored release does not silently survive.
+yanked = "deny"
 # RUSTSEC-2023-0071: Marvin Attack on RSA - no fix available upstream
 # Transitive dependency from russh -> rsa crate
 # Safe for local use, timing attack requires network observation

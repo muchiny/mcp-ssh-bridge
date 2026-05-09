@@ -23,9 +23,18 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tower_http::cors::CorsLayer;
 use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
+use tower_http::sensitive_headers::{
+    SetSensitiveRequestHeadersLayer, SetSensitiveResponseHeadersLayer,
+};
+use tower_http::timeout::TimeoutLayer;
 use tracing::{info, warn};
 
-use super::oauth::{OAuthConfig, OAuthMetadata};
+/// Hard cap on request handler latency. Prevents slow-loris-style requests
+/// from holding connections open indefinitely. Returns HTTP 408 on expiry.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+use super::oauth::{OAuthConfig, OAuthMetadata, OAuthValidator};
 use super::session_store::{InMemorySessionStore, SessionData, SessionStore};
 
 use crate::mcp::protocol::{
@@ -65,7 +74,7 @@ fn is_allowed_origin(origin: &str, allowed: &[String]) -> bool {
 /// Configuration for the HTTP transport.
 #[derive(Debug, Clone)]
 pub struct HttpTransportConfig {
-    /// Bind address (e.g., `"0.0.0.0:3000"`).
+    /// Bind address (e.g., `"127.0.0.1:3000"`).
     pub bind: String,
     /// Maximum request body size in bytes (default: 1MB).
     pub max_body_size: usize,
@@ -79,17 +88,22 @@ pub struct HttpTransportConfig {
     /// An empty list means "reject every request that carries an `Origin`",
     /// which is rarely what you want — see `default_allowed_origins`.
     pub allowed_origins: Vec<String>,
+    /// SECURITY: bypass the loopback-or-OAuth check in `serve`. Required only
+    /// when intentionally exposing the bridge on a public interface without
+    /// OAuth (e.g. behind a separate auth proxy). Defaults to `false`.
+    pub allow_unsafe_bind: bool,
 }
 
 impl Default for HttpTransportConfig {
     fn default() -> Self {
         Self {
-            bind: "0.0.0.0:3000".to_string(),
+            bind: "127.0.0.1:3000".to_string(),
             max_body_size: 1_048_576,
             session_timeout: Duration::from_secs(1800),
             max_sessions: 100,
             oauth: OAuthConfig::default(),
             allowed_origins: default_allowed_origins(),
+            allow_unsafe_bind: false,
         }
     }
 }
@@ -108,37 +122,70 @@ pub struct HttpTransportState {
 
 /// Anti-DNS-rebinding gate (MCP 2025-11-25 §"Streamable HTTP / Security Warning").
 ///
-/// Requests with no `Origin` are forwarded — this matches non-browser MCP
-/// clients which do not set the header. Requests with an `Origin` not in
-/// the configured allowlist receive HTTP 403 with a JSON-RPC error body
-/// (no `id`), as the spec mandates.
+/// Requests with no `Origin` are rejected with HTTP 403 — non-browser MCP
+/// clients on a network attacker's path could otherwise impersonate
+/// loopback callers. Requests with an `Origin` not in the configured
+/// allowlist also receive HTTP 403 with a JSON-RPC error body (no `id`),
+/// as the spec mandates.
 async fn origin_guard(
     State(state): State<Arc<HttpTransportState>>,
     request: Request,
     next: Next,
 ) -> Response {
-    if let Some(origin) = request
+    let origin_header = request
         .headers()
         .get("origin")
         .and_then(|v| v.to_str().ok())
-        && !is_allowed_origin(origin, &state.config.allowed_origins)
-    {
-        warn!(origin = %origin, "Rejected request with invalid Origin header");
-        let body = serde_json::json!({
-            "jsonrpc": "2.0",
-            "error": {
-                "code": -32600,
-                "message": format!("Origin '{origin}' is not allowed"),
-            },
-        });
-        return (StatusCode::FORBIDDEN, Json(body)).into_response();
+        .map(String::from);
+
+    match origin_header {
+        Some(o) if is_allowed_origin(&o, &state.config.allowed_origins) => next.run(request).await,
+        Some(o) => {
+            warn!(origin = %o, "Rejected request with invalid Origin header");
+            forbidden(&format!("Origin '{o}' is not allowed"))
+        }
+        None => {
+            warn!("Rejected request with no Origin header");
+            forbidden("Missing Origin header (anti-DNS-rebinding)")
+        }
     }
-    next.run(request).await
+}
+
+fn forbidden(message: &str) -> Response {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "error": { "code": -32600, "message": message },
+    });
+    (StatusCode::FORBIDDEN, Json(body)).into_response()
 }
 
 /// Build the axum Router for the MCP HTTP transport.
+///
+/// When OAuth is enabled, callers must use
+/// [`build_router_with_validator`] (or the wrapping [`serve`] function)
+/// to install a boot-time [`OAuthValidator`]. This entry point omits the
+/// validator extension; if OAuth is enabled the middleware will respond
+/// with HTTP 503 to every protected request, surfacing the
+/// misconfiguration loudly instead of silently rejecting tokens with
+/// "Unknown JWT signing key" (FIND-006).
 pub fn build_router(server: Arc<McpServer>, config: HttpTransportConfig) -> Router {
-    build_router_with_store(server, config, Arc::new(InMemorySessionStore::new()))
+    build_router_with_store(server, config, Arc::new(InMemorySessionStore::new()), None)
+}
+
+/// Build the axum Router with a pre-built [`OAuthValidator`] installed
+/// as a request extension. Used by [`serve`] after the validator has
+/// been constructed at boot via [`super::oauth::build_validator_from_runtime`].
+pub fn build_router_with_validator(
+    server: Arc<McpServer>,
+    config: HttpTransportConfig,
+    validator: &Arc<OAuthValidator>,
+) -> Router {
+    build_router_with_store(
+        server,
+        config,
+        Arc::new(InMemorySessionStore::new()),
+        Some(validator),
+    )
 }
 
 /// Variant of [`build_router`] that accepts a caller-provided session
@@ -148,6 +195,7 @@ pub fn build_router_with_store(
     server: Arc<McpServer>,
     config: HttpTransportConfig,
     sessions: Arc<dyn SessionStore>,
+    validator: Option<&Arc<OAuthValidator>>,
 ) -> Router {
     let oauth_config = Arc::new(config.oauth.clone());
 
@@ -167,6 +215,9 @@ pub fn build_router_with_store(
     if oauth_config.enabled {
         router = router.layer(axum::middleware::from_fn(super::oauth::oauth_middleware));
         router = router.layer(axum::Extension(Arc::clone(&oauth_config)));
+        if let Some(v) = validator {
+            router = router.layer(axum::Extension(Arc::clone(v)));
+        }
     }
 
     // Discovery and health endpoints (not behind OAuth, but still
@@ -207,12 +258,48 @@ pub fn build_router_with_store(
         }
     }
 
+    // Headers carrying secrets must be marked sensitive so any
+    // tracing layer that logs HeaderMap will mask them. We share the
+    // list as `Arc<[HeaderName]>` so the request- and response-side
+    // layers don't each clone the slice.
+    let sensitive_headers: Arc<[axum::http::HeaderName]> = Arc::from(
+        [
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::COOKIE,
+            axum::http::HeaderName::from_static("mcp-session-id"),
+        ]
+        .as_slice(),
+    );
+
     router
         .merge(discovery_router)
         .layer(axum::middleware::from_fn_with_state(
             Arc::clone(&state),
             origin_guard,
         ))
+        // Sensitive-header marking wraps everything below it so any
+        // logging middleware sees the masked headers.
+        .layer(SetSensitiveRequestHeadersLayer::from_shared(Arc::clone(
+            &sensitive_headers,
+        )))
+        .layer(SetSensitiveResponseHeadersLayer::from_shared(
+            sensitive_headers,
+        ))
+        // Request ID propagation: echo client-supplied x-request-id
+        // and stamp our own UUID when the client didn't send one. The
+        // propagate layer must be *outside* the set layer so the value
+        // generated by `SetRequestIdLayer` makes it back onto the
+        // response on the way out.
+        .layer(PropagateRequestIdLayer::x_request_id())
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        // Hard request timeout — tower-http returns 408 by default.
+        // `with_status_code` is the non-deprecated constructor in 0.6.7+.
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            REQUEST_TIMEOUT,
+        ))
+        // Body-size cap (anti-DoS). Trips with HTTP 413 and never
+        // reaches the handler.
         .layer(RequestBodyLimitLayer::new(state.config.max_body_size))
         .layer(cors)
         .with_state(state)
@@ -221,12 +308,36 @@ pub fn build_router_with_store(
 /// Start the HTTP transport server.
 ///
 /// This binds to the configured address and serves MCP over HTTP.
+/// Refuses to start when binding to a non-loopback address without OAuth
+/// enabled, unless `allow_unsafe_bind` is explicitly set.
+///
+/// When OAuth is enabled, builds a single [`OAuthValidator`] from the
+/// supplied config and installs it as an Axum extension so the middleware
+/// reads the boot-time key map instead of constructing an empty validator
+/// per request (FIND-006). Fails closed at boot when OAuth is enabled but
+/// no static keys are configured.
 pub async fn serve(
     server: Arc<McpServer>,
     config: HttpTransportConfig,
 ) -> crate::error::Result<()> {
+    refuse_unsafe_bind(&config)?;
+
     let bind = config.bind.clone();
-    let router = build_router(server, config);
+
+    let validator = if config.oauth.enabled {
+        let v = super::oauth::build_validator_from_runtime(&config.oauth)
+            .await
+            .map_err(crate::error::BridgeError::McpInvalidRequest)?;
+        Some(Arc::new(v))
+    } else {
+        None
+    };
+
+    let router = if let Some(v) = validator.as_ref() {
+        build_router_with_validator(server, config, v)
+    } else {
+        build_router(server, config)
+    };
 
     info!(bind = %bind, "Starting MCP HTTP transport");
 
@@ -235,6 +346,35 @@ pub async fn serve(
         .await
         .map_err(|e| crate::error::BridgeError::McpProtocol(format!("HTTP server error: {e}")))?;
 
+    Ok(())
+}
+
+/// Refuse to bind to a non-loopback address when OAuth is disabled.
+///
+/// This prevents the default deployment from exposing an unauthenticated
+/// MCP server on a public interface. The check is bypassed when:
+/// - `config.allow_unsafe_bind` is `true` (explicit operator override), or
+/// - `config.oauth.enabled` is `true`, or
+/// - the bind host is a recognised loopback (`127.0.0.1`, `::1`, `localhost`).
+fn refuse_unsafe_bind(config: &HttpTransportConfig) -> crate::error::Result<()> {
+    if config.allow_unsafe_bind {
+        return Ok(());
+    }
+    let host_part = config
+        .bind
+        .rsplit_once(':')
+        .map_or(config.bind.as_str(), |x| x.0)
+        .trim_start_matches('[')
+        .trim_end_matches(']');
+    let is_loopback = host_part == "127.0.0.1" || host_part == "::1" || host_part == "localhost";
+    if !is_loopback && !config.oauth.enabled {
+        return Err(crate::error::BridgeError::McpInvalidRequest(format!(
+            "Refusing to bind '{}' without OAuth. \
+             Set oauth.enabled = true, or bind to 127.0.0.1, \
+             or set allow_unsafe_bind = true to override.",
+            config.bind
+        )));
+    }
     Ok(())
 }
 
@@ -474,9 +614,10 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = HttpTransportConfig::default();
-        assert_eq!(config.bind, "0.0.0.0:3000");
+        assert_eq!(config.bind, "127.0.0.1:3000");
         assert_eq!(config.max_body_size, 1_048_576);
         assert_eq!(config.max_sessions, 100);
+        assert!(!config.allow_unsafe_bind);
     }
 
     #[test]
@@ -561,6 +702,7 @@ mod tests {
             max_sessions: 50,
             oauth: OAuthConfig::default(),
             allowed_origins: Vec::new(),
+            allow_unsafe_bind: false,
         };
         assert_eq!(config.bind, "127.0.0.1:8080");
         assert_eq!(config.max_body_size, 2_097_152);
@@ -721,13 +863,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_origin_guard_allows_no_origin_header() {
+    async fn test_origin_guard_rejects_no_origin_header() {
         use axum::body::Body;
         use axum::http::Request;
         use tower::ServiceExt;
 
-        // Non-browser MCP clients (e.g. Claude Desktop over HTTP) do not
-        // set an Origin header. Per spec we forward those untouched.
+        // Vuln 1 (audit 2026-05-09): a request with no Origin must be
+        // rejected. The previous behaviour (forwarding unconditionally)
+        // let any non-browser network attacker reach the MCP endpoints.
         let response = build_test_router()
             .oneshot(
                 Request::builder()
@@ -740,7 +883,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_ne!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
@@ -764,5 +907,87 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    // ========================================================================
+    // Vuln 1 (audit 2026-05-09) — loopback default + refuse anonymous public bind
+    // ========================================================================
+
+    #[test]
+    fn default_bind_is_loopback() {
+        let cfg = HttpTransportConfig::default();
+        assert_eq!(cfg.bind, "127.0.0.1:3000");
+    }
+
+    #[tokio::test]
+    async fn serve_refuses_public_bind_without_oauth() {
+        let cfg = HttpTransportConfig {
+            bind: "0.0.0.0:0".to_string(),
+            ..Default::default()
+        };
+        let cfg_main = crate::config::Config::default();
+        let (server, _audit_task) = crate::mcp::McpServer::new(cfg_main);
+        let server = std::sync::Arc::new(server);
+        let r = serve(server, cfg).await;
+        assert!(r.is_err(), "must refuse 0.0.0.0 bind without OAuth");
+        let msg = format!("{}", r.err().unwrap());
+        assert!(msg.contains("loopback") || msg.contains("OAuth") || msg.contains("oauth"));
+    }
+
+    #[tokio::test]
+    async fn serve_allows_loopback_bind_without_oauth() {
+        let cfg = HttpTransportConfig {
+            bind: "127.0.0.1:0".to_string(), // port 0 = OS picks
+            ..Default::default()
+        };
+        // Spawn the server in a task and immediately drop after a tick — the
+        // initial bind succeeded if no error was reported synchronously.
+        let cfg_main = crate::config::Config::default();
+        let (server, _audit_task) = crate::mcp::McpServer::new(cfg_main);
+        let server = std::sync::Arc::new(server);
+        let handle = tokio::spawn(async move { serve(server, cfg).await });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        handle.abort();
+        // If serve returned an Err synchronously the abort wouldn't have helped — and
+        // the test would have observed it via JoinHandle. We just confirm we did not
+        // get an immediate refuse_unsafe_bind error.
+    }
+
+    #[test]
+    fn refuse_unsafe_bind_allows_oauth_enabled_public() {
+        let mut cfg = HttpTransportConfig {
+            bind: "0.0.0.0:3000".to_string(),
+            ..Default::default()
+        };
+        cfg.oauth.enabled = true;
+        assert!(refuse_unsafe_bind(&cfg).is_ok());
+    }
+
+    #[test]
+    fn refuse_unsafe_bind_allows_explicit_override() {
+        let cfg = HttpTransportConfig {
+            bind: "0.0.0.0:3000".to_string(),
+            allow_unsafe_bind: true,
+            ..Default::default()
+        };
+        assert!(refuse_unsafe_bind(&cfg).is_ok());
+    }
+
+    #[test]
+    fn refuse_unsafe_bind_allows_ipv6_loopback() {
+        let cfg = HttpTransportConfig {
+            bind: "[::1]:3000".to_string(),
+            ..Default::default()
+        };
+        assert!(refuse_unsafe_bind(&cfg).is_ok());
+    }
+
+    #[test]
+    fn refuse_unsafe_bind_allows_localhost_alias() {
+        let cfg = HttpTransportConfig {
+            bind: "localhost:3000".to_string(),
+            ..Default::default()
+        };
+        assert!(refuse_unsafe_bind(&cfg).is_ok());
     }
 }

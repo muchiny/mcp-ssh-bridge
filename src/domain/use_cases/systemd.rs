@@ -130,9 +130,17 @@ impl SystemdCommandBuilder {
     ///
     /// Constructs: `systemctl list-units --type=service [--state={s}]
     /// [--all] --no-pager --no-legend`
-    #[must_use]
-    pub fn build_list_command(state: Option<&str>, all: bool, unit_type: Option<&str>) -> String {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BridgeError::CommandDenied`] if `unit_type` is not in the allowlist.
+    pub fn build_list_command(
+        state: Option<&str>,
+        all: bool,
+        unit_type: Option<&str>,
+    ) -> Result<String> {
         let utype = unit_type.unwrap_or("service");
+        Self::validate_unit_type(utype)?;
         let mut cmd = format!("systemctl list-units --type={utype}");
 
         if let Some(s) = state {
@@ -144,7 +152,38 @@ impl SystemdCommandBuilder {
         }
 
         cmd.push_str(" --no-pager --no-legend");
-        cmd
+        Ok(cmd)
+    }
+
+    /// Validate a systemd unit type against an allowlist.
+    ///
+    /// Allowed: `service`, `socket`, `timer`, `mount`, `target`, `automount`,
+    /// `path`, `slice`, `scope`, `device`, `swap`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BridgeError::CommandDenied`] if the unit type is not in the allowlist.
+    fn validate_unit_type(t: &str) -> Result<()> {
+        matches!(
+            t,
+            "service"
+                | "socket"
+                | "timer"
+                | "mount"
+                | "target"
+                | "automount"
+                | "path"
+                | "slice"
+                | "scope"
+                | "device"
+                | "swap"
+        )
+        .then_some(())
+        .ok_or_else(|| BridgeError::CommandDenied {
+            reason: format!(
+                "Invalid systemd unit_type '{t}'. Allowed: service|socket|timer|mount|target|automount|path|slice|scope|device|swap"
+            ),
+        })
     }
 
     /// Build a `journalctl` command for service logs.
@@ -275,7 +314,7 @@ mod tests {
 
     #[test]
     fn test_list_command_minimal() {
-        let cmd = SystemdCommandBuilder::build_list_command(None, false, None);
+        let cmd = SystemdCommandBuilder::build_list_command(None, false, None).unwrap();
         assert_eq!(
             cmd,
             "systemctl list-units --type=service --no-pager --no-legend"
@@ -284,19 +323,19 @@ mod tests {
 
     #[test]
     fn test_list_command_with_state() {
-        let cmd = SystemdCommandBuilder::build_list_command(Some("running"), false, None);
+        let cmd = SystemdCommandBuilder::build_list_command(Some("running"), false, None).unwrap();
         assert!(cmd.contains("--state='running'"));
     }
 
     #[test]
     fn test_list_command_all() {
-        let cmd = SystemdCommandBuilder::build_list_command(None, true, None);
+        let cmd = SystemdCommandBuilder::build_list_command(None, true, None).unwrap();
         assert!(cmd.contains("--all"));
     }
 
     #[test]
     fn test_list_command_custom_type() {
-        let cmd = SystemdCommandBuilder::build_list_command(None, false, Some("timer"));
+        let cmd = SystemdCommandBuilder::build_list_command(None, false, Some("timer")).unwrap();
         assert!(cmd.contains("--type=timer"));
     }
 
@@ -437,7 +476,8 @@ mod tests {
 
     #[test]
     fn test_list_injection_in_state() {
-        let cmd = SystemdCommandBuilder::build_list_command(Some("running; whoami"), false, None);
+        let cmd = SystemdCommandBuilder::build_list_command(Some("running; whoami"), false, None)
+            .unwrap();
         assert!(cmd.contains("--state='running; whoami'"));
     }
 
@@ -445,7 +485,8 @@ mod tests {
 
     #[test]
     fn test_list_all_options() {
-        let cmd = SystemdCommandBuilder::build_list_command(Some("running"), true, Some("socket"));
+        let cmd = SystemdCommandBuilder::build_list_command(Some("running"), true, Some("socket"))
+            .unwrap();
         assert!(cmd.contains("--type=socket"));
         assert!(cmd.contains("--state='running'"));
         assert!(cmd.contains("--all"));
@@ -589,5 +630,47 @@ mod tests {
     fn test_daemon_reload_command() {
         let cmd = SystemdCommandBuilder::build_daemon_reload_command();
         assert_eq!(cmd, "systemctl daemon-reload");
+    }
+
+    // ============== unit_type allowlist (Vuln 6) ==============
+
+    #[test]
+    fn test_list_command_rejects_injection_in_unit_type() {
+        let r = SystemdCommandBuilder::build_list_command(
+            None,
+            false,
+            Some("service; cat /etc/shadow #"),
+        );
+        assert!(
+            r.is_err(),
+            "must reject unit_type with shell metacharacters"
+        );
+    }
+
+    #[test]
+    fn test_list_command_accepts_known_unit_types() {
+        for t in [
+            "service",
+            "socket",
+            "timer",
+            "mount",
+            "target",
+            "automount",
+            "path",
+            "slice",
+            "scope",
+            "device",
+            "swap",
+        ] {
+            let r = SystemdCommandBuilder::build_list_command(None, false, Some(t));
+            assert!(r.is_ok(), "{t} should be accepted");
+        }
+    }
+
+    #[test]
+    fn test_list_command_default_no_unit_type() {
+        let r = SystemdCommandBuilder::build_list_command(None, false, None);
+        assert!(r.is_ok());
+        assert!(r.unwrap().contains("--type=service"));
     }
 }

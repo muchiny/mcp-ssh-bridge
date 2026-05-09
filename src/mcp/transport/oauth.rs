@@ -1,14 +1,37 @@
 //! OAuth 2.0 Authentication Middleware for MCP HTTP Transport
 //!
 //! Validates Bearer tokens on incoming HTTP requests when OAuth is enabled.
-//! Supports JWT validation with configurable issuer, audience, and scope checks.
+//! Tokens are verified as JWTs against a configured set of public keys
+//! (RSA or ECDSA family — HMAC algorithms are rejected to prevent
+//! `alg`-confusion attacks).
+//!
+//! # Production wiring
+//!
+//! Use [`build_validator`] at server startup to construct a single
+//! [`OAuthValidator`] from a [`HttpOAuthConfig`]. The validator pre-loads
+//! every signing key declared in `static_keys` and is shared across
+//! requests as `Arc<OAuthValidator>` via Axum extensions; the middleware
+//! reads the shared instance instead of building a fresh empty validator
+//! per request. `build_validator` returns `Err` when OAuth is enabled but
+//! no key source is configured, so the server fails closed at boot
+//! rather than rejecting every token.
+//!
+//! # Limitations
+//!
+//! JWKS HTTP fetching (`jwks_uri`) is not yet wired here: the `http`
+//! feature does not pull in an HTTP client, so the configuration field is
+//! reserved but currently rejected by `build_validator` with a clear
+//! error. Until reqwest/hyper are piped through extensions, populate the
+//! validator via `static_keys`.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{debug, warn};
@@ -35,6 +58,12 @@ pub struct OAuthConfig {
     /// Required scopes for access.
     #[serde(default)]
     pub required_scopes: Vec<String>,
+    /// Static signing keys, keyed by `kid`. Populated from
+    /// [`crate::config::types::HttpOAuthConfig::static_keys`] at boot;
+    /// kept on the runtime config so [`build_validator`] can pre-load
+    /// the validator's key map.
+    #[serde(default)]
+    pub static_keys: Vec<(String, String)>,
 }
 
 /// Validated token claims extracted from a Bearer token.
@@ -68,64 +97,154 @@ pub mod scopes {
     pub const ADMIN: &str = "mcp:admin";
 }
 
+/// Internal JWT claims layout deserialised from the verified token payload.
+#[derive(Debug, Deserialize)]
+struct JwtClaims {
+    #[serde(default)]
+    sub: Option<String>,
+    iss: String,
+    /// `aud` may be a single string or an array per RFC 7519 §4.1.3.
+    /// `jsonwebtoken` validates it through [`Validation::set_audience`]; we
+    /// only need to deserialise it without rejecting either shape.
+    #[allow(dead_code)]
+    aud: serde_json::Value,
+    #[serde(default)]
+    scope: String,
+    #[allow(dead_code)]
+    exp: i64,
+    #[serde(default)]
+    #[allow(dead_code)]
+    nbf: Option<i64>,
+}
+
 /// OAuth validator that checks Bearer tokens.
+///
+/// Tokens must be JWTs signed with one of the accepted asymmetric algorithms
+/// (`RS256`/`RS384`/`RS512`, `ES256`/`ES384`, `PS256`/`PS384`/`PS512`).
+/// HMAC algorithms (`HS*`) and `none` are rejected to prevent
+/// `alg`-confusion attacks.
+///
+/// Public keys are addressed by their JWK `kid`. Two key shapes are accepted:
+/// - PEM-encoded RSA public key (PKCS#1 or `SubjectPublicKeyInfo`)
+/// - `n.e` JWK components stored as `"<n>.<e>"` (populated by
+///   [`Self::refresh_jwks`])
 pub struct OAuthValidator {
     config: OAuthConfig,
+    /// Public keys keyed by `kid`. Each value is either a PEM blob or the
+    /// `n.e` JWK components when populated by [`Self::refresh_jwks`].
+    keys: HashMap<String, String>,
 }
 
 impl OAuthValidator {
-    /// Create a new OAuth validator.
+    /// Create a new OAuth validator with no signing keys.
+    ///
+    /// Callers must populate keys via [`Self::set_static_keys`] or
+    /// [`Self::refresh_jwks`] before any token will be accepted.
     #[must_use]
     pub fn new(config: OAuthConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            keys: HashMap::new(),
+        }
+    }
+
+    /// Replace the in-memory key map with the supplied `(kid, pem)` pairs.
+    pub fn set_static_keys(&mut self, keys: Vec<(String, String)>) {
+        self.keys = keys.into_iter().collect();
+    }
+
+    /// Number of signing keys currently loaded (mostly useful in tests).
+    #[must_use]
+    pub fn key_count(&self) -> usize {
+        self.keys.len()
+    }
+
+    /// Replace the in-memory key map from a parsed JWKS document.
+    ///
+    /// The document must follow RFC 7517 (`{ "keys": [ { "kid": ..., "n":
+    /// ..., "e": ... } ] }`). The HTTP fetch is intentionally not bundled
+    /// here so the `http` feature does not pull in an HTTP client; callers
+    /// (or a follow-up that pipes `reqwest`/`hyper` through extensions)
+    /// fetch the document and pass the parsed JSON in.
+    ///
+    /// # Errors
+    /// Returns a string describing the parse failure.
+    pub fn load_jwks(&mut self, jwks: &serde_json::Value) -> Result<(), String> {
+        let mut keys = HashMap::new();
+        for k in jwks["keys"].as_array().ok_or("jwks.keys not an array")? {
+            let kid = k["kid"].as_str().unwrap_or_default().to_string();
+            let n = k["n"].as_str().ok_or("jwk.n missing")?;
+            let e = k["e"].as_str().ok_or("jwk.e missing")?;
+            keys.insert(kid, format!("{n}.{e}"));
+        }
+        self.keys = keys;
+        Ok(())
     }
 
     /// Validate a Bearer token string.
     ///
-    /// In a production implementation, this would verify JWT signatures
-    /// against JWKS keys. For now, it performs basic structural validation
-    /// and extracts claims from the JWT payload.
+    /// Verifies the JWT signature against the configured public key map,
+    /// enforces `iss`/`aud`/`exp`/`nbf` (with 30s leeway) and the configured
+    /// `required_scopes`. Returns the extracted claims on success.
+    ///
+    /// # Errors
+    /// Returns a human-readable description of the first validation failure.
     pub fn validate_token(&self, token: &str) -> Result<TokenClaims, String> {
-        // JWT format: header.payload.signature
-        let parts: Vec<&str> = token.split('.').collect();
-        if parts.len() != 3 {
-            return Err("Invalid JWT format: expected 3 parts".to_string());
+        // Decode the unverified header to learn the algorithm and key id.
+        let header = decode_header(token).map_err(|e| format!("Invalid JWT header: {e}"))?;
+
+        // Reject HMAC and `none` algorithms to prevent alg-confusion attacks.
+        match header.alg {
+            Algorithm::RS256
+            | Algorithm::RS384
+            | Algorithm::RS512
+            | Algorithm::ES256
+            | Algorithm::ES384
+            | Algorithm::PS256
+            | Algorithm::PS384
+            | Algorithm::PS512 => {}
+            other => return Err(format!("Algorithm '{other:?}' not accepted")),
         }
 
-        // Decode the payload (base64url)
-        let payload =
-            base64url_decode(parts[1]).map_err(|e| format!("Invalid JWT payload encoding: {e}"))?;
+        let kid = header
+            .kid
+            .ok_or_else(|| "JWT missing kid header".to_string())?;
+        let key_material = self
+            .keys
+            .get(&kid)
+            .ok_or_else(|| format!("Unknown JWT signing key: {kid}"))?;
 
-        let claims: serde_json::Value = serde_json::from_slice(&payload)
-            .map_err(|e| format!("Invalid JWT payload JSON: {e}"))?;
+        let decoding_key = if let Some((n, e)) = key_material.split_once('.') {
+            DecodingKey::from_rsa_components(n, e)
+                .map_err(|err| format!("Invalid JWKS RSA components: {err}"))?
+        } else {
+            DecodingKey::from_rsa_pem(key_material.as_bytes())
+                .map_err(|err| format!("Invalid PEM signing key: {err}"))?
+        };
 
-        // Validate issuer
-        if !self.config.issuer.is_empty() {
-            let iss = claims["iss"].as_str().unwrap_or_default();
-            if iss != self.config.issuer {
-                return Err(format!(
-                    "Invalid issuer: expected '{}', got '{iss}'",
-                    self.config.issuer
-                ));
-            }
-        }
+        let mut validation = Validation::new(header.alg);
+        validation.set_issuer(&[self.config.issuer.as_str()]);
+        validation.set_audience(&[self.config.audience.as_str()]);
+        // Explicitly require all four spec claims. `jsonwebtoken` 9.x only
+        // requires `exp` by default; without this line a token missing
+        // `sub` would pass validation. `iss`/`aud` enforcement is already
+        // implied by `set_issuer`/`set_audience` above, but listing them
+        // here keeps the contract explicit (FIND-007).
+        validation.set_required_spec_claims(&["exp", "sub", "iss", "aud"]);
+        validation.validate_exp = true;
+        validation.validate_nbf = true;
+        validation.leeway = 30;
 
-        // Validate audience
-        if !self.config.audience.is_empty() {
-            let aud = claims["aud"].as_str().unwrap_or_default();
-            if aud != self.config.audience {
-                return Err(format!(
-                    "Invalid audience: expected '{}', got '{aud}'",
-                    self.config.audience
-                ));
-            }
-        }
+        let data = decode::<JwtClaims>(token, &decoding_key, &validation)
+            .map_err(|e| format!("JWT validation failed: {e}"))?;
 
-        // Extract scopes
-        let scopes_str = claims["scope"].as_str().unwrap_or_default();
-        let scopes: Vec<String> = scopes_str.split_whitespace().map(String::from).collect();
+        let scopes: Vec<String> = data
+            .claims
+            .scope
+            .split_whitespace()
+            .map(String::from)
+            .collect();
 
-        // Check required scopes
         for required in &self.config.required_scopes {
             if !scopes.iter().any(|s| s == required) {
                 return Err(format!("Missing required scope: {required}"));
@@ -133,14 +252,95 @@ impl OAuthValidator {
         }
 
         Ok(TokenClaims {
-            sub: claims["sub"].as_str().unwrap_or_default().to_string(),
-            iss: claims["iss"].as_str().unwrap_or_default().to_string(),
+            sub: data.claims.sub.unwrap_or_default(),
+            iss: data.claims.iss,
             scopes,
         })
     }
 }
 
+/// Build an [`OAuthValidator`] from a YAML config: pre-populates static
+/// keys so token validation succeeds at request time rather than per-
+/// request constructing an empty key map.
+///
+/// JWKS HTTP fetching is not yet wired here — see the module-level
+/// "Limitations" section. When `jwks_uri` is configured but no static
+/// keys are present, this function returns an explicit error rather
+/// than silently building a validator that rejects every token.
+///
+/// # Errors
+/// Returns `Err` when OAuth is enabled but no usable key source is
+/// configured, so the server fails closed at boot.
+// Async because the FIND-006 follow-up will replace the
+// `jwks_uri` rejection with an actual fetch (`reqwest`/`hyper`),
+// and the public signature should not need to change again.
+#[allow(clippy::unused_async)]
+pub async fn build_validator(
+    cfg: &crate::config::types::HttpOAuthConfig,
+) -> Result<OAuthValidator, String> {
+    let runtime_cfg = OAuthConfig {
+        enabled: cfg.enabled,
+        issuer: cfg.issuer.clone(),
+        audience: cfg.audience.clone(),
+        jwks_uri: cfg.jwks_uri.clone(),
+        client_id: cfg.client_id.clone(),
+        required_scopes: cfg.required_scopes.clone(),
+        static_keys: cfg
+            .static_keys
+            .iter()
+            .map(|k| (k.kid.clone(), k.public_key_pem.clone()))
+            .collect(),
+    };
+
+    build_validator_from_runtime(&runtime_cfg).await
+}
+
+/// Build an [`OAuthValidator`] from the runtime [`OAuthConfig`].
+///
+/// Used by the HTTP server start-up path, which already converts the
+/// YAML config into the runtime shape before constructing
+/// [`super::http::HttpTransportConfig`]. Same fail-closed semantics as
+/// [`build_validator`].
+///
+/// # Errors
+/// Returns `Err` when OAuth is enabled but no usable key source is
+/// configured.
+// See `build_validator` — async kept to absorb the FIND-006 follow-up
+// (JWKS HTTP fetch) without breaking the public signature.
+#[allow(clippy::unused_async)]
+pub async fn build_validator_from_runtime(cfg: &OAuthConfig) -> Result<OAuthValidator, String> {
+    let mut v = OAuthValidator::new(cfg.clone());
+
+    if !cfg.static_keys.is_empty() {
+        v.set_static_keys(cfg.static_keys.clone());
+    }
+
+    if cfg.jwks_uri.is_some() && v.key_count() == 0 {
+        return Err(
+            "oauth.jwks_uri configured but JWKS HTTP fetching is not yet wired; \
+             configure oauth.static_keys for now (FIND-006 follow-up will pipe \
+             reqwest through extensions)"
+                .into(),
+        );
+    }
+
+    if cfg.enabled && v.key_count() == 0 {
+        return Err(
+            "oauth.enabled=true but no static_keys (or supported jwks_uri) configured; \
+             refusing to start with an empty key map"
+                .into(),
+        );
+    }
+
+    Ok(v)
+}
+
 /// Axum middleware that validates OAuth Bearer tokens.
+///
+/// Reads the shared `Arc<OAuthValidator>` installed by [`build_validator`]
+/// from request extensions. When the validator extension is absent (server
+/// misconfiguration) the request is rejected with HTTP 503 rather than
+/// silently falling back to an empty key map.
 pub async fn oauth_middleware(request: Request, next: Next) -> Response {
     // Extract the OAuth config from extensions
     let config = request.extensions().get::<Arc<OAuthConfig>>().cloned();
@@ -169,8 +369,13 @@ pub async fn oauth_middleware(request: Request, next: Next) -> Response {
     };
     let token = token.trim();
 
-    // Validate the token
-    let validator = OAuthValidator::new((*config).clone());
+    // Read the boot-time validator from extensions. If it is missing the
+    // server was wired incorrectly — fail closed with 503 rather than
+    // building a fresh empty validator that rejects every token.
+    let Some(validator) = request.extensions().get::<Arc<OAuthValidator>>().cloned() else {
+        warn!("OAuthValidator extension missing — server misconfigured");
+        return service_unavailable("OAuth validator not configured on this server");
+    };
     match validator.validate_token(token) {
         Ok(claims) => {
             debug!(sub = %claims.sub, scopes = ?claims.scopes, "Token validated");
@@ -183,6 +388,17 @@ pub async fn oauth_middleware(request: Request, next: Next) -> Response {
     }
 }
 
+fn service_unavailable(message: &str) -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        axum::Json(json!({
+            "error": "service_unavailable",
+            "message": message,
+        })),
+    )
+        .into_response()
+}
+
 fn unauthorized(message: &str) -> Response {
     (
         StatusCode::UNAUTHORIZED,
@@ -192,63 +408,6 @@ fn unauthorized(message: &str) -> Response {
         })),
     )
         .into_response()
-}
-
-/// Decode a base64url-encoded string (no padding).
-fn base64url_decode(input: &str) -> Result<Vec<u8>, String> {
-    // Replace URL-safe chars with standard base64
-    let standard = input.replace('-', "+").replace('_', "/");
-
-    // Add padding
-    let padded = match standard.len() % 4 {
-        2 => format!("{standard}=="),
-        3 => format!("{standard}="),
-        _ => standard,
-    };
-
-    base64_decode_simple(&padded).map_err(|e| format!("base64 decode error: {e}"))
-}
-
-/// Simple base64 decoder (avoids adding a base64 crate dependency).
-#[allow(clippy::cast_possible_truncation)]
-fn base64_decode_simple(input: &str) -> Result<Vec<u8>, &'static str> {
-    fn decode_char(c: u8) -> Result<u8, &'static str> {
-        match c {
-            b'A'..=b'Z' => Ok(c - b'A'),
-            b'a'..=b'z' => Ok(c - b'a' + 26),
-            b'0'..=b'9' => Ok(c - b'0' + 52),
-            b'+' => Ok(62),
-            b'/' => Ok(63),
-            b'=' => Ok(0),
-            _ => Err("invalid base64 character"),
-        }
-    }
-
-    let bytes = input.as_bytes();
-    if !bytes.len().is_multiple_of(4) {
-        return Err("invalid base64 length");
-    }
-
-    let mut output = Vec::with_capacity(bytes.len() * 3 / 4);
-
-    for chunk in bytes.chunks(4) {
-        let a = decode_char(chunk[0])?;
-        let b = decode_char(chunk[1])?;
-        let c = decode_char(chunk[2])?;
-        let d = decode_char(chunk[3])?;
-
-        let triple = u32::from(a) << 18 | u32::from(b) << 12 | u32::from(c) << 6 | u32::from(d);
-
-        output.push((triple >> 16) as u8);
-        if chunk[2] != b'=' {
-            output.push((triple >> 8) as u8);
-        }
-        if chunk[3] != b'=' {
-            output.push(triple as u8);
-        }
-    }
-
-    Ok(output)
 }
 
 /// OAuth Authorization Server Metadata (RFC 8414).
@@ -294,21 +453,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_base64url_decode() {
-        // "Hello" in base64url
-        let encoded = "SGVsbG8";
-        let decoded = base64url_decode(encoded).unwrap();
-        assert_eq!(String::from_utf8(decoded).unwrap(), "Hello");
-    }
-
-    #[test]
-    fn test_base64url_decode_with_padding() {
-        let encoded = "dGVzdA";
-        let decoded = base64url_decode(encoded).unwrap();
-        assert_eq!(String::from_utf8(decoded).unwrap(), "test");
-    }
-
-    #[test]
     fn test_token_claims_has_scope() {
         let claims = TokenClaims {
             sub: "user1".to_string(),
@@ -351,47 +495,228 @@ mod tests {
         let result = validator.validate_token("not-a-jwt");
         assert!(result.is_err());
     }
+}
 
-    #[test]
-    fn test_validate_token_valid_structure() {
-        let config = OAuthConfig::default();
-        let validator = OAuthValidator::new(config);
+#[cfg(test)]
+mod jwt_verification_tests {
+    use super::*;
+    use base64::Engine;
+    use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+    use serde_json::json;
 
-        // Create a minimal JWT with base64url-encoded payload
-        let payload = serde_json::json!({
-            "sub": "test-user",
-            "iss": "",
-            "aud": "",
-            "scope": "mcp:tools:read mcp:admin"
-        });
-        let payload_b64 = base64url_encode(&serde_json::to_vec(&payload).unwrap());
-        let header_b64 = base64url_encode(b"{\"alg\":\"none\"}");
-        let token = format!("{header_b64}.{payload_b64}.sig");
-
-        let claims = validator.validate_token(&token).unwrap();
-        assert_eq!(claims.sub, "test-user");
-        assert_eq!(claims.scopes.len(), 2);
-        assert!(claims.has_scope("mcp:tools:read"));
+    fn priv_pem() -> &'static str {
+        include_str!("../../../tests/fixtures/oauth/test_priv.pem")
+    }
+    fn pub_pem() -> &'static str {
+        include_str!("../../../tests/fixtures/oauth/test_pub.pem")
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    fn base64url_encode(data: &[u8]) -> String {
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let mut result = String::new();
-        for chunk in data.chunks(3) {
-            let b0 = chunk[0];
-            let b1 = chunk.get(1).copied().unwrap_or(0);
-            let b2 = chunk.get(2).copied().unwrap_or(0);
-            let triple = u32::from(b0) << 16 | u32::from(b1) << 8 | u32::from(b2);
-            result.push(CHARSET[(triple >> 18) as usize & 63] as char);
-            result.push(CHARSET[(triple >> 12) as usize & 63] as char);
-            if chunk.len() > 1 {
-                result.push(CHARSET[(triple >> 6) as usize & 63] as char);
-            }
-            if chunk.len() > 2 {
-                result.push(CHARSET[triple as usize & 63] as char);
-            }
-        }
-        result.replace('+', "-").replace('/', "_")
+    fn make_validator() -> OAuthValidator {
+        let cfg = OAuthConfig {
+            enabled: true,
+            issuer: "iss".to_string(),
+            audience: "aud".to_string(),
+            jwks_uri: None,
+            client_id: "test".to_string(),
+            required_scopes: vec!["mcp:tools:execute".to_string()],
+            static_keys: vec![],
+        };
+        let mut v = OAuthValidator::new(cfg);
+        v.set_static_keys(vec![("kid-test".to_string(), pub_pem().to_string())]);
+        v
+    }
+
+    fn sign_token(claims: &serde_json::Value) -> String {
+        let mut header = Header::new(Algorithm::RS256);
+        header.kid = Some("kid-test".to_string());
+        encode(
+            &header,
+            claims,
+            &EncodingKey::from_rsa_pem(priv_pem().as_bytes()).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn rejects_token_with_invalid_signature() {
+        let v = make_validator();
+        let now = chrono::Utc::now().timestamp();
+        let claims = json!({
+            "iss": "iss", "aud": "aud", "scope": "mcp:tools:execute",
+            "exp": now + 60, "iat": now, "sub": "alice",
+        });
+        let valid = sign_token(&claims);
+        let mut parts: Vec<String> = valid.split('.').map(String::from).collect();
+        parts[2] = "AAAA".to_string();
+        let forged = parts.join(".");
+        assert!(v.validate_token(&forged).is_err());
+    }
+
+    #[test]
+    fn rejects_alg_none() {
+        let v = make_validator();
+        let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(br#"{"alg":"none","kid":"kid-test"}"#);
+        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(br#"{"iss":"iss","aud":"aud","scope":"mcp:tools:execute","exp":99999999999}"#);
+        let none_token = format!("{header}.{payload}.");
+        assert!(v.validate_token(&none_token).is_err());
+    }
+
+    #[test]
+    fn rejects_expired_token() {
+        let v = make_validator();
+        let claims = json!({
+            "iss": "iss", "aud": "aud", "scope": "mcp:tools:execute",
+            "exp": 1_000_000, "iat": 999_000, "sub": "alice",
+        });
+        let token = sign_token(&claims);
+        assert!(v.validate_token(&token).is_err());
+    }
+
+    #[test]
+    fn rejects_wrong_issuer() {
+        let v = make_validator();
+        let now = chrono::Utc::now().timestamp();
+        let claims = json!({
+            "iss": "evil", "aud": "aud", "scope": "mcp:tools:execute",
+            "exp": now + 60, "iat": now, "sub": "alice",
+        });
+        let token = sign_token(&claims);
+        assert!(v.validate_token(&token).is_err());
+    }
+
+    #[test]
+    fn rejects_missing_scope() {
+        let v = make_validator();
+        let now = chrono::Utc::now().timestamp();
+        let claims = json!({
+            "iss": "iss", "aud": "aud", "scope": "mcp:tools:read",
+            "exp": now + 60, "iat": now, "sub": "alice",
+        });
+        let token = sign_token(&claims);
+        assert!(v.validate_token(&token).is_err());
+    }
+
+    #[test]
+    fn accepts_well_formed_token() {
+        let v = make_validator();
+        let now = chrono::Utc::now().timestamp();
+        let claims = json!({
+            "iss": "iss", "aud": "aud", "scope": "mcp:tools:execute mcp:admin",
+            "exp": now + 600, "iat": now, "sub": "alice",
+        });
+        let token = sign_token(&claims);
+        let claims = v.validate_token(&token).expect("valid token");
+        assert_eq!(claims.sub, "alice");
+        assert!(claims.scopes.iter().any(|s| s == "mcp:tools:execute"));
+    }
+
+    #[tokio::test]
+    async fn build_validator_static_key_validates_token() {
+        use crate::config::types::{HttpOAuthConfig, HttpOAuthStaticKey};
+
+        let cfg = HttpOAuthConfig {
+            enabled: true,
+            issuer: "iss".into(),
+            audience: "aud".into(),
+            client_id: "test".into(),
+            required_scopes: vec!["mcp:tools:execute".into()],
+            jwks_uri: None,
+            static_keys: vec![HttpOAuthStaticKey {
+                kid: "kid-test".into(),
+                public_key_pem: pub_pem().into(),
+            }],
+        };
+
+        let v = super::build_validator(&cfg)
+            .await
+            .expect("validator built from static keys");
+        assert_eq!(v.key_count(), 1);
+
+        let now = chrono::Utc::now().timestamp();
+        let claims = json!({
+            "iss": "iss", "aud": "aud", "scope": "mcp:tools:execute",
+            "exp": now + 600, "iat": now, "sub": "bob",
+        });
+        let token = sign_token(&claims);
+        let parsed = v.validate_token(&token).expect("valid token");
+        assert_eq!(parsed.sub, "bob");
+    }
+
+    /// Build a JWT claims object with all four required spec claims
+    /// (`exp`, `sub`, `iss`, `aud`) populated, then remove the named claim
+    /// before signing. Used by the "missing required claim" tests below.
+    fn claims_omitting(name: &str) -> serde_json::Value {
+        let now = chrono::Utc::now().timestamp();
+        let mut claims = json!({
+            "iss": "iss",
+            "aud": "aud",
+            "scope": "mcp:tools:execute",
+            "exp": now + 600,
+            "iat": now,
+            "sub": "alice",
+        });
+        claims
+            .as_object_mut()
+            .expect("claims is an object")
+            .remove(name);
+        claims
+    }
+
+    #[test]
+    fn token_missing_sub_is_rejected() {
+        let v = make_validator();
+        let token = sign_token(&claims_omitting("sub"));
+        assert!(
+            v.validate_token(&token).is_err(),
+            "token without `sub` claim must be rejected"
+        );
+    }
+
+    #[test]
+    fn token_missing_iss_is_rejected() {
+        let v = make_validator();
+        let token = sign_token(&claims_omitting("iss"));
+        assert!(
+            v.validate_token(&token).is_err(),
+            "token without `iss` claim must be rejected"
+        );
+    }
+
+    #[test]
+    fn token_missing_aud_is_rejected() {
+        let v = make_validator();
+        let token = sign_token(&claims_omitting("aud"));
+        assert!(
+            v.validate_token(&token).is_err(),
+            "token without `aud` claim must be rejected"
+        );
+    }
+
+    #[test]
+    fn token_missing_exp_is_rejected() {
+        let v = make_validator();
+        let token = sign_token(&claims_omitting("exp"));
+        assert!(
+            v.validate_token(&token).is_err(),
+            "token without `exp` claim must be rejected"
+        );
+    }
+
+    #[tokio::test]
+    async fn build_validator_rejects_empty_when_enabled() {
+        use crate::config::types::HttpOAuthConfig;
+
+        let cfg = HttpOAuthConfig {
+            enabled: true,
+            issuer: "iss".into(),
+            audience: "aud".into(),
+            client_id: "test".into(),
+            required_scopes: vec![],
+            jwks_uri: None,
+            static_keys: vec![],
+        };
+        assert!(super::build_validator(&cfg).await.is_err());
     }
 }

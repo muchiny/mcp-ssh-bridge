@@ -137,13 +137,34 @@ impl VaultCommandBuilder {
 
     /// Build a `vault kv put` command.
     ///
-    /// Constructs: `vault kv put [-mount={mount}] {path} {key=value}...`
+    /// Constructs:
+    /// ```text
+    /// vault kv put [-mount={mount}] {path} - <<'VAULT_DATA_EOF_<uuid>'
+    /// k1=v1
+    /// k2=v2
+    /// VAULT_DATA_EOF_<uuid>
+    /// ```
+    ///
+    /// **FIND-031 (Sprint 2 Task 21):** the `key=value` pairs are piped via
+    /// stdin (`-` argument + heredoc) instead of being appended to argv.
+    /// The previous shape `vault kv put path key=secret_value` exposed every
+    /// secret value to anyone running `ps eww` on the remote host for the
+    /// lifetime of the vault process. The heredoc body is shell-literal
+    /// (single-quoted terminator, no expansion) and the terminator is
+    /// randomized per call to defeat any value that tries to close the
+    /// heredoc early. Same pattern as `template_apply` (commit 2da5d55).
+    ///
+    /// `data` carries `key=value` pairs; values are typically secrets, so the
+    /// caller is expected to pass `Zeroizing<String>` (FIND-030) to avoid
+    /// gratuitous heap residency. The slice is borrowed immutably here; the
+    /// owner controls when the secret bytes are wiped.
+    ///
     /// # Errors
     ///
     /// Returns [`BridgeError::CommandDenied`] if `path` contains unsafe characters.
     pub fn build_write_command(
         path: &str,
-        data: &[String],
+        data: &[zeroize::Zeroizing<String>],
         vault_addr: Option<&str>,
         mount: Option<&str>,
     ) -> Result<String> {
@@ -162,9 +183,26 @@ impl VaultCommandBuilder {
 
         let _ = write!(cmd, " {}", shell_escape(path));
 
+        // FIND-031: pipe data via stdin heredoc. Terminator is randomized
+        // and re-rolled if any value happens to contain a line equal to the
+        // candidate terminator (astronomically unlikely with a UUID, but
+        // defended in depth — an attacker who controls a value could
+        // otherwise close the heredoc early).
+        let terminator = loop {
+            let candidate = format!("VAULT_DATA_EOF_{}", uuid::Uuid::new_v4().simple());
+            if !data
+                .iter()
+                .any(|kv| kv.lines().any(|l| l == candidate.as_str()))
+            {
+                break candidate;
+            }
+        };
+
+        let _ = writeln!(cmd, " - <<'{terminator}'");
         for kv in data {
-            let _ = write!(cmd, " {}", shell_escape(kv));
+            let _ = writeln!(cmd, "{}", kv.as_str());
         }
+        cmd.push_str(&terminator);
 
         Ok(cmd)
     }
@@ -257,17 +295,23 @@ mod tests {
 
     #[test]
     fn test_write_simple() {
-        let data = vec!["username=admin".to_string(), "password=secret".to_string()];
+        let data = vec![
+            zeroize::Zeroizing::new("username=admin".to_string()),
+            zeroize::Zeroizing::new("password=secret".to_string()),
+        ];
         let cmd =
             VaultCommandBuilder::build_write_command("secret/myapp", &data, None, None).unwrap();
-        assert!(cmd.contains("vault kv put 'secret/myapp'"));
-        assert!(cmd.contains("'username=admin'"));
-        assert!(cmd.contains("'password=secret'"));
+        // FIND-031: argv is `vault kv put 'path' - <<'TERMINATOR'`; values
+        // live in the heredoc body, not as argv-visible `key=value` pairs.
+        assert!(cmd.contains("vault kv put 'secret/myapp' - <<"));
+        // Body is shell-literal — values appear verbatim, not single-quoted.
+        assert!(cmd.contains("\nusername=admin\n"));
+        assert!(cmd.contains("\npassword=secret\n"));
     }
 
     #[test]
     fn test_write_with_mount() {
-        let data = vec!["key=value".to_string()];
+        let data = vec![zeroize::Zeroizing::new("key=value".to_string())];
         let cmd = VaultCommandBuilder::build_write_command("myapp/config", &data, None, Some("kv"))
             .unwrap();
         assert!(cmd.contains("-mount='kv'"));
@@ -284,10 +328,15 @@ mod tests {
 
     #[test]
     fn test_write_injection_in_data_value() {
-        let data = vec!["password=s3cr3t; rm -rf /".to_string()];
+        let data = vec![zeroize::Zeroizing::new(
+            "password=s3cr3t; rm -rf /".to_string(),
+        )];
         let cmd =
             VaultCommandBuilder::build_write_command("secret/app", &data, None, None).unwrap();
-        assert!(cmd.contains("'password=s3cr3t; rm -rf /'"));
+        // FIND-031: value is a heredoc body line (single-quoted terminator
+        // disables shell expansion), so `;` and `rm -rf /` are literal data,
+        // not shell metacharacters. Verify the line shape.
+        assert!(cmd.contains("\npassword=s3cr3t; rm -rf /\n"));
     }
 
     #[test]
@@ -339,7 +388,10 @@ mod tests {
 
     #[test]
     fn test_write_all_options() {
-        let data = vec!["user=admin".to_string(), "pass=secret".to_string()];
+        let data = vec![
+            zeroize::Zeroizing::new("user=admin".to_string()),
+            zeroize::Zeroizing::new("pass=secret".to_string()),
+        ];
         let cmd = VaultCommandBuilder::build_write_command(
             "secret/myapp",
             &data,
@@ -350,8 +402,9 @@ mod tests {
         assert!(cmd.contains("VAULT_ADDR='https://vault:8200'"));
         assert!(cmd.contains("-mount='kv'"));
         assert!(cmd.contains("'secret/myapp'"));
-        assert!(cmd.contains("'user=admin'"));
-        assert!(cmd.contains("'pass=secret'"));
+        // FIND-031: values are heredoc body lines, not argv args.
+        assert!(cmd.contains("\nuser=admin\n"));
+        assert!(cmd.contains("\npass=secret\n"));
     }
 
     #[test]
@@ -366,26 +419,33 @@ mod tests {
 
     #[test]
     fn test_write_empty_data() {
-        let data: Vec<String> = vec![];
+        let data: Vec<zeroize::Zeroizing<String>> = vec![];
         let cmd =
             VaultCommandBuilder::build_write_command("secret/myapp", &data, None, None).unwrap();
-        assert!(cmd.contains("vault kv put 'secret/myapp'"));
+        // FIND-031: even with no data, the heredoc structure is still produced
+        // (vault accepts an empty body — a no-op write).
+        assert!(cmd.contains("vault kv put 'secret/myapp' - <<"));
     }
 
     #[test]
     fn test_write_single_data_item() {
-        let data = vec!["key=val".to_string()];
+        let data = vec![zeroize::Zeroizing::new("key=val".to_string())];
         let cmd =
             VaultCommandBuilder::build_write_command("secret/myapp", &data, None, None).unwrap();
-        assert!(cmd.contains("'secret/myapp' 'key=val'"));
+        // FIND-031: shape is `... 'secret/myapp' - <<'TERMINATOR'\nkey=val\nTERMINATOR`.
+        assert!(cmd.contains("'secret/myapp' - <<"));
+        assert!(cmd.contains("\nkey=val\n"));
     }
 
     #[test]
     fn test_write_data_with_single_quotes() {
-        let data = vec!["msg=it's secret".to_string()];
+        let data = vec![zeroize::Zeroizing::new("msg=it's secret".to_string())];
         let cmd =
             VaultCommandBuilder::build_write_command("secret/app", &data, None, None).unwrap();
-        assert!(cmd.contains("it'\\''s secret"));
+        // FIND-031: heredoc body is shell-literal; the apostrophe is preserved
+        // verbatim, no shell-escape needed (the single-quoted terminator
+        // disables expansion).
+        assert!(cmd.contains("\nmsg=it's secret\n"));
     }
 
     #[test]
@@ -444,5 +504,62 @@ mod tests {
     fn test_validate_vault_path_single_dot_allowed() {
         assert!(validate_vault_path("secret/v1.0/config").is_ok());
         assert!(validate_vault_path("secret/my.app").is_ok());
+    }
+
+    // ============== FIND-031: argv leak prevention ==============
+
+    /// FIND-031: secrets must not appear as `vault kv put path KEY=VALUE`
+    /// because the remote process's `ps eww` would expose `VALUE`.
+    /// Instead the builder pipes a stdin heredoc whose body is shell-literal
+    /// (single-quoted terminator), so `VALUE` lives in the kernel pipe buffer
+    /// and never in argv.
+    #[test]
+    fn vault_write_excludes_secret_value_from_argv() {
+        let data = vec![zeroize::Zeroizing::new("k=topsecret".to_string())];
+        let cmd =
+            VaultCommandBuilder::build_write_command("secret/foo", &data, None, None).unwrap();
+
+        // Split on `<<` — anything before is argv, anything after is the
+        // heredoc construct (terminator + body). Secret may appear in the
+        // body, never in argv.
+        let argv_only = cmd.split("<<").next().unwrap();
+        assert!(
+            !argv_only.contains("topsecret"),
+            "FIND-031: secret leaked into argv portion of command: {cmd}"
+        );
+    }
+
+    /// FIND-031: the builder must use a stdin pipe (`-` argument + heredoc).
+    #[test]
+    fn vault_write_uses_stdin_heredoc() {
+        let data = vec![zeroize::Zeroizing::new("k=v".to_string())];
+        let cmd =
+            VaultCommandBuilder::build_write_command("secret/foo", &data, None, None).unwrap();
+
+        assert!(
+            cmd.contains("vault kv put"),
+            "command must still invoke vault kv put: {cmd}"
+        );
+        // The dash signals "read key=value lines from stdin" to vault.
+        assert!(
+            cmd.contains(" - <<"),
+            "FIND-031: must pipe data via stdin heredoc, got: {cmd}"
+        );
+    }
+
+    /// FIND-031: heredoc terminator is randomized so a malicious value
+    /// cannot close the heredoc early and inject shell. Same pattern as
+    /// `template_apply` (commit 2da5d55).
+    #[test]
+    fn vault_write_heredoc_terminator_is_randomized() {
+        let data = vec![zeroize::Zeroizing::new("k=v".to_string())];
+        let cmd1 =
+            VaultCommandBuilder::build_write_command("secret/foo", &data, None, None).unwrap();
+        let cmd2 =
+            VaultCommandBuilder::build_write_command("secret/foo", &data, None, None).unwrap();
+        assert_ne!(
+            cmd1, cmd2,
+            "heredoc terminator must be re-rolled per call to defeat injection"
+        );
     }
 }

@@ -234,7 +234,15 @@ impl SshFileWriteHandler {
         }
 
         let host = args.host.clone();
-        let host_config = ctx.config.hosts.get(&host).expect("host checked above");
+        // Host existence is checked in `execute()` before this function is
+        // called, but we re-validate via `?` rather than `.expect()` so a
+        // future refactor that removes the upstream check still returns a
+        // structured error instead of panicking.
+        let host_config = ctx
+            .config
+            .hosts
+            .get(&host)
+            .ok_or_else(|| BridgeError::UnknownHost { host: host.clone() })?;
         let retry_config = limits.retry_config();
         let jump_host = host_config.proxy_jump.as_ref().and_then(|jump_name| {
             ctx.config

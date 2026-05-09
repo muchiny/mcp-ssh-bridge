@@ -159,7 +159,15 @@ security-audit: audit deny security-tests geiger
 
 # Scan for unsafe code in dependencies (requires cargo-geiger)
 geiger:
-	@command -v cargo-geiger >/dev/null 2>&1 && cargo geiger --all-features --output-format ascii || echo "cargo-geiger not installed, run: cargo install cargo-geiger --locked"
+	@command -v cargo-geiger >/dev/null 2>&1 || { echo "cargo-geiger not installed, run: cargo install cargo-geiger --locked"; exit 0; }
+	@# FIND-021 (audit 2026-05-09): cloud features (aws-sdk, azure, gcp)
+	@# pull nkeys-0.4.5 which cargo-geiger fails to extract on a cold
+	@# graph. Pre-fetch first; if extraction still fails on --all-features,
+	@# fall back to --forbid-only (acceptable since the workspace already
+	@# enforces `#![forbid(unsafe_code)]`).
+	@cargo fetch >/dev/null 2>&1 || true
+	@cargo geiger --all-features --output-format Ascii 2>/dev/null \
+	    || cargo geiger --forbid-only --output-format Ascii
 
 # Check for semver-breaking API changes (requires cargo-semver-checks)
 semver-checks:

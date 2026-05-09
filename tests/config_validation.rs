@@ -240,8 +240,9 @@ hosts:
     assert!(config.limits.max_output_bytes > 0);
     assert!(config.limits.max_concurrent_commands > 0);
 
-    // SSH config discovery enabled by default
-    assert!(config.ssh_config.enabled);
+    // FIND-023 (audit 2026-05-09): SSH config discovery is now opt-in.
+    // Operators must set `ssh_config.enabled: true` to scan ~/.ssh/config.
+    assert!(!config.ssh_config.enabled);
 }
 
 #[test]

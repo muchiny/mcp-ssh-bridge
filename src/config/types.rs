@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
     pub hosts: HashMap<String, HostConfig>,
@@ -46,6 +47,7 @@ pub struct Config {
 /// This enables air-gapped environments where AWX is not directly
 /// reachable from the MCP server host.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct AwxConfig {
     /// SSH host alias (from `hosts` section) used to relay API calls.
     pub ssh_host: String,
@@ -76,8 +78,9 @@ fn default_true() -> bool {
 
 /// HTTP transport configuration for the YAML config.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct HttpTransportConfig {
-    /// Bind address (default: `"0.0.0.0:3000"`).
+    /// Bind address (default: `"127.0.0.1:3000"` — loopback only).
     #[serde(default = "default_http_bind")]
     pub bind: String,
 
@@ -102,6 +105,13 @@ pub struct HttpTransportConfig {
     /// their public origin (e.g. `https://app.example.com`).
     #[serde(default = "default_http_allowed_origins")]
     pub allowed_origins: Vec<String>,
+
+    /// SECURITY: bypass the loopback-or-OAuth check enforced by `serve`.
+    /// Required only when intentionally exposing the bridge on a public
+    /// interface without OAuth (e.g. behind a separate auth proxy).
+    /// Defaults to `false`.
+    #[serde(default)]
+    pub allow_unsafe_bind: bool,
 }
 
 impl Default for HttpTransportConfig {
@@ -113,12 +123,13 @@ impl Default for HttpTransportConfig {
             max_sessions: default_http_max_sessions(),
             oauth: HttpOAuthConfig::default(),
             allowed_origins: default_http_allowed_origins(),
+            allow_unsafe_bind: false,
         }
     }
 }
 
 fn default_http_bind() -> String {
-    "0.0.0.0:3000".to_string()
+    "127.0.0.1:3000".to_string()
 }
 
 fn default_http_allowed_origins() -> Vec<String> {
@@ -146,7 +157,7 @@ const fn default_http_max_sessions() -> usize {
 
 /// OAuth configuration for the HTTP transport (YAML-serializable).
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HttpOAuthConfig {
     /// Enable OAuth authentication (default: false).
     #[serde(default)]
@@ -161,6 +172,11 @@ pub struct HttpOAuthConfig {
     pub audience: String,
 
     /// JWKS endpoint for key validation.
+    ///
+    /// NOTE: JWKS HTTP fetching is not yet wired in this build —
+    /// configure [`Self::static_keys`] for now. The follow-up will pipe
+    /// `reqwest`/`hyper` through extensions and fetch this document at
+    /// boot.
     #[serde(default)]
     pub jwks_uri: Option<String>,
 
@@ -171,9 +187,33 @@ pub struct HttpOAuthConfig {
     /// Required scopes for access.
     #[serde(default)]
     pub required_scopes: Vec<String>,
+
+    /// Static signing keys for token validation, keyed by `kid`.
+    ///
+    /// Each entry is `(key_id, pem_encoded_public_key)`. Either
+    /// `static_keys` or `jwks_uri` MUST be configured when
+    /// `enabled = true`; otherwise the server fails closed at boot
+    /// rather than rejecting every token at request time.
+    #[serde(default)]
+    pub static_keys: Vec<HttpOAuthStaticKey>,
+}
+
+/// A single OAuth signing key entry for static-key validation.
+///
+/// Used by [`HttpOAuthConfig::static_keys`] to populate the validator's
+/// in-memory key map at boot. Keys are addressed by their JWT `kid`
+/// header.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HttpOAuthStaticKey {
+    /// JWT `kid` header value this key matches.
+    pub kid: String,
+    /// PEM-encoded RSA public key (PKCS#1 or `SubjectPublicKeyInfo`).
+    pub public_key_pem: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct HostConfig {
     pub hostname: String,
 
@@ -206,9 +246,14 @@ pub struct HostConfig {
     #[serde(default)]
     pub socks_proxy: Option<SocksProxyConfig>,
 
-    /// Optional sudo password for this host (used with sudo commands)
+    /// Optional sudo password for this host (used with sudo commands).
+    ///
+    /// Wrapped in [`Zeroizing<String>`] so the byte buffer is overwritten when
+    /// the value is dropped (FIND-028). Hot-reload via `config/watcher.rs`
+    /// drops the old `HostConfig`, which now wipes the prior password
+    /// instead of leaving it resident on the heap for the process lifetime.
     #[serde(default)]
-    pub sudo_password: Option<String>,
+    pub sudo_password: Option<Zeroizing<String>>,
 
     /// Tags for grouping hosts (e.g., "production", "staging", "database")
     #[serde(default)]
@@ -270,6 +315,7 @@ pub struct HostConfig {
 
 /// Per-host retry configuration override
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct HostRetryConfig {
     /// Maximum retry attempts (overrides global `limits.retry_attempts`)
     #[serde(default)]
@@ -392,6 +438,7 @@ const fn default_port() -> u16 {
 
 /// SOCKS proxy configuration for tunneling SSH connections
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SocksProxyConfig {
     /// Proxy hostname or IP
     pub hostname: String,
@@ -408,9 +455,14 @@ pub struct SocksProxyConfig {
     #[serde(default)]
     pub username: Option<String>,
 
-    /// Optional password for SOCKS5 authentication
+    /// Optional password for SOCKS5 authentication.
+    ///
+    /// Wrapped in `Zeroizing<String>` so the byte buffer is overwritten
+    /// when the value is dropped (FIND-014). `SocksProxyConfig` lives for
+    /// the entire process; without `Zeroizing` the password sits in heap
+    /// from start to exit.
     #[serde(default)]
-    pub password: Option<String>,
+    pub password: Option<Zeroizing<String>>,
 }
 
 /// SOCKS protocol version
@@ -473,6 +525,7 @@ pub enum AuthConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
     #[serde(default = "default_security_mode")]
     pub mode: SecurityMode,
@@ -496,7 +549,11 @@ pub struct SecurityConfig {
     /// `elicitation` capability, the server asks the user to confirm; on
     /// decline/cancel the tool call returns an error without executing.
     /// When the client does not support elicitation, the call is rejected.
-    #[serde(default)]
+    ///
+    /// Defaults to `true` (security-first); set to `false` to opt out
+    /// (NOT RECOMMENDED in production — a compromised MCP client can
+    /// mass-execute destructive tools without surfacing to a human).
+    #[serde(default = "default_require_elicitation_on_destructive")]
     pub require_elicitation_on_destructive: bool,
 }
 
@@ -508,9 +565,18 @@ impl Default for SecurityConfig {
             blacklist: default_blacklist(),
             sanitize_patterns: Vec::new(),
             sanitize: SanitizeConfig::default(),
-            require_elicitation_on_destructive: false,
+            require_elicitation_on_destructive: default_require_elicitation_on_destructive(),
         }
     }
+}
+
+/// Default for `SecurityConfig::require_elicitation_on_destructive`.
+///
+/// FIND-022: defaults to `true` (security-first). Operators who want the
+/// legacy permissive behaviour must opt out explicitly via
+/// `security.require_elicitation_on_destructive: false`.
+fn default_require_elicitation_on_destructive() -> bool {
+    true
 }
 
 /// Advanced sanitizer configuration
@@ -520,6 +586,7 @@ impl Default for SecurityConfig {
 /// - Disable specific builtin pattern categories
 /// - Add custom patterns with custom replacement text
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SanitizeConfig {
     /// Enable/disable sanitization entirely (default: true)
     #[serde(default = "default_sanitize_enabled")]
@@ -605,6 +672,7 @@ const fn default_sanitize_enabled() -> bool {
 
 /// Custom sanitization pattern with configurable replacement
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CustomSanitizePattern {
     /// Regex pattern to match sensitive data
     pub pattern: String,
@@ -688,6 +756,7 @@ pub enum SecurityMode {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct LimitsConfig {
     #[serde(default = "default_command_timeout")]
     pub command_timeout_seconds: u64,
@@ -845,6 +914,7 @@ pub enum MatchMode {
 
 /// Per-client override for output limits, matched by MCP client name.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ClientOverride {
     /// Pattern to match against the MCP client name (case-insensitive)
     pub name_contains: String,
@@ -975,6 +1045,7 @@ const fn default_sftp_write_threshold() -> usize {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuditConfig {
     #[serde(default = "default_audit_enabled")]
     pub enabled: bool,
@@ -1020,6 +1091,7 @@ const fn default_audit_retain() -> u32 {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SessionConfig {
     /// Maximum number of concurrent sessions
     #[serde(default = "default_max_sessions")]
@@ -1060,10 +1132,14 @@ const fn default_session_max_age() -> u64 {
 ///
 /// When enabled, the bridge will parse `~/.ssh/config` and automatically
 /// discover hosts. YAML-defined hosts take precedence over discovered ones.
-/// Enabled by default to reduce time-to-first-command.
+/// FIND-023: disabled by default. Enabling exposes the operator's full
+/// personal SSH host inventory (often >> the YAML-declared production set)
+/// to MCP clients via the bridge's host-listing surfaces. Operators who
+/// want the time-to-first-command convenience must opt in explicitly.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SshConfigDiscovery {
-    /// Enable SSH config auto-discovery (default: true)
+    /// Enable SSH config auto-discovery (default: false — FIND-023).
     #[serde(default = "default_ssh_config_enabled")]
     pub enabled: bool,
 
@@ -1087,7 +1163,8 @@ impl Default for SshConfigDiscovery {
 }
 
 const fn default_ssh_config_enabled() -> bool {
-    true
+    // FIND-023: discovery is opt-in. See SshConfigDiscovery doc comment.
+    false
 }
 
 fn default_ssh_config_path() -> String {
@@ -1234,19 +1311,58 @@ fn default_ssh_config_path() -> String {
 /// - `recording`: `ssh_recording_start`, `ssh_recording_stop`, `ssh_recording_list`,
 ///   `ssh_recording_replay`, `ssh_recording_verify`
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolGroupsConfig {
     /// Map of group name to enabled status.
-    /// Groups not listed are enabled by default.
+    ///
+    /// FIND-024 (audit 2026-05-09): unlisted groups are now treated as
+    /// **disabled** unless they appear in [`MINIMAL_DEFAULT_GROUPS`]. The
+    /// previous semantics (unlisted = enabled) exposed all 75 groups /
+    /// 357 handlers out of the box, violating least-privilege for
+    /// operators who only need a small subset (e.g. `docker` + `service`).
+    ///
+    /// The default value is an empty map; resolution falls through to
+    /// `MINIMAL_DEFAULT_GROUPS` membership in [`Self::is_group_enabled`].
+    /// A YAML config that explicitly lists `core: false` still wins over
+    /// the default profile.
+    ///
+    /// To enable a non-default group, list it explicitly with `true`. To
+    /// disable a group from the default profile, list it with `false`.
     #[serde(default)]
     pub groups: HashMap<String, bool>,
 }
 
+/// Default-enabled tool groups (FIND-024).
+///
+/// Covers the eight groups that nearly every operator workflow uses:
+/// raw exec, file ops, directory listing, process management, system
+/// monitoring, network diagnostics, systemd service management, and
+/// persistent tmux sessions. Everything else (containers, K8s, AD/LDAP,
+/// cloud, `ESXi`, Hyper-V, Windows-specific, etc.) requires explicit
+/// opt-in via the YAML map.
+pub const MINIMAL_DEFAULT_GROUPS: &[&str] = &[
+    "core",
+    "file_ops",
+    "directory",
+    "process",
+    "monitoring",
+    "network",
+    "systemd",
+    "sessions",
+];
+
 impl ToolGroupsConfig {
     /// Check if a given tool group is enabled.
-    /// Groups not explicitly listed default to enabled.
+    ///
+    /// Resolution order:
+    /// 1. If the group appears in `self.groups` with an explicit value, use it.
+    /// 2. Otherwise, group is enabled iff it is in [`MINIMAL_DEFAULT_GROUPS`].
     #[must_use]
     pub fn is_group_enabled(&self, group: &str) -> bool {
-        self.groups.get(group).copied().unwrap_or(true)
+        match self.groups.get(group).copied() {
+            Some(explicit) => explicit,
+            None => MINIMAL_DEFAULT_GROUPS.contains(&group),
+        }
     }
 }
 
@@ -1539,7 +1655,7 @@ mod tests {
         assert_eq!(config.port, 9050);
         assert_eq!(config.version, SocksVersion::Socks4);
         assert_eq!(config.username, Some("user".to_string()));
-        assert_eq!(config.password, Some("pass".to_string()));
+        assert_eq!(config.password.as_deref().map(String::as_str), Some("pass"));
     }
 
     #[test]
@@ -1670,11 +1786,26 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_groups_config_unlisted_group_is_enabled() {
+    fn test_tool_groups_config_default_profile_membership() {
+        // FIND-024: default profile is the 8 groups in MINIMAL_DEFAULT_GROUPS.
+        // Everything else is opt-in.
         let config = ToolGroupsConfig::default();
+
+        // In default profile.
         assert!(config.is_group_enabled("core"));
         assert!(config.is_group_enabled("sessions"));
-        assert!(config.is_group_enabled("anything"));
+        assert!(config.is_group_enabled("file_ops"));
+        assert!(config.is_group_enabled("directory"));
+        assert!(config.is_group_enabled("process"));
+        assert!(config.is_group_enabled("monitoring"));
+        assert!(config.is_group_enabled("network"));
+        assert!(config.is_group_enabled("systemd"));
+
+        // NOT in default profile — must be opt-in now.
+        assert!(!config.is_group_enabled("docker"));
+        assert!(!config.is_group_enabled("kubernetes"));
+        assert!(!config.is_group_enabled("active_directory"));
+        assert!(!config.is_group_enabled("anything"));
     }
 
     #[test]
@@ -1708,15 +1839,19 @@ mod tests {
         assert!(!config.is_group_enabled("sessions"));
         assert!(!config.is_group_enabled("monitoring"));
         assert!(config.is_group_enabled("core"));
-        assert!(config.is_group_enabled("file_transfer")); // Unlisted = enabled
+        // FIND-024: `file_transfer` is NOT in MINIMAL_DEFAULT_GROUPS, so
+        // unlisted means disabled now (was enabled prior to FIND-024).
+        assert!(!config.is_group_enabled("file_transfer"));
     }
 
     #[test]
     fn test_tool_groups_config_empty_deserialization() {
+        // FIND-024: empty config -> default profile via MINIMAL_DEFAULT_GROUPS.
         let yaml = "{}";
         let config: ToolGroupsConfig = serde_saphyr::from_str(yaml).unwrap();
         assert!(config.groups.is_empty());
-        assert!(config.is_group_enabled("core"));
+        assert!(config.is_group_enabled("core")); // in default profile
+        assert!(!config.is_group_enabled("docker")); // not in default profile
     }
 
     #[test]
