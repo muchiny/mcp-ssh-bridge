@@ -377,9 +377,15 @@ impl SshClient {
 
         let handle = client::connect_stream(config, stream, handler)
             .await
-            .map_err(|e| BridgeError::SshConnection {
-                host: host_name.to_string(),
-                reason: format!("Failed to establish SSH through tunnel: {e}"),
+            .map_err(|e| {
+                // FIND-016: sanitize before embedding so russh-emitted diagnostics
+                // that name auth methods do not leak through the jump-host
+                // connect-phase error.
+                let sanitized = sanitize_ssh_error(&e);
+                BridgeError::SshConnection {
+                    host: host_name.to_string(),
+                    reason: format!("Failed to establish SSH through tunnel: {sanitized}"),
+                }
             })?;
 
         tracing::debug!(host = %host_name, "Authenticating through tunnel");
@@ -492,10 +498,14 @@ impl SshClient {
             client::connect_stream(config, tcp_stream, handler)
                 .await
                 .map_err(|e| {
-                    tracing::error!(host = %host_name, error = %e, "SSH connection through SOCKS proxy failed");
+                    // FIND-016: sanitize before logging/embedding so russh-emitted
+                    // diagnostics that name auth methods (publickey, password,
+                    // gssapi-*) do not leak through connect-phase errors.
+                    let sanitized = sanitize_ssh_error(&e);
+                    tracing::error!(host = %host_name, error = %sanitized, "SSH connection through SOCKS proxy failed");
                     BridgeError::SshConnection {
                         host: host_name.to_string(),
-                        reason: format!("Failed to establish SSH through SOCKS proxy: {e}"),
+                        reason: format!("Failed to establish SSH through SOCKS proxy: {sanitized}"),
                     }
                 })
         } else {
@@ -512,10 +522,12 @@ impl SshClient {
                     }
                 })?
                 .map_err(|e| {
-                    tracing::error!(host = %host_name, addr = %addr, error = %e, "SSH connection failed");
+                    // FIND-016: same sanitization as the SOCKS branch above.
+                    let sanitized = sanitize_ssh_error(&e);
+                    tracing::error!(host = %host_name, addr = %addr, error = %sanitized, "SSH connection failed");
                     BridgeError::SshConnection {
                         host: host_name.to_string(),
-                        reason: e.to_string(),
+                        reason: sanitized,
                     }
                 })
         }
@@ -646,24 +658,24 @@ impl SshClient {
         use russh::keys::agent::client::AgentClient;
 
         let mut agent = AgentClient::connect_env().await.map_err(|e| {
-            tracing::error!(host = %host_name, error = %e, "SSH agent connection failed");
+            // FIND-016: sanitize the trace event too — the error-variant `host`
+            // is already sanitized below but the trace was emitting the raw
+            // russh diagnostic.
+            let sanitized = sanitize_ssh_error(&e);
+            tracing::error!(host = %host_name, error = %sanitized, "SSH agent connection failed");
             BridgeError::SshAuth {
                 user: host.user.clone(),
-                host: format!(
-                    "{host_name}: SSH agent connection failed: {}",
-                    sanitize_ssh_error(&e)
-                ),
+                host: format!("{host_name}: SSH agent connection failed: {sanitized}"),
             }
         })?;
 
         let identities = agent.request_identities().await.map_err(|e| {
-            tracing::error!(host = %host_name, error = %e, "Failed to get agent identities");
+            // FIND-016: same sanitization pattern as the agent-connect site above.
+            let sanitized = sanitize_ssh_error(&e);
+            tracing::error!(host = %host_name, error = %sanitized, "Failed to get agent identities");
             BridgeError::SshAuth {
                 user: host.user.clone(),
-                host: format!(
-                    "{host_name}: Failed to get agent identities: {}",
-                    sanitize_ssh_error(&e)
-                ),
+                host: format!("{host_name}: Failed to get agent identities: {sanitized}"),
             }
         })?;
 
