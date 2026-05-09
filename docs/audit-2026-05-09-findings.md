@@ -21,6 +21,7 @@ This file is the **single source of truth** for every concrete problem the audit
 | FIND-004 | `src/config/loader.rs:45` | `serde_saphyr::from_str(&content)` in main config loader. Lower risk (file is permission-checked) but completes the codebase pattern fix. | Same as FIND-001. | Task 4 + Task 5 | open |
 | FIND-005 | `src/mcp/transport/http.rs:202` | Axum router has only `CorsLayer::new()`. Missing: `TimeoutLayer + HandleErrorLayer`, explicit `DefaultBodyLimit`, `SetSensitiveRequestHeadersLayer + SetSensitiveResponseHeadersLayer`, `RequestIdLayer + PropagateRequestIdLayer`. | Add full tower-http middleware stack per `audit/2026-05-09/surface/context7/axum.md`. Without `HandleErrorLayer`, requests hang on timeout. Without sensitive-headers, `Authorization`/`Cookie` leak in tracing. | Task 4 (context7 drift) + Task 5 (oauth section open Q) | open |
 | FIND-006 | `src/mcp/transport/oauth.rs` + `src/mcp/transport/http.rs:275` | `oauth_middleware` constructs `OAuthValidator::new((*config).clone())` per request → `keys: HashMap::new()` → every token rejected with "Unknown JWT signing key". Module doc L9–L18 states production wiring is "left for a follow-up". OAuth feature is not usable in production as wired. | Implement key population path (`set_static_keys` from config or `load_jwks` from JWKS URI) before middleware dispatch. Decide: per-request fresh validator vs shared `Arc<OAuthValidator>` (latter requires `RwLock`). | Task 5 (oauth section, structural observation) | open |
+| FIND-038 | `src/mcp/server.rs:91` (`active_requests: Arc<Mutex<HashMap<String, CancellationToken>>>`) + insert at L720, lookup at L274 | **Direct cross-session attack.** HashMap keyed on JSON-RPC request id (caller-chosen, NOT session-scoped). Client A sends `tools/call { id: 42 }` → server stores `active_requests["42"] = token_A`. Client B (concurrent session) sends `notifications/cancelled { params: { requestId: "42" } }` → `cancel_request("42")` removes A's entry, cancels A's token. Client A's request is aborted mid-execution. **Vuln 8 sibling — same defect class, same shape.** | Apply the same per-session fix as Vuln 8: move `active_requests` into a per-session `Arc<...>` allocated in `serve_session` (mirror L641 `session_pending`); clone Arc into spawned task at L720; route `cancel_request` lookups through the session-local map. Also include session id in the key for defense-in-depth. | Task 13 (variant-analysis) | open |
 
 ---
 
@@ -36,6 +37,10 @@ This file is the **single source of truth** for every concrete problem the audit
 | FIND-028 | `src/config/types.rs:219` | `HostConfig.sudo_password: Option<String>` not `Zeroizing`. Same class as FIND-014 (SOCKS password) on the sibling field. `HostConfig` lives for entire process lifetime; password sits in heap from start to exit. Hot-reload (`src/config/watcher.rs`) does NOT wipe old allocations. | `pub sudo_password: Option<Zeroizing<String>>`. Update borrow sites with `.as_deref()` — no behavior change. | Task 11 (zeroize-audit) | open |
 | FIND-029 | `src/mcp/tool_handlers/ssh_db_query.rs:27` (+ likely `ssh_db_dump.rs`, `ssh_mysql_query.rs`, `ssh_postgresql_query.rs`) | `SshDbQueryArgs.db_password: Option<String>` arg not `Zeroizing`. Password from MCP JSON-RPC request body sits in plain heap during handler. `as_deref()` borrows the underlying `&str` for `database.rs::write_password_env`; drop of `Args` does NOT wipe. | `db_password: Option<Zeroizing<String>>` in every DB handler `Args` struct. | Task 11 (zeroize-audit) | open |
 | FIND-032 | `src/domain/yq_filter.rs:42` | `yaml_to_json_string` uses `serde_saphyr::from_str(yaml)` without `Budget`. The `yaml: &str` arg is attacker-influenceable (MCP request body OR captured `ssh_exec` stdout via `output_id`). Same billion-laughs / depth-bomb class as FIND-001..004. Missed by Task 4 context7 review because not a standard config file. | Same as FIND-001..004: `serde_saphyr::from_str_with_options(yaml, options! { budget: budget! { ... } })`. | Task 12 (custom semgrep rule confirmed) | open |
+| FIND-033 | `src/mcp/server.rs:65` (`runtime_max_output_chars: Arc<RwLock<Option<usize>>>`), written L1125, read L405+L422 | Single `Option<usize>` slot, written per `initialize` based on `init_params.client_info.name`. Two concurrent HTTP clients with different `client_overrides` profiles: last `initialize` wins, applies to ALL subsequent tool calls regardless of which session sent them. Cross-session quality-of-service contamination. | Same per-session fix shape as Vuln 9: move into per-session `Arc<...>` in `serve_session`; pass via `ToolContext`. | Task 13 (variant-analysis) | open |
+| FIND-034 | `src/mcp/server.rs:68` (`notification_tx: Arc<RwLock<Option<mpsc::Sender>>>`), written L653, read L598-603 | Single `Option<Sender>` slot. Each `serve_session` entry overwrites it with that session's tx. Background workers (task_store progress events) `blocking_read()` the slot per notification — fires whoever's tx is current at fire time. Notifications from session A can route to session B's writer. Confirms OQ-008. | Per-session `Arc<RwLock<Option<Sender>>>` allocated in `serve_session`; or use a `HashMap<SessionId, Sender>` if multiplexing. | Task 13 (variant-analysis) | open |
+| FIND-036 | `src/mcp/server.rs:77` (`resource_subscriptions: Arc<RwLock<HashMap<String, Vec<String>>>>`), subscribe L1763, unsubscribe L1782 | HashMap keyed on URI (resource path), Vec of subscription IDs not session-scoped. Two clients subscribing to same URI share the Vec; notifications fan out to all sub-IDs (cross-session leakage). Unsubscribe by client A may inadvertently affect notification dispatch for client B. | Switch key to `(SessionId, URI)` tuple, or move to per-session HashMap allocated in `serve_session`. | Task 13 (variant-analysis) | open |
+| FIND-037 | `src/mcp/server.rs:79` (`roots: Arc<RwLock<Vec<RootEntry>>>`), written L942 | Single `Vec<RootEntry>` overwritten by `fetch_roots` from the requesting client. Tool handlers reading `ctx.roots` see whichever client called last. Confirms OQ-006. | Per-session `roots` field allocated in `serve_session`; pass via `ToolContext`. | Task 13 (variant-analysis) | open |
 
 ---
 
@@ -57,6 +62,7 @@ This file is the **single source of truth** for every concrete problem the audit
 | FIND-027 | `Cargo.toml` (`tokio-socks = "0.5"`) used at `src/ssh/client.rs:373-413` | `tokio-socks` (sticnarf/tokio-socks) — last push 2025-02-19 (>14 months stale), 102 stars, not archived but inactive. SOCKS proxy is auth-perimeter relevant. | Monitor `sticnarf/tokio-socks` for activity. If no release by 2026-08, plan vendoring (crate is ~1500 LOC). | Task 10 (supply-chain) | open |
 | FIND-030 | `src/mcp/tool_handlers/ssh_vault_write.rs:13` | `SshVaultWriteArgs.data: Vec<String>` carries vault `key=value` secret pairs unwrapped. Strings sit in heap during handler call; `Args` drop does not wipe. Local heap residency is gratuitous (separate from FIND-031 about remote argv visibility). | `data: Vec<Zeroizing<String>>`; update `build_write_command` to take `&[Zeroizing<String>]`. Optional: add `data_files: Vec<PathBuf>` so secrets can be passed via stdin/file. | Task 11 (zeroize-audit) | open |
 | FIND-031 | `src/domain/use_cases/database.rs:90-94`, `src/domain/use_cases/vault.rs:144-170` | Secrets transit shell argv on the remote host. `MYSQL_PWD='pwd' mysql ...` / `PGPASSWORD='pwd' psql ...` / `vault kv put path key=secret_value` — visible in remote `ps eww` (vault) or `/proc/PID/environ` (DB) during execution. Local audit-log sanitizer covers local trace; remote process-list is unprotected. | Vault: pipe `data` via stdin (`vault kv put path - <<EOF`). DB: recommend `~/.my.cnf` / `~/.pgpass` connection files (`0600` mode); document trade-off in handler description text shown to MCP client. | Task 11 (zeroize-audit) | open |
+| FIND-035 | `src/mcp/server.rs:70` (`log_level: Arc<AtomicU8>`) | Global atomic set by any client's `notifications/setLevel`. Client B can mute client A's `notifications/message`. Cross-session denial-of-observability. Low operational impact. | Per-session log level, mirror of session_capabilities pattern. | Task 13 (variant-analysis) | open |
 
 ---
 
@@ -124,12 +130,12 @@ For Open Questions resolved by a later task: update the OQ row's "Owner task" co
 
 ## Summary counters (auto-update at end of each commit)
 
-- P0: **6**
-- P1: **8**
+- P0: **7**
+- P1: **12**
 - P2: **14**
-- P3: **4**
+- P3: **5**
 - FP (proven): **5** (sanitizer self-tests) **+ 4 confirmed test-only saphyr matches** (rbac.rs:299, runbook.rs:336/355/375)
 - OQ (open): **13**
-- **Total open findings: 32**
+- **Total open findings: 38**
 
-**Last assigned ID:** FIND-032
+**Last assigned ID:** FIND-038
