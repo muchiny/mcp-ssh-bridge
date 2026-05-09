@@ -964,7 +964,10 @@ mod tests {
     fn validate_root_scope_rejects_parent_traversal() {
         let mut ctx = mock::create_test_context();
         ctx.roots = vec![root("file:///srv/app", None)];
-        assert!(ctx.validate_root_scope("/srv/app/../../etc/shadow").is_err());
+        assert!(
+            ctx.validate_root_scope("/srv/app/../../etc/shadow")
+                .is_err()
+        );
         assert!(
             ctx.validate_root_scope("/srv/app/foo/../../../etc/passwd")
                 .is_err()

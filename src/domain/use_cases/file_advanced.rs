@@ -11,7 +11,9 @@ fn shell_escape(s: &str) -> String {
 
 fn validate_env_var_name(name: &str) -> Result<()> {
     let mut chars = name.chars();
-    let first_ok = chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+    let first_ok = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
     let rest_ok = chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
     if first_ok && rest_ok && !name.is_empty() {
         Ok(())
@@ -124,12 +126,9 @@ mod tests {
 
     #[test]
     fn test_template_command_no_vars() {
-        let cmd = FileAdvancedCommandBuilder::build_template_command(
-            "/etc/template",
-            "/etc/output",
-            &[],
-        )
-        .unwrap();
+        let cmd =
+            FileAdvancedCommandBuilder::build_template_command("/etc/template", "/etc/output", &[])
+                .unwrap();
         assert!(cmd.contains("envsubst"));
         assert!(!cmd.contains("export"));
     }
@@ -149,24 +148,23 @@ mod tests {
     fn test_template_command_rejects_lowercase_or_digit_first() {
         for bad in ["1FOO", "foo bar", "BAD-NAME", "WITH$DOLLAR", ""] {
             let vars = vec![(bad.to_string(), "x".to_string())];
-            let r = FileAdvancedCommandBuilder::build_template_command(
-                "/etc/t",
-                "/tmp/o",
-                &vars,
-            );
+            let r = FileAdvancedCommandBuilder::build_template_command("/etc/t", "/tmp/o", &vars);
             assert!(r.is_err(), "key {bad:?} must be rejected");
         }
     }
 
     #[test]
     fn test_template_command_accepts_posix_names() {
-        for ok in ["FOO", "FOO_BAR", "_LEADING", "X1", "A_B_C_123", "lowercase_ok"] {
+        for ok in [
+            "FOO",
+            "FOO_BAR",
+            "_LEADING",
+            "X1",
+            "A_B_C_123",
+            "lowercase_ok",
+        ] {
             let vars = vec![(ok.to_string(), "x".to_string())];
-            let r = FileAdvancedCommandBuilder::build_template_command(
-                "/etc/t",
-                "/tmp/o",
-                &vars,
-            );
+            let r = FileAdvancedCommandBuilder::build_template_command("/etc/t", "/tmp/o", &vars);
             assert!(r.is_ok(), "key {ok} must be accepted");
         }
     }

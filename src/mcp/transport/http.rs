@@ -273,8 +273,7 @@ fn refuse_unsafe_bind(config: &HttpTransportConfig) -> crate::error::Result<()> 
         .map_or(config.bind.as_str(), |x| x.0)
         .trim_start_matches('[')
         .trim_end_matches(']');
-    let is_loopback =
-        host_part == "127.0.0.1" || host_part == "::1" || host_part == "localhost";
+    let is_loopback = host_part == "127.0.0.1" || host_part == "::1" || host_part == "localhost";
     if !is_loopback && !config.oauth.enabled {
         return Err(crate::error::BridgeError::McpInvalidRequest(format!(
             "Refusing to bind '{}' without OAuth. \

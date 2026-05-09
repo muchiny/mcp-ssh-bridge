@@ -658,12 +658,7 @@ mod tests {
 
     #[test]
     fn test_deny_rejects_protocol_injection() {
-        let r = FirewallCommandBuilder::build_deny_command(
-            None,
-            "80",
-            Some("udp; rm -rf /"),
-            None,
-        );
+        let r = FirewallCommandBuilder::build_deny_command(None, "80", Some("udp; rm -rf /"), None);
         assert!(r.is_err());
     }
 

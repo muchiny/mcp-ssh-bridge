@@ -164,14 +164,17 @@ mod tests {
 
     #[test]
     fn test_user_info_escapes_filter_metacharacters() {
-        let cmd = LdapCommandBuilder::build_user_info_command(
-            "dc=example,dc=com",
-            "*)(uid=*",
-            None,
+        let cmd =
+            LdapCommandBuilder::build_user_info_command("dc=example,dc=com", "*)(uid=*", None);
+        assert!(
+            !cmd.contains("(uid=*)(uid=*"),
+            "raw injection must not appear"
         );
-        assert!(!cmd.contains("(uid=*)(uid=*"), "raw injection must not appear");
         assert!(cmd.contains(r"\2a"), "asterisk must be RFC 4515 encoded");
-        assert!(cmd.contains(r"\28") || cmd.contains(r"\29"), "parens must be encoded");
+        assert!(
+            cmd.contains(r"\28") || cmd.contains(r"\29"),
+            "parens must be encoded"
+        );
     }
 
     #[test]
@@ -187,22 +190,15 @@ mod tests {
 
     #[test]
     fn test_user_info_passthrough_clean_value() {
-        let cmd = LdapCommandBuilder::build_user_info_command(
-            "dc=example,dc=com",
-            "alice",
-            None,
-        );
+        let cmd = LdapCommandBuilder::build_user_info_command("dc=example,dc=com", "alice", None);
         // The filter string can be quoted by shell_escape, so accept either form.
         assert!(cmd.contains("(uid=alice)") || cmd.contains("'(uid=alice)'"));
     }
 
     #[test]
     fn test_group_members_passthrough_clean_value() {
-        let cmd = LdapCommandBuilder::build_group_members_command(
-            "dc=example,dc=com",
-            "admins",
-            None,
-        );
+        let cmd =
+            LdapCommandBuilder::build_group_members_command("dc=example,dc=com", "admins", None);
         assert!(cmd.contains("(cn=admins)") || cmd.contains("'(cn=admins)'"));
     }
 }

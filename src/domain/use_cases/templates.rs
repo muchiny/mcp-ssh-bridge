@@ -437,11 +437,8 @@ mod tests {
 
     #[test]
     fn test_template_apply_backup_branch_still_works() {
-        let cmd = TemplateCommandBuilder::build_template_apply_command(
-            "body",
-            "/etc/foo.conf",
-            true,
-        );
+        let cmd =
+            TemplateCommandBuilder::build_template_apply_command("body", "/etc/foo.conf", true);
         assert!(cmd.starts_with("cp "));
         assert!(cmd.contains(".bak 2>/dev/null;"));
         assert!(cmd.contains("cat > '/etc/foo.conf'"));

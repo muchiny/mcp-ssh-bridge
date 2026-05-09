@@ -485,9 +485,8 @@ mod tests {
 
     #[test]
     fn test_list_all_options() {
-        let cmd =
-            SystemdCommandBuilder::build_list_command(Some("running"), true, Some("socket"))
-                .unwrap();
+        let cmd = SystemdCommandBuilder::build_list_command(Some("running"), true, Some("socket"))
+            .unwrap();
         assert!(cmd.contains("--type=socket"));
         assert!(cmd.contains("--state='running'"));
         assert!(cmd.contains("--all"));
@@ -642,7 +641,10 @@ mod tests {
             false,
             Some("service; cat /etc/shadow #"),
         );
-        assert!(r.is_err(), "must reject unit_type with shell metacharacters");
+        assert!(
+            r.is_err(),
+            "must reject unit_type with shell metacharacters"
+        );
     }
 
     #[test]

@@ -158,10 +158,7 @@ impl OAuthValidator {
     /// Returns a string describing the parse failure.
     pub fn load_jwks(&mut self, jwks: &serde_json::Value) -> Result<(), String> {
         let mut keys = HashMap::new();
-        for k in jwks["keys"]
-            .as_array()
-            .ok_or("jwks.keys not an array")?
-        {
+        for k in jwks["keys"].as_array().ok_or("jwks.keys not an array")? {
             let kid = k["kid"].as_str().unwrap_or_default().to_string();
             let n = k["n"].as_str().ok_or("jwk.n missing")?;
             let e = k["e"].as_str().ok_or("jwk.e missing")?;
