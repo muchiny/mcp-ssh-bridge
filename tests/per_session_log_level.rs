@@ -41,8 +41,14 @@ async fn log_level_isolated_across_sessions() {
         .store(LogLevel::Error.severity(), Ordering::Relaxed);
 
     // Each session sees only its own value; the other session is untouched.
-    assert_eq!(a.log_level.load(Ordering::Relaxed), LogLevel::Debug.severity());
-    assert_eq!(b.log_level.load(Ordering::Relaxed), LogLevel::Error.severity());
+    assert_eq!(
+        a.log_level.load(Ordering::Relaxed),
+        LogLevel::Debug.severity()
+    );
+    assert_eq!(
+        b.log_level.load(Ordering::Relaxed),
+        LogLevel::Error.severity()
+    );
 
     // The Arc handles must be distinct allocations — same pointer would
     // collapse the per-session storage into a shared cell.

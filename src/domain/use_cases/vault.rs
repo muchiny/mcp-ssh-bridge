@@ -328,7 +328,9 @@ mod tests {
 
     #[test]
     fn test_write_injection_in_data_value() {
-        let data = vec![zeroize::Zeroizing::new("password=s3cr3t; rm -rf /".to_string())];
+        let data = vec![zeroize::Zeroizing::new(
+            "password=s3cr3t; rm -rf /".to_string(),
+        )];
         let cmd =
             VaultCommandBuilder::build_write_command("secret/app", &data, None, None).unwrap();
         // FIND-031: value is a heredoc body line (single-quoted terminator

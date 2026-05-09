@@ -37,10 +37,8 @@ async fn runtime_max_output_chars_isolated_per_session() {
     let (server, _audit_task) = McpServer::new(config);
     let server = Arc::new(server);
 
-    let cell_a: Arc<RwLock<Option<usize>>> =
-        server.allocate_session_runtime_max_output_for_test();
-    let cell_b: Arc<RwLock<Option<usize>>> =
-        server.allocate_session_runtime_max_output_for_test();
+    let cell_a: Arc<RwLock<Option<usize>>> = server.allocate_session_runtime_max_output_for_test();
+    let cell_b: Arc<RwLock<Option<usize>>> = server.allocate_session_runtime_max_output_for_test();
 
     // Both fresh — unset.
     assert_eq!(*cell_a.read().await, None);

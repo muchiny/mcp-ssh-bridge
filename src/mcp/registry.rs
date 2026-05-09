@@ -2846,11 +2846,7 @@ mod tests {
         use crate::config::types::MINIMAL_DEFAULT_GROUPS;
 
         let registry = create_default_registry();
-        let tools: Vec<String> = registry
-            .list_tools()
-            .into_iter()
-            .map(|t| t.name)
-            .collect();
+        let tools: Vec<String> = registry.list_tools().into_iter().map(|t| t.name).collect();
 
         // Every tool in the default registry must belong to a
         // minimal-profile group.
@@ -2865,10 +2861,7 @@ mod tests {
 
         // Each minimal-profile group must register at least one handler.
         for &g in MINIMAL_DEFAULT_GROUPS {
-            let count_in_g = tools
-                .iter()
-                .filter(|t| tool_group(t) == g)
-                .count();
+            let count_in_g = tools.iter().filter(|t| tool_group(t) == g).count();
             assert!(
                 count_in_g > 0,
                 "FIND-024: minimal-profile group '{g}' should have at \

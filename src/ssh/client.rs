@@ -71,15 +71,11 @@ fn hardened_preferred() -> russh::Preferred {
         russh::kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
     ];
 
-    const HARDENED_CIPHER: &[russh::cipher::Name] = &[
-        russh::cipher::CHACHA20_POLY1305,
-        russh::cipher::AES_256_GCM,
-    ];
+    const HARDENED_CIPHER: &[russh::cipher::Name] =
+        &[russh::cipher::CHACHA20_POLY1305, russh::cipher::AES_256_GCM];
 
-    const HARDENED_MAC: &[russh::mac::Name] = &[
-        russh::mac::HMAC_SHA512_ETM,
-        russh::mac::HMAC_SHA256_ETM,
-    ];
+    const HARDENED_MAC: &[russh::mac::Name] =
+        &[russh::mac::HMAC_SHA512_ETM, russh::mac::HMAC_SHA256_ETM];
 
     russh::Preferred {
         kex: Cow::Borrowed(HARDENED_KEX),

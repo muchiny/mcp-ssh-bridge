@@ -143,8 +143,7 @@ impl NotificationFanout {
         };
         let mut dead = Vec::new();
         for tx in &snapshot {
-            if let Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) =
-                tx.try_send(msg.clone())
+            if let Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) = tx.try_send(msg.clone())
             {
                 dead.push(tx.clone());
             }

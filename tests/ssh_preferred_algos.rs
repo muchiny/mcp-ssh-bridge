@@ -35,8 +35,14 @@ fn pinned_preferred_excludes_legacy_ciphers() {
         let n: &str = cipher.as_ref();
         assert!(!n.contains("3des"), "cipher {n} is 3DES — excluded");
         assert!(!n.contains("blowfish"), "cipher {n} is blowfish — excluded");
-        assert!(!n.contains("arcfour"), "cipher {n} is arcfour/RC4 — excluded");
-        assert!(!n.contains("-cbc"), "cipher {n} is CBC mode — excluded (CTR/GCM/ChaCha only)");
+        assert!(
+            !n.contains("arcfour"),
+            "cipher {n} is arcfour/RC4 — excluded"
+        );
+        assert!(
+            !n.contains("-cbc"),
+            "cipher {n} is CBC mode — excluded (CTR/GCM/ChaCha only)"
+        );
     }
 }
 
@@ -84,9 +90,7 @@ fn pinned_preferred_includes_etm_macs_only() {
         );
     }
     assert!(
-        names
-            .iter()
-            .any(|n| n == &"hmac-sha2-512-etm@openssh.com"),
+        names.iter().any(|n| n == &"hmac-sha2-512-etm@openssh.com"),
         "mac list must include hmac-sha2-512-etm@openssh.com, got: {names:?}"
     );
 }

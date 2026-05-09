@@ -71,10 +71,7 @@ mod tests {
 
     #[test]
     fn home_expand_passes_through_absolute() {
-        assert_eq!(
-            home_expand("/abs/path"),
-            Some(PathBuf::from("/abs/path"))
-        );
+        assert_eq!(home_expand("/abs/path"), Some(PathBuf::from("/abs/path")));
         assert_eq!(
             home_expand("relative/path"),
             Some(PathBuf::from("relative/path"))
@@ -85,10 +82,7 @@ mod tests {
     fn home_expand_does_not_handle_user_specific() {
         // `~bob/foo` is returned unchanged: we don't enumerate
         // /etc/passwd, matching `shellexpand::tilde`'s own behaviour.
-        assert_eq!(
-            home_expand("~bob/foo"),
-            Some(PathBuf::from("~bob/foo"))
-        );
+        assert_eq!(home_expand("~bob/foo"), Some(PathBuf::from("~bob/foo")));
     }
 
     #[test]
@@ -103,13 +97,19 @@ mod tests {
     #[test]
     fn home_expand_or_input_falls_back_on_unchanged_value() {
         // For inputs without `~`, the helper is a no-op.
-        assert_eq!(home_expand_or_input("/etc/ssh/sshd_config"), "/etc/ssh/sshd_config");
+        assert_eq!(
+            home_expand_or_input("/etc/ssh/sshd_config"),
+            "/etc/ssh/sshd_config"
+        );
         assert_eq!(home_expand_or_input("relative"), "relative");
     }
 
     #[test]
     fn home_expand_or_input_expands_tilde_when_home_known() {
         let home = std::env::var("HOME").expect("HOME must be set in test environment");
-        assert_eq!(home_expand_or_input("~/.ssh/id_ed25519"), format!("{home}/.ssh/id_ed25519"));
+        assert_eq!(
+            home_expand_or_input("~/.ssh/id_ed25519"),
+            format!("{home}/.ssh/id_ed25519")
+        );
     }
 }

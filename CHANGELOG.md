@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-05-10
+
+### Summary
+
+**Full security audit (2026-05-09) — 30+ findings remediated across YAML
+parsing, JWT validation, transport defaults, session isolation, secret
+zeroization, and tool-group exposure.** Two BREAKING default flips
+(FIND-022 elicitation + FIND-024 tool_groups) plus per-session isolation
+hardening (FIND-033/034/035/036/037/038), Zeroizing on every cred-bearing
+struct (FIND-014/028/029/030), saphyr Budget on every YAML parse site
+(FIND-001/002/004/032), OAuth/JWT spec compliance (FIND-006/007),
+russh algo pinning + rekey limits (FIND-008), HTTP middleware hardening
+(FIND-005), SSH error sanitization (FIND-016), `deny_unknown_fields`
+on every config struct (FIND-017), and supply-chain cleanup
+(FIND-018/025/026/027). Test suite: ~6,973 → 7,200+ tests (new
+integration suites: `cross_session_cancel`, `multisession_isolation`,
+`per_session_state`, `per_session_log_level`, `oauth_keys_loaded`,
+`saphyr_budget`, `deny_unknown_fields`, `destructive_default`,
+`http_middleware`, `ssh_config_discovery_default`, `ssh_preferred_algos`,
+`sudo_password_zeroizing`, `security_audit_redaction`).
+
 ### Changed (BREAKING)
 
 - **Security: `tool_groups` default-disabled, ships an 8-group minimal
@@ -20,8 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requires explicit opt-in via `tool_groups.groups: { groupname: true }`.
   Operators who relied on the old all-enabled behaviour must enumerate
   the groups they need (or set every group they want to `true`).
-  Source-of-truth: audit FIND-024 (`docs/audit-2026-05-09-findings.md`);
-  migration documented in `config/config.example.yaml`.
+  Migration documented in `config/config.example.yaml`.
 
 - **Security: `security.require_elicitation_on_destructive` now defaults to
   `true`** (was `false`). Destructive tools annotated `destructive_hint: true`
@@ -32,7 +52,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `security.require_elicitation_on_destructive: false` in their config
   (NOT RECOMMENDED in production — a compromised MCP client could
   otherwise mass-execute destructive tools without surfacing to a human).
-  Source-of-truth: audit FIND-022 (`docs/audit-2026-05-09-findings.md`).
+
+- **Security: `SshConfigDiscovery` default off** (FIND-023). `~/.ssh/config`
+  is no longer parsed unless the operator explicitly opts in. Eliminates
+  the implicit on-disk attack surface for hosts not declared in
+  `config.yaml`.
+
+### Security
+
+- **YAML parser: enforce saphyr `Budget` on every parse site**
+  (FIND-001/002/004/032). Caps node count + alias depth + recursion to
+  prevent resource-exhaustion via crafted runbooks/configs.
+- **HTTP transport: defaults to loopback; refuses anonymous public bind.**
+  Public bind requires explicit auth + origin allowlist.
+- **HTTP middleware: timeout + body-limit + request-id + sensitive-header
+  redaction** (FIND-005).
+- **JWT: signature verification via `jsonwebtoken` (Vuln 2)** + require
+  `sub`/`iss`/`aud` spec claims (FIND-007).
+- **OAuth: load keys at boot, share `Arc<OAuthValidator>`** (FIND-006).
+- **russh: pin `Preferred` algorithms + rekey limits** (FIND-008).
+- **SSH errors: sanitize at every connect-phase site** (FIND-016) —
+  no more leaking key paths/host details on auth failure.
+- **Path traversal: canonicalize in `validate_root_scope` (Vuln 11).**
+- **Audit log: sanitize commands before write** — no plaintext secrets.
+- **Heredoc: randomize terminator in `template_apply`** — defeats
+  attacker-supplied terminator injection.
+- **Env vars: validate names in `file_template` builder.**
+- **LDAP: RFC 4515-escape values in filters.**
+- **systemd: allowlist `unit_type` in `list_command`.**
+- **Firewall: allowlist protocol values.**
+- **Blacklist matcher: normalize `${IFS}` / `$'\t'` / line-continuation
+  before match** (defeats common bypass tricks).
+- **Per-session isolation:**
+  - `PendingRequests` (Vuln 8 part 2) + UUID-based unguessable IDs
+    (Vuln 8 part 1)
+  - `SessionCapabilities` (Vuln 9)
+  - `active_requests` map (FIND-038)
+  - `runtime` / `notification` / `resource_subs` / `roots` (FIND-033/034/036/037)
+  - `log_level` (FIND-035)
+- **Secret zeroization:**
+  - `HostConfig.sudo_password` (FIND-028)
+  - `db_password` Args (FIND-029)
+  - vault `Args.data` (FIND-030)
+  - `SocksProxyConfig.password` (FIND-014)
+  - vault/db secrets piped via stdin/tempfile (FIND-031)
+- **`deny_unknown_fields` on every config + runbook struct** (FIND-017) —
+  unknown keys are now hard errors, not silent ignores.
+
+### Changed
+
+- **Reliability: replace `expect`/`unwrap` with `?`/`Err` on Result-returning
+  functions** (FIND-010/011/012/013).
+- **Clippy clean across `--workspace --all-targets --all-features`**
+  (FIND-019/020).
+- **CI: `cargo-geiger` fallback + baseline** (FIND-021).
+- **Domain layer: move YAML helper into domain/** (hexagonal compliance).
+
+### Removed / Deps
+
+- **Drop archived `shellexpand`, use `dirs::home_dir`** (FIND-025).
+- **Patch `winrm-rs` to drop obsolete `reqwest` feature** (FIND-018).
+- **Supply-chain monitoring entries for `saphyr` + `tokio-socks`**
+  (FIND-026/027).
 
 ## [1.16.0] - 2026-05-03
 

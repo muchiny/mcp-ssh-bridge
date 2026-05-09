@@ -308,9 +308,7 @@ pub async fn build_validator(
 // See `build_validator` — async kept to absorb the FIND-006 follow-up
 // (JWKS HTTP fetch) without breaking the public signature.
 #[allow(clippy::unused_async)]
-pub async fn build_validator_from_runtime(
-    cfg: &OAuthConfig,
-) -> Result<OAuthValidator, String> {
+pub async fn build_validator_from_runtime(cfg: &OAuthConfig) -> Result<OAuthValidator, String> {
     let mut v = OAuthValidator::new(cfg.clone());
 
     if !cfg.static_keys.is_empty() {

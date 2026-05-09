@@ -506,8 +506,7 @@ impl McpServer {
         // longer holds global `client_supports_*` flags. Snapshot the
         // current session's flags into `ToolContext`; default to `false`
         // when no session handle is available (legacy non-MCP code paths).
-        ctx.client_supports_elicitation =
-            session.is_some_and(|s| s.caps.supports_elicitation());
+        ctx.client_supports_elicitation = session.is_some_and(|s| s.caps.supports_elicitation());
         ctx.client_supports_sampling = session.is_some_and(|s| s.caps.supports_sampling());
         ctx.mcp_logger = self.mcp_logger.read().await.as_ref().map(Arc::clone);
         ctx
@@ -1792,9 +1791,7 @@ impl McpServer {
             // session anyway.
             return JsonRpcResponse::error(
                 id,
-                JsonRpcError::invalid_request(
-                    "resources/subscribe requires an active MCP session",
-                ),
+                JsonRpcError::invalid_request("resources/subscribe requires an active MCP session"),
             );
         };
         let sub_id = uuid::Uuid::new_v4().to_string();
@@ -2161,8 +2158,7 @@ mod tests {
             limits: LimitsConfig::default(),
             audit: AuditConfig::default(),
             sessions: SessionConfig::default(),
-            tool_groups:
-                crate::mcp::registry::all_enabled_tool_groups_config_for_test(),
+            tool_groups: crate::mcp::registry::all_enabled_tool_groups_config_for_test(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),
@@ -2403,8 +2399,7 @@ mod tests {
             limits: LimitsConfig::default(),
             audit: AuditConfig::default(),
             sessions: SessionConfig::default(),
-            tool_groups:
-                crate::mcp::registry::all_enabled_tool_groups_config_for_test(),
+            tool_groups: crate::mcp::registry::all_enabled_tool_groups_config_for_test(),
             ssh_config: SshConfigDiscovery::default(),
             http: HttpTransportConfig::default(),
             rbac: crate::security::rbac::RbacConfig::default(),

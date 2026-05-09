@@ -572,7 +572,9 @@ mod tests {
         assert!(cmd.starts_with("TMPF=$(mktemp)"));
         assert!(cmd.contains("PGPASSFILE=$TMPF"));
         // pgpass format: host:port:database:user:password
-        assert!(cmd.contains("printf '%s:%s:%s:%s:%s\\n' 'pghost' '5432' 'pgdb' 'pguser' 'pgpass'"));
+        assert!(
+            cmd.contains("printf '%s:%s:%s:%s:%s\\n' 'pghost' '5432' 'pgdb' 'pguser' 'pgpass'")
+        );
         assert!(cmd.contains("psql -h 'pghost' -p 5432 -U 'pguser' -d 'pgdb'"));
         assert!(cmd.contains("-c 'SELECT * FROM orders'"));
         assert!(cmd.contains("--csv"));
