@@ -6,13 +6,13 @@
 use std::collections::HashMap;
 
 use mcp_ssh_bridge::config::ToolGroupsConfig;
-use mcp_ssh_bridge::mcp::registry::{create_filtered_registry, tool_annotations, tool_group};
+use mcp_ssh_bridge::mcp::registry::{all_enabled_tool_groups_config_for_test, create_filtered_registry, tool_annotations, tool_group};
 
 // ============== Default Registry ==============
 
 #[test]
 fn test_default_registry_includes_all_groups() {
-    let config = ToolGroupsConfig::default();
+    let config = all_enabled_tool_groups_config_for_test();
     let registry = create_filtered_registry(&config);
 
     let tools = registry.list_tools();
@@ -52,7 +52,7 @@ fn test_default_registry_includes_all_groups() {
 
 #[test]
 fn test_disable_docker_removes_all_docker_tools() {
-    let mut groups = HashMap::new();
+    let mut groups = all_enabled_tool_groups_config_for_test().groups;
     groups.insert("docker".to_string(), false);
     let config = ToolGroupsConfig { groups };
     let registry = create_filtered_registry(&config);
@@ -108,7 +108,7 @@ fn test_disable_docker_removes_all_docker_tools() {
 
 #[test]
 fn test_disable_kubernetes_removes_all_k8s_and_helm_tools() {
-    let mut groups = HashMap::new();
+    let mut groups = all_enabled_tool_groups_config_for_test().groups;
     groups.insert("kubernetes".to_string(), false);
     let config = ToolGroupsConfig { groups };
     let registry = create_filtered_registry(&config);
@@ -143,7 +143,7 @@ fn test_disable_kubernetes_removes_all_k8s_and_helm_tools() {
 
 #[test]
 fn test_disable_multiple_groups_removes_all_their_tools() {
-    let mut groups = HashMap::new();
+    let mut groups = all_enabled_tool_groups_config_for_test().groups;
     groups.insert("docker".to_string(), false);
     groups.insert("kubernetes".to_string(), false);
     groups.insert("ansible".to_string(), false);
@@ -166,7 +166,7 @@ fn test_disable_multiple_groups_removes_all_their_tools() {
 
 #[test]
 fn test_disable_all_windows_groups() {
-    let mut groups = HashMap::new();
+    let mut groups = all_enabled_tool_groups_config_for_test().groups;
     for group in &[
         "windows_services",
         "windows_events",
@@ -213,7 +213,7 @@ fn test_disable_all_windows_groups() {
 
 #[test]
 fn test_every_tool_maps_to_a_known_group() {
-    let config = ToolGroupsConfig::default();
+    let config = all_enabled_tool_groups_config_for_test();
     let registry = create_filtered_registry(&config);
     let tools = registry.list_tools();
 
@@ -310,7 +310,7 @@ fn test_every_tool_maps_to_a_known_group() {
 
 #[test]
 fn test_every_tool_has_non_empty_annotations() {
-    let config = ToolGroupsConfig::default();
+    let config = all_enabled_tool_groups_config_for_test();
     let registry = create_filtered_registry(&config);
     let tools = registry.list_tools();
 
@@ -326,7 +326,7 @@ fn test_every_tool_has_non_empty_annotations() {
 
 #[test]
 fn test_read_only_tools_not_marked_destructive() {
-    let config = ToolGroupsConfig::default();
+    let config = all_enabled_tool_groups_config_for_test();
     let registry = create_filtered_registry(&config);
     let tools = registry.list_tools();
 
@@ -345,7 +345,7 @@ fn test_read_only_tools_not_marked_destructive() {
 
 #[test]
 fn test_destructive_tools_not_marked_read_only() {
-    let config = ToolGroupsConfig::default();
+    let config = all_enabled_tool_groups_config_for_test();
     let registry = create_filtered_registry(&config);
     let tools = registry.list_tools();
 
@@ -366,7 +366,7 @@ fn test_destructive_tools_not_marked_read_only() {
 
 #[test]
 fn test_every_tool_has_execution_task_support() {
-    let config = ToolGroupsConfig::default();
+    let config = all_enabled_tool_groups_config_for_test();
     let registry = create_filtered_registry(&config);
     let tools = registry.list_tools();
 
@@ -389,7 +389,7 @@ fn test_every_tool_has_execution_task_support() {
 
 #[test]
 fn test_all_tools_have_valid_input_schema() {
-    let config = ToolGroupsConfig::default();
+    let config = all_enabled_tool_groups_config_for_test();
     let registry = create_filtered_registry(&config);
     let tools = registry.list_tools();
 
@@ -412,7 +412,7 @@ fn test_all_tools_have_valid_input_schema() {
 
 #[tokio::test]
 async fn test_calling_disabled_tool_returns_unknown_tool_error() {
-    let mut groups = HashMap::new();
+    let mut groups = all_enabled_tool_groups_config_for_test().groups;
     groups.insert("docker".to_string(), false);
     let config = ToolGroupsConfig { groups };
     let registry = create_filtered_registry(&config);
@@ -427,7 +427,7 @@ async fn test_calling_disabled_tool_returns_unknown_tool_error() {
 
 #[test]
 fn test_enabled_tool_is_accessible() {
-    let config = ToolGroupsConfig::default();
+    let config = all_enabled_tool_groups_config_for_test();
     let registry = create_filtered_registry(&config);
 
     let handler = registry.get("ssh_exec");
