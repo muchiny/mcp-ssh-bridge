@@ -33,6 +33,8 @@ This file is the **single source of truth** for every concrete problem the audit
 | FIND-009 | `src/mcp/transport/oauth.rs:184-194` | JWT alg-allowlist excludes `EdDSA` (Ed25519 / RFC 8037). RS/ES/PS families allowed. Likely intentional but undocumented. | Decide: confirm intentional + document in module comment, OR add `Algorithm::EdDSA` to the allowlist. | Task 5 (oauth section open Q) | open |
 | FIND-022 | `src/config/types.rs:516` | `SecurityConfig.require_elicitation_on_destructive: false` default. 97 P0-bucket destructive handlers (per `surface/entry-points.md`) execute without MCP `elicitation/create` confirmation by default. Compromised MCP client can mass-execute destructive tools without surfacing to human. | Flip default to `true` with documented opt-out, OR document the opt-in clearly in `config.example.yaml` and security model docs. | Task 9 (insecure-defaults) | open |
 | FIND-026 | `Cargo.toml` (`serde-saphyr = "=0.0.21"`) | Pre-1.0 single-maintainer YAML parser on critical-path. Primary author has 649/667 commits, 167 GitHub stars, 0 open issues (low scrutiny). Parses ALL config + runbook YAML. Maintainer-takeover or buggy update would compromise everything that goes through `from_str` (FIND-001..004). | Stay pinned at `=0.0.21`, subscribe to release notifications, plan migration when crate reaches 1.0 or alternative emerges. Vendor source as fallback. | Task 10 (supply-chain) | open |
+| FIND-028 | `src/config/types.rs:219` | `HostConfig.sudo_password: Option<String>` not `Zeroizing`. Same class as FIND-014 (SOCKS password) on the sibling field. `HostConfig` lives for entire process lifetime; password sits in heap from start to exit. Hot-reload (`src/config/watcher.rs`) does NOT wipe old allocations. | `pub sudo_password: Option<Zeroizing<String>>`. Update borrow sites with `.as_deref()` — no behavior change. | Task 11 (zeroize-audit) | open |
+| FIND-029 | `src/mcp/tool_handlers/ssh_db_query.rs:27` (+ likely `ssh_db_dump.rs`, `ssh_mysql_query.rs`, `ssh_postgresql_query.rs`) | `SshDbQueryArgs.db_password: Option<String>` arg not `Zeroizing`. Password from MCP JSON-RPC request body sits in plain heap during handler. `as_deref()` borrows the underlying `&str` for `database.rs::write_password_env`; drop of `Args` does NOT wipe. | `db_password: Option<Zeroizing<String>>` in every DB handler `Args` struct. | Task 11 (zeroize-audit) | open |
 
 ---
 
@@ -52,6 +54,8 @@ This file is the **single source of truth** for every concrete problem the audit
 | FIND-024 | `src/config/types.rs:1247-1250` | `ToolGroupsConfig`: groups not listed are enabled by default. All 75 groups / 357 handlers exposed out-of-box. Operator who only needs `docker` + `service` is also exposed to AD/LDAP/Vault/K8s/AWS/ESXi/HyperV groups. | Flip to default-disabled; require explicit opt-in per group. Or ship a profile system (`profile: minimal\|standard\|full`) so operators don't have to enumerate 75 groups manually. | Task 9 (insecure-defaults) | open |
 | FIND-025 | `Cargo.toml` (`shellexpand = "3"`) used at `src/ssh/client.rs:487` | `shellexpand` GitHub repo is **archived** (last push 2026-02-25, 97 stars). No more security patches. Used on the SSH-key auth path for `~` expansion — regression could cause silent fallback to wrong key. | Replace with `dirs::home_dir()` + manual `~` strip (~30 LOC, `dirs` crate already in deps). OR vendor shellexpand source in-tree under `vendor/`. | Task 10 (supply-chain) | open |
 | FIND-027 | `Cargo.toml` (`tokio-socks = "0.5"`) used at `src/ssh/client.rs:373-413` | `tokio-socks` (sticnarf/tokio-socks) — last push 2025-02-19 (>14 months stale), 102 stars, not archived but inactive. SOCKS proxy is auth-perimeter relevant. | Monitor `sticnarf/tokio-socks` for activity. If no release by 2026-08, plan vendoring (crate is ~1500 LOC). | Task 10 (supply-chain) | open |
+| FIND-030 | `src/mcp/tool_handlers/ssh_vault_write.rs:13` | `SshVaultWriteArgs.data: Vec<String>` carries vault `key=value` secret pairs unwrapped. Strings sit in heap during handler call; `Args` drop does not wipe. Local heap residency is gratuitous (separate from FIND-031 about remote argv visibility). | `data: Vec<Zeroizing<String>>`; update `build_write_command` to take `&[Zeroizing<String>]`. Optional: add `data_files: Vec<PathBuf>` so secrets can be passed via stdin/file. | Task 11 (zeroize-audit) | open |
+| FIND-031 | `src/domain/use_cases/database.rs:90-94`, `src/domain/use_cases/vault.rs:144-170` | Secrets transit shell argv on the remote host. `MYSQL_PWD='pwd' mysql ...` / `PGPASSWORD='pwd' psql ...` / `vault kv put path key=secret_value` — visible in remote `ps eww` (vault) or `/proc/PID/environ` (DB) during execution. Local audit-log sanitizer covers local trace; remote process-list is unprotected. | Vault: pipe `data` via stdin (`vault kv put path - <<EOF`). DB: recommend `~/.my.cnf` / `~/.pgpass` connection files (`0600` mode); document trade-off in handler description text shown to MCP client. | Task 11 (zeroize-audit) | open |
 
 ---
 
@@ -98,6 +102,7 @@ These are anchor points for Tasks 9–13 to resolve. Each becomes a finding (or 
 | OQ-010 | Task 5 ssh/client | 10 open questions in ssh/client section. Covered: FIND-008 (Default config), FIND-014 (SOCKS pwd), FIND-015 (originator), FIND-016 (sanitize coverage). Remaining: russh 0.60 default `Preferred` actual contents, `PrivateKey` `ZeroizeOnDrop` impl status, `best_supported_rsa_hash()` fallback to SHA-1 vs SHA-256, `check_known_hosts` port handling at port 22, `SSH_AUTH_SOCK` trust boundary in containers, last_error in agent auth not sanitized (variant of FIND-016), re-key limit on long-lived pool. | `Cargo.lock` russh 0.60, russh source | Task 11 |
 | OQ-011 | Task 5 runbook | 8 open questions in runbook section. Covered: FIND-001/002/003. Remaining: saphyr internal Budget defaults; `command: Some("")` evasion of validator; `save_as` mechanism not implemented despite shipped runbooks referencing it; missing `deny_unknown_fields` on `Runbook`/`RunbookStep`/`RunbookParam` (covered by FIND-017 for `Config` only); HashMap iteration-order non-determinism in `apply_template`; `require_elicitation_on_destructive` gate applied to `ssh_runbook_execute`. | `src/domain/runbook.rs`, saphyr crate, runbook YAML files | Tasks 11, 14 |
 | OQ-012 | Task 5 (cross-section) | `McpServer` server-singleton state distinct from Vuln 8/9: `runtime_max_output_chars`, `roots`, `client_info`, `notification_tx`. Are any of these latent Vuln 10/11 cross-session leaks, or all acceptable design? | `src/mcp/server.rs:46-92` field-by-field | Task 13 (variant-analysis) |
+| OQ-013 | Task 11 (zeroize-audit) | Does `russh::keys::PrivateKey` (russh 0.60.1) implement `ZeroizeOnDrop`? If not, secret key bytes persist in heap until Arc refcount=0; even then, depends on Drop impl wiping. After `load_secret_key` returns at `src/ssh/client.rs:502`, `Arc::new(key_pair)` wraps the secret. | `~/.cargo/registry/src/index.crates.io-*/russh-keys-*/src/private.rs` or upstream `Eugeny/russh` | Task 11 deferred / manual follow-up |
 
 ---
 
@@ -119,11 +124,11 @@ For Open Questions resolved by a later task: update the OQ row's "Owner task" co
 ## Summary counters (auto-update at end of each commit)
 
 - P0: **6**
-- P1: **5**
-- P2: **12**
+- P1: **7**
+- P2: **14**
 - P3: **4**
 - FP (proven): **5**
-- OQ (open): **12**
-- **Total open findings: 27**
+- OQ (open): **13**
+- **Total open findings: 31**
 
-**Last assigned ID:** FIND-027
+**Last assigned ID:** FIND-031
