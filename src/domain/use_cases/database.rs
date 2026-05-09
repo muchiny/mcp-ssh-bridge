@@ -83,15 +83,71 @@ fn shell_escape(s: &str) -> String {
     super::shell::escape(s, ShellType::Posix)
 }
 
-/// Helper to write the password environment variable prefix.
+/// FIND-031: write a tempfile-creation prelude that stores the DB password
+/// in a 0600 file, registers a cleanup trap, and (for `MySQL`) writes the
+/// `[client]` section. The remote DB CLI then reads the password from the
+/// file instead of from environ/argv — `/proc/PID/environ` and `ps eww`
+/// stay clean.
 ///
-/// **Security note:** Environment variables set this way (`MYSQL_PWD=... mysql ...`)
-/// may be visible in `/proc/PID/environ` on Linux. This is more secure than passing
-/// passwords as command-line arguments (visible in `ps`), but for maximum security
-/// consider using connection files (`~/.my.cnf`, `~/.pgpass`) on the remote host.
-fn write_password_env(cmd: &mut String, env_var: &str, password: &str) {
+/// Layout:
+/// - `mktemp` creates a unique path (atomic, race-free).
+/// - `trap '...' EXIT` ensures the file is shredded/removed even on signal.
+/// - `chmod 600` restricts access to the bridge user before writing the
+///   password (prevents a TOCTOU window where another process reads the
+///   default-mode file).
+/// - `printf '...' '<pw>' > $TMPF` writes the file content. The password
+///   is a `printf` format-arg, not a CLI flag value visible to other
+///   processes' `ps`.
+///
+/// `shred -u` overwrites the inode before unlink (defense against forensic
+/// recovery of swapped-out tempfile content). On BusyBox/Alpine where
+/// `shred` is missing, the `|| rm -f` fallback still removes the file.
+///
+/// `password` is single-quote-escaped POSIX-style. `printf '%s\n' '<pw>'`
+/// treats `%` and `\\` literally inside the single-quoted argument, so no
+/// further escaping is required for those chars.
+fn write_mysql_password_tempfile(cmd: &mut String, password: &str) {
     let escaped_pw = password.replace('\'', "'\\''");
-    let _ = write!(cmd, "{env_var}='{escaped_pw}' ");
+    let _ = write!(
+        cmd,
+        "TMPF=$(mktemp) && \
+         trap 'shred -u \"$TMPF\" 2>/dev/null || rm -f \"$TMPF\"' EXIT && \
+         chmod 600 \"$TMPF\" && \
+         printf '[client]\\npassword=%s\\n' '{escaped_pw}' > $TMPF && "
+    );
+}
+
+/// FIND-031: `PostgreSQL` counterpart of [`write_mysql_password_tempfile`].
+/// Writes a `~/.pgpass`-style line in the format
+/// `host:port:database:user:password` (per `psql(1)` man page) and then
+/// exports `PGPASSFILE=$TMPF` so `psql` / `pg_dump` pick it up.
+///
+/// The pgpass format permits `:` and `\\` in the password, but they must
+/// be escaped with a backslash. We perform that escaping here in addition
+/// to the single-quote escape for the `printf` format-arg.
+fn write_pg_password_tempfile(
+    cmd: &mut String,
+    db_host: &str,
+    db_port: u16,
+    database: &str,
+    db_user: &str,
+    password: &str,
+) {
+    // pgpass-format escaping: \ and : must be backslash-escaped.
+    let pgpass_pw = password.replace('\\', "\\\\").replace(':', "\\:");
+    // POSIX single-quote escaping for the printf format-arg.
+    let printf_pw = pgpass_pw.replace('\'', "'\\''");
+    let printf_host = db_host.replace('\\', "\\\\").replace(':', "\\:");
+    let printf_db = database.replace('\\', "\\\\").replace(':', "\\:");
+    let printf_user = db_user.replace('\\', "\\\\").replace(':', "\\:");
+    let _ = write!(
+        cmd,
+        "TMPF=$(mktemp) && \
+         trap 'shred -u \"$TMPF\" 2>/dev/null || rm -f \"$TMPF\"' EXIT && \
+         chmod 600 \"$TMPF\" && \
+         printf '%s:%s:%s:%s:%s\\n' '{printf_host}' '{db_port}' '{printf_db}' '{printf_user}' '{printf_pw}' > $TMPF && \
+         PGPASSFILE=$TMPF "
+    );
 }
 
 /// Helper to write the compression suffix or plain redirect.
@@ -119,8 +175,23 @@ pub struct DatabaseCommandBuilder;
 impl DatabaseCommandBuilder {
     /// Build a SQL query command.
     ///
-    /// For `MySQL`: `MYSQL_PWD='password' mysql -h host -P port -u user database -e "query"`
-    /// For `PostgreSQL`: `PGPASSWORD='password' psql -h host -p port -U user -d database -c "query"`
+    /// **FIND-031 (Sprint 2 Task 21):** when a password is supplied, it is
+    /// written to a 0600 tempfile (cleaned up by `trap ... EXIT`) and the
+    /// DB CLI reads it from there:
+    /// - `MySQL`: `--defaults-extra-file=$TMPF` (must be the *first* mysql arg).
+    /// - `PostgreSQL`: `PGPASSFILE=$TMPF` env var with a `~/.pgpass`-format file.
+    ///
+    /// The previous shape used `MYSQL_PWD=...` / `PGPASSWORD=...` env vars,
+    /// which were visible in `/proc/PID/environ` on the remote host for the
+    /// lifetime of the DB process. The tempfile pattern keeps the password
+    /// out of both argv and environ.
+    ///
+    /// Resulting shape (`MySQL` with password):
+    /// ```text
+    /// TMPF=$(mktemp) && trap '...' EXIT && chmod 600 "$TMPF" && \
+    /// printf '[client]\npassword=%s\n' '<pw>' > $TMPF && \
+    /// mysql --defaults-extra-file=$TMPF -h host -P 3306 -u user db -e 'query'
+    /// ```
     #[must_use]
     #[expect(clippy::too_many_arguments)]
     pub fn build_query_command(
@@ -142,13 +213,18 @@ impl DatabaseCommandBuilder {
         match db_type {
             DatabaseType::MySQL => {
                 if let Some(password) = db_password {
-                    write_password_env(&mut cmd, "MYSQL_PWD", password);
+                    write_mysql_password_tempfile(&mut cmd, password);
+                    // --defaults-extra-file must be the FIRST mysql argument.
+                    let _ = write!(
+                        cmd,
+                        "mysql --defaults-extra-file=$TMPF -h {escaped_host} -P {db_port} -u {escaped_user} {escaped_db} -e '{escaped_query}'"
+                    );
+                } else {
+                    let _ = write!(
+                        cmd,
+                        "mysql -h {escaped_host} -P {db_port} -u {escaped_user} {escaped_db} -e '{escaped_query}'"
+                    );
                 }
-
-                let _ = write!(
-                    cmd,
-                    "mysql -h {escaped_host} -P {db_port} -u {escaped_user} {escaped_db} -e '{escaped_query}'"
-                );
 
                 if let Some("csv") = format {
                     cmd.push_str(" -B");
@@ -156,7 +232,9 @@ impl DatabaseCommandBuilder {
             }
             DatabaseType::PostgreSQL => {
                 if let Some(password) = db_password {
-                    write_password_env(&mut cmd, "PGPASSWORD", password);
+                    write_pg_password_tempfile(
+                        &mut cmd, db_host, db_port, database, db_user, password,
+                    );
                 }
 
                 let _ = write!(
@@ -175,8 +253,11 @@ impl DatabaseCommandBuilder {
 
     /// Build a database dump command.
     ///
-    /// For `MySQL`: `MYSQL_PWD='password' mysqldump -h host -P port -u user database`
-    /// For `PostgreSQL`: `PGPASSWORD='password' pg_dump -h host -p port -U user database`
+    /// **FIND-031:** uses the same tempfile pattern as
+    /// [`Self::build_query_command`] to keep passwords out of argv/environ.
+    ///
+    /// - `MySQL`: `mysqldump --defaults-extra-file=$TMPF -h host ...`.
+    /// - `PostgreSQL`: `PGPASSFILE=$TMPF pg_dump -h host ...`.
     #[must_use]
     #[expect(clippy::too_many_arguments)]
     pub fn build_dump_command(
@@ -198,13 +279,17 @@ impl DatabaseCommandBuilder {
         match db_type {
             DatabaseType::MySQL => {
                 if let Some(password) = db_password {
-                    write_password_env(&mut cmd, "MYSQL_PWD", password);
+                    write_mysql_password_tempfile(&mut cmd, password);
+                    let _ = write!(
+                        cmd,
+                        "mysqldump --defaults-extra-file=$TMPF -h {escaped_host} -P {db_port} -u {escaped_user} {escaped_db}"
+                    );
+                } else {
+                    let _ = write!(
+                        cmd,
+                        "mysqldump -h {escaped_host} -P {db_port} -u {escaped_user} {escaped_db}"
+                    );
                 }
-
-                let _ = write!(
-                    cmd,
-                    "mysqldump -h {escaped_host} -P {db_port} -u {escaped_user} {escaped_db}"
-                );
 
                 if let Some(table_list) = tables {
                     for table in table_list {
@@ -214,7 +299,9 @@ impl DatabaseCommandBuilder {
             }
             DatabaseType::PostgreSQL => {
                 if let Some(password) = db_password {
-                    write_password_env(&mut cmd, "PGPASSWORD", password);
+                    write_pg_password_tempfile(
+                        &mut cmd, db_host, db_port, database, db_user, password,
+                    );
                 }
 
                 let _ = write!(
@@ -237,8 +324,11 @@ impl DatabaseCommandBuilder {
 
     /// Build a database restore command.
     ///
-    /// For `MySQL`: `MYSQL_PWD='password' mysql -h host -P port -u user database < input_file`
-    /// For `PostgreSQL`: `PGPASSWORD='password' psql -h host -p port -U user -d database < input_file`
+    /// **FIND-031:** uses the same tempfile pattern as
+    /// [`Self::build_query_command`] to keep passwords out of argv/environ.
+    ///
+    /// - `MySQL`: `mysql --defaults-extra-file=$TMPF ... < input_file`.
+    /// - `PostgreSQL`: `PGPASSFILE=$TMPF psql ... < input_file`.
     #[must_use]
     pub fn build_restore_command(
         db_type: &DatabaseType,
@@ -258,17 +348,23 @@ impl DatabaseCommandBuilder {
         match db_type {
             DatabaseType::MySQL => {
                 if let Some(password) = db_password {
-                    write_password_env(&mut cmd, "MYSQL_PWD", password);
+                    write_mysql_password_tempfile(&mut cmd, password);
+                    let _ = write!(
+                        cmd,
+                        "mysql --defaults-extra-file=$TMPF -h {escaped_host} -P {db_port} -u {escaped_user} {escaped_db} < {escaped_file}"
+                    );
+                } else {
+                    let _ = write!(
+                        cmd,
+                        "mysql -h {escaped_host} -P {db_port} -u {escaped_user} {escaped_db} < {escaped_file}"
+                    );
                 }
-
-                let _ = write!(
-                    cmd,
-                    "mysql -h {escaped_host} -P {db_port} -u {escaped_user} {escaped_db} < {escaped_file}"
-                );
             }
             DatabaseType::PostgreSQL => {
                 if let Some(password) = db_password {
-                    write_password_env(&mut cmd, "PGPASSWORD", password);
+                    write_pg_password_tempfile(
+                        &mut cmd, db_host, db_port, database, db_user, password,
+                    );
                 }
 
                 let _ = write!(
@@ -399,8 +495,12 @@ mod tests {
             "SELECT * FROM users",
             Some("csv"),
         );
-        assert!(cmd.starts_with("MYSQL_PWD='secret' "));
-        assert!(cmd.contains("mysql -h 'dbhost' -P 3306 -u 'admin' 'mydb'"));
+        // FIND-031: password lives in a 0600 tempfile, mysql reads it via
+        // --defaults-extra-file. No env var prefix anymore.
+        assert!(cmd.starts_with("TMPF=$(mktemp)"));
+        assert!(cmd.contains("printf '[client]\\npassword=%s\\n' 'secret'"));
+        assert!(cmd.contains("mysql --defaults-extra-file=$TMPF"));
+        assert!(cmd.contains("-h 'dbhost' -P 3306 -u 'admin' 'mydb'"));
         assert!(cmd.contains("-e 'SELECT * FROM users'"));
         assert!(cmd.contains("-B"));
     }
@@ -467,7 +567,12 @@ mod tests {
             "SELECT * FROM orders",
             Some("csv"),
         );
-        assert!(cmd.starts_with("PGPASSWORD='pgpass' "));
+        // FIND-031: password lives in a 0600 ~/.pgpass-format tempfile;
+        // PGPASSFILE env var points psql at it. No PGPASSWORD anymore.
+        assert!(cmd.starts_with("TMPF=$(mktemp)"));
+        assert!(cmd.contains("PGPASSFILE=$TMPF"));
+        // pgpass format: host:port:database:user:password
+        assert!(cmd.contains("printf '%s:%s:%s:%s:%s\\n' 'pghost' '5432' 'pgdb' 'pguser' 'pgpass'"));
         assert!(cmd.contains("psql -h 'pghost' -p 5432 -U 'pguser' -d 'pgdb'"));
         assert!(cmd.contains("-c 'SELECT * FROM orders'"));
         assert!(cmd.contains("--csv"));
@@ -533,7 +638,10 @@ mod tests {
             "SELECT 1",
             None,
         );
-        assert!(cmd.contains("MYSQL_PWD='pass'\\''word'"));
+        // FIND-031: password is in a printf format-arg, not an env var.
+        // Single-quote escape (POSIX `'\''` sequence) still applies.
+        assert!(cmd.contains("'pass'\\''word'"));
+        assert!(!cmd.contains("MYSQL_PWD"));
     }
 
     // ============== build_dump_command Tests ==============
@@ -551,8 +659,10 @@ mod tests {
             None,
             "/tmp/dump.sql",
         );
-        assert!(cmd.contains("MYSQL_PWD='pass'"));
-        assert!(cmd.contains("mysqldump -h 'localhost' -P 3306 -u 'root' 'mydb'"));
+        // FIND-031: --defaults-extra-file pattern, no MYSQL_PWD env.
+        assert!(cmd.contains("printf '[client]\\npassword=%s\\n' 'pass'"));
+        assert!(cmd.contains("mysqldump --defaults-extra-file=$TMPF"));
+        assert!(cmd.contains("-h 'localhost' -P 3306 -u 'root' 'mydb'"));
         assert!(cmd.contains("> '/tmp/dump.sql'"));
         assert!(!cmd.contains("| gzip"));
     }
@@ -635,7 +745,9 @@ mod tests {
             None,
             "/tmp/dump.sql",
         );
-        assert!(cmd.contains("PGPASSWORD='pgpass'"));
+        // FIND-031: PGPASSFILE pgpass-file pattern, no PGPASSWORD env.
+        assert!(cmd.contains("PGPASSFILE=$TMPF"));
+        assert!(cmd.contains("printf '%s:%s:%s:%s:%s\\n'"));
         assert!(cmd.contains("pg_dump -h 'localhost' -p 5432 -U 'postgres' 'mydb'"));
         assert!(cmd.contains("> '/tmp/dump.sql'"));
     }
@@ -703,8 +815,11 @@ mod tests {
             "mydb",
             "/tmp/dump.sql",
         );
-        assert!(cmd.contains("MYSQL_PWD='pass'"));
-        assert!(cmd.contains("mysql -h 'localhost' -P 3306 -u 'root' 'mydb' < '/tmp/dump.sql'"));
+        // FIND-031: --defaults-extra-file pattern, no MYSQL_PWD env.
+        assert!(cmd.contains("printf '[client]\\npassword=%s\\n' 'pass'"));
+        assert!(cmd.contains(
+            "mysql --defaults-extra-file=$TMPF -h 'localhost' -P 3306 -u 'root' 'mydb' < '/tmp/dump.sql'"
+        ));
     }
 
     #[test]
@@ -718,7 +833,9 @@ mod tests {
             "mydb",
             "/tmp/dump.sql",
         );
-        assert!(cmd.contains("PGPASSWORD='pgpass'"));
+        // FIND-031: PGPASSFILE pgpass-file pattern, no PGPASSWORD env.
+        assert!(cmd.contains("PGPASSFILE=$TMPF"));
+        assert!(cmd.contains("printf '%s:%s:%s:%s:%s\\n'"));
         assert!(
             cmd.contains("psql -h 'localhost' -p 5432 -U 'postgres' -d 'mydb' < '/tmp/dump.sql'")
         );
@@ -916,5 +1033,187 @@ mod tests {
     #[test]
     fn test_validate_query_explain_is_ok() {
         assert!(DatabaseCommandBuilder::validate_query("EXPLAIN SELECT * FROM users").is_ok());
+    }
+
+    // ============== FIND-031: argv/environ leak prevention ==============
+
+    /// FIND-031: `MySQL` password must NOT appear as `MYSQL_PWD=...` (visible
+    /// in `/proc/PID/environ`) and must NOT appear in argv. The defaults-
+    /// extra-file pattern stores the password in a 0600 tempfile, cleaned
+    /// up by `trap ... EXIT`.
+    ///
+    /// Test strategy: split on `> $TMPF`, take the portion AFTER (which is
+    /// the actual `mysql ...` invocation). Password may appear in the
+    /// printf format-arg before the redirect (tempfile write, not argv)
+    /// but must not appear after — that's the visible-to-`ps` portion.
+    #[test]
+    fn db_query_mysql_excludes_password_from_argv_and_environ() {
+        let cmd = DatabaseCommandBuilder::build_query_command(
+            &DatabaseType::MySQL,
+            "host",
+            3306,
+            "user",
+            Some("topsecret"),
+            "db",
+            "select 1",
+            None,
+        );
+
+        let argv = post_redirect(&cmd);
+        assert!(
+            !argv.contains("topsecret"),
+            "FIND-031: password leaked into argv after tempfile write: {cmd}"
+        );
+        assert!(
+            !cmd.contains("MYSQL_PWD="),
+            "FIND-031: MYSQL_PWD env var must be replaced by --defaults-extra-file: {cmd}"
+        );
+        assert!(
+            cmd.contains("--defaults-extra-file"),
+            "FIND-031: must use --defaults-extra-file: {cmd}"
+        );
+    }
+
+    /// FIND-031: `PostgreSQL` password must NOT appear as `PGPASSWORD=...`.
+    /// Use `PGPASSFILE=$TMPF` with a 0600 pgpass file instead.
+    #[test]
+    fn db_query_pg_excludes_password_from_argv_and_environ() {
+        let cmd = DatabaseCommandBuilder::build_query_command(
+            &DatabaseType::PostgreSQL,
+            "host",
+            5432,
+            "user",
+            Some("topsecret"),
+            "db",
+            "select 1",
+            None,
+        );
+
+        let argv = post_redirect(&cmd);
+        assert!(
+            !argv.contains("topsecret"),
+            "FIND-031: password leaked into argv after tempfile write: {cmd}"
+        );
+        assert!(
+            !cmd.contains("PGPASSWORD="),
+            "FIND-031: PGPASSWORD env var must be replaced by PGPASSFILE: {cmd}"
+        );
+        assert!(
+            cmd.contains("PGPASSFILE="),
+            "FIND-031: must use PGPASSFILE: {cmd}"
+        );
+    }
+
+    /// FIND-031: same protection on `mysqldump`.
+    #[test]
+    fn db_dump_mysql_excludes_password_from_argv_and_environ() {
+        let cmd = DatabaseCommandBuilder::build_dump_command(
+            &DatabaseType::MySQL,
+            "host",
+            3306,
+            "user",
+            Some("topsecret"),
+            "db",
+            None,
+            None,
+            "/tmp/out.sql",
+        );
+
+        let argv = post_redirect(&cmd);
+        assert!(!argv.contains("topsecret"), "argv: {argv}");
+        assert!(!cmd.contains("MYSQL_PWD="));
+        assert!(cmd.contains("--defaults-extra-file"));
+    }
+
+    /// FIND-031: same protection on `pg_dump`.
+    #[test]
+    fn db_dump_pg_excludes_password_from_argv_and_environ() {
+        let cmd = DatabaseCommandBuilder::build_dump_command(
+            &DatabaseType::PostgreSQL,
+            "host",
+            5432,
+            "user",
+            Some("topsecret"),
+            "db",
+            None,
+            None,
+            "/tmp/out.sql",
+        );
+
+        let argv = post_redirect(&cmd);
+        assert!(!argv.contains("topsecret"), "argv: {argv}");
+        assert!(!cmd.contains("PGPASSWORD="));
+        assert!(cmd.contains("PGPASSFILE="));
+    }
+
+    /// FIND-031: same protection on `mysql < dump.sql` restore path.
+    #[test]
+    fn db_restore_mysql_excludes_password_from_argv_and_environ() {
+        let cmd = DatabaseCommandBuilder::build_restore_command(
+            &DatabaseType::MySQL,
+            "host",
+            3306,
+            "user",
+            Some("topsecret"),
+            "db",
+            "/tmp/in.sql",
+        );
+
+        let argv = post_redirect(&cmd);
+        assert!(!argv.contains("topsecret"), "argv: {argv}");
+        assert!(!cmd.contains("MYSQL_PWD="));
+        assert!(cmd.contains("--defaults-extra-file"));
+    }
+
+    /// FIND-031: same protection on `psql < dump.sql` restore path.
+    #[test]
+    fn db_restore_pg_excludes_password_from_argv_and_environ() {
+        let cmd = DatabaseCommandBuilder::build_restore_command(
+            &DatabaseType::PostgreSQL,
+            "host",
+            5432,
+            "user",
+            Some("topsecret"),
+            "db",
+            "/tmp/in.sql",
+        );
+
+        let argv = post_redirect(&cmd);
+        assert!(!argv.contains("topsecret"), "argv: {argv}");
+        assert!(!cmd.contains("PGPASSWORD="));
+        assert!(cmd.contains("PGPASSFILE="));
+    }
+
+    /// Helper: returns the portion of the command AFTER the `> $TMPF` redirect.
+    /// This is the `mysql ... ` / `psql ... ` invocation that is visible to
+    /// `ps eww` on the remote host. The password must never appear here.
+    /// If no tempfile redirect exists (no-password path), returns the whole
+    /// command (the entire thing is argv).
+    fn post_redirect(cmd: &str) -> &str {
+        cmd.split_once("> $TMPF && ")
+            .map_or(cmd, |(_, after)| after)
+    }
+
+    /// FIND-031: tempfile must be created with mode 0600 and cleaned up by
+    /// trap-on-EXIT (with shred preferred, rm fallback).
+    #[test]
+    fn db_query_tempfile_is_secure_and_cleaned_up() {
+        let cmd = DatabaseCommandBuilder::build_query_command(
+            &DatabaseType::MySQL,
+            "host",
+            3306,
+            "user",
+            Some("pw"),
+            "db",
+            "select 1",
+            None,
+        );
+        assert!(cmd.contains("mktemp"), "must use mktemp: {cmd}");
+        assert!(cmd.contains("chmod 600"), "must chmod 600: {cmd}");
+        assert!(cmd.contains("trap"), "must register cleanup trap: {cmd}");
+        assert!(
+            cmd.contains("shred -u") || cmd.contains("rm -f"),
+            "must clean up tempfile: {cmd}"
+        );
     }
 }

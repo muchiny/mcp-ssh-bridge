@@ -485,7 +485,9 @@ mod tests {
         };
 
         let cmd = DbDumpTool::build_command(&args, &test_host_config()).unwrap();
-        assert!(cmd.contains("PGPASSWORD="));
+        // FIND-031: PGPASSWORD env replaced by PGPASSFILE pgpass-file.
+        assert!(cmd.contains("PGPASSFILE=$TMPF"));
+        assert!(!cmd.contains("PGPASSWORD="));
         assert!(cmd.contains("pg_dump"));
         assert!(cmd.contains("-h 'dbhost'"));
         assert!(cmd.contains("-p 5433"));
