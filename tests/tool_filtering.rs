@@ -3,10 +3,10 @@
 //! Tests that `ToolGroupsConfig` properly controls which tools are visible
 //! and callable through the registry.
 
-use std::collections::HashMap;
-
 use mcp_ssh_bridge::config::ToolGroupsConfig;
-use mcp_ssh_bridge::mcp::registry::{all_enabled_tool_groups_config_for_test, create_filtered_registry, tool_annotations, tool_group};
+use mcp_ssh_bridge::mcp::registry::{
+    all_enabled_tool_groups_config_for_test, create_filtered_registry, tool_annotations, tool_group,
+};
 
 // ============== Default Registry ==============
 
