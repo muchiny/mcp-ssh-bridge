@@ -131,6 +131,10 @@ impl TemplateCommandBuilder {
     /// Build a command to apply template content to a destination file.
     ///
     /// If `backup` is true, creates a `.bak` copy before overwriting.
+    ///
+    /// The heredoc terminator is randomized per call (`MCP_EOF_{uuid}`)
+    /// and re-rolled on the astronomically rare collision with any body line,
+    /// so a malicious `content` cannot close the heredoc and inject shell.
     #[must_use]
     pub fn build_template_apply_command(content: &str, dest: &str, backup: bool) -> String {
         let escaped_dest = shell_escape(dest);
@@ -138,9 +142,17 @@ impl TemplateCommandBuilder {
         if backup {
             let _ = write!(cmd, "cp {escaped_dest} {escaped_dest}.bak 2>/dev/null; ");
         }
+
+        let terminator = loop {
+            let candidate = format!("MCP_EOF_{}", uuid::Uuid::new_v4().simple());
+            if !content.lines().any(|l| l == candidate) {
+                break candidate;
+            }
+        };
+
         let _ = write!(
             cmd,
-            "cat > {escaped_dest} << 'TEMPLATE_EOF'\n{content}\nTEMPLATE_EOF"
+            "cat > {escaped_dest} << '{terminator}'\n{content}\n{terminator}"
         );
         cmd
     }
@@ -345,6 +357,14 @@ mod tests {
 
     // ============== Apply Command ==============
 
+    /// Helper for tests: extract the heredoc terminator (the token between
+    /// `<< '` and the next `'`) from a built apply command.
+    fn extract_terminator(cmd: &str) -> &str {
+        let start = cmd.find("<< '").expect("heredoc opening present") + 4;
+        let end = cmd[start..].find('\'').expect("terminator close quote") + start;
+        &cmd[start..end]
+    }
+
     #[test]
     fn test_apply_command_no_backup() {
         let cmd = TemplateCommandBuilder::build_template_apply_command(
@@ -352,7 +372,8 @@ mod tests {
             "/etc/nginx/nginx.conf",
             false,
         );
-        assert!(cmd.contains("TEMPLATE_EOF"));
+        let terminator = extract_terminator(&cmd);
+        assert!(cmd.contains(terminator));
         assert!(cmd.contains("server { listen 80; }"));
         assert!(!cmd.contains(".bak"));
     }
@@ -364,8 +385,9 @@ mod tests {
             "/etc/nginx/nginx.conf",
             true,
         );
+        let terminator = extract_terminator(&cmd);
         assert!(cmd.contains(".bak"));
-        assert!(cmd.contains("TEMPLATE_EOF"));
+        assert!(cmd.contains(terminator));
         assert!(cmd.contains("cp "));
     }
 
@@ -377,6 +399,52 @@ mod tests {
             false,
         );
         assert!(cmd.contains("'/tmp/test; rm -rf /'"));
+    }
+
+    #[test]
+    fn test_template_apply_uses_unique_terminator() {
+        let cmd = TemplateCommandBuilder::build_template_apply_command(
+            "hello\nTEMPLATE_EOF\nbash -c 'evil'",
+            "/etc/site.conf",
+            false,
+        );
+        // Extract the terminator: the token after `<< '` and before the next `'`.
+        let start = cmd.find("<< '").expect("heredoc opening present") + 4;
+        let end = cmd[start..].find('\'').expect("terminator close quote") + start;
+        let terminator = &cmd[start..end];
+
+        // The terminator must not appear as a sole line in the body.
+        let body_start = cmd.find('\n').expect("body has newline") + 1;
+        let body_end = cmd
+            .rfind(&format!("\n{terminator}"))
+            .expect("closing terminator");
+        let body = &cmd[body_start..body_end];
+        assert!(
+            !body.lines().any(|l| l == terminator),
+            "terminator {terminator} must not appear as a sole line in body"
+        );
+        // Sanity: the literal old default 'TEMPLATE_EOF' is in the BODY (the attacker payload).
+        // Reject builds that still emit that as the actual heredoc terminator.
+        assert_ne!(terminator, "TEMPLATE_EOF");
+    }
+
+    #[test]
+    fn test_template_apply_terminators_are_unique_per_call() {
+        let a = TemplateCommandBuilder::build_template_apply_command("a", "/x", false);
+        let b = TemplateCommandBuilder::build_template_apply_command("a", "/x", false);
+        assert_ne!(a, b, "calls must use different terminators");
+    }
+
+    #[test]
+    fn test_template_apply_backup_branch_still_works() {
+        let cmd = TemplateCommandBuilder::build_template_apply_command(
+            "body",
+            "/etc/foo.conf",
+            true,
+        );
+        assert!(cmd.starts_with("cp "));
+        assert!(cmd.contains(".bak 2>/dev/null;"));
+        assert!(cmd.contains("cat > '/etc/foo.conf'"));
     }
 
     // ============== Validate Command ==============
