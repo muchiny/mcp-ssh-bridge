@@ -386,13 +386,20 @@ impl PooledConnectionGuard<'_> {
     ///
     /// # Errors
     ///
-    /// Returns an error if the command execution fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the connection has already been taken (e.g., after `mark_failed` was called).
+    /// Returns an error if the command execution fails, or if the
+    /// underlying connection handle has already been consumed (e.g., after
+    /// `mark_failed` was called). The latter is reported as a structured
+    /// `BridgeError::SshConnection` rather than a panic so the calling
+    /// tool surfaces a clean MCP error instead of crashing the process.
     pub async fn exec(&mut self, command: &str, limits: &LimitsConfig) -> Result<CommandOutput> {
-        let conn = self.connection.as_mut().expect("connection already taken");
+        let conn =
+            self.connection
+                .as_mut()
+                .ok_or_else(|| crate::error::BridgeError::SshConnection {
+                    host: self.host_name.clone(),
+                    reason: "pooled connection handle missing (already taken or never initialized)"
+                        .to_string(),
+                })?;
         conn.touch();
         conn.client.exec(command, limits).await
     }

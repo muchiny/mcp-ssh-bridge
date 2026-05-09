@@ -149,9 +149,11 @@ pub fn is_retryable_error(error: &BridgeError) -> bool {
 ///
 /// Returns the last error from the operation if all retry attempts fail.
 ///
-/// # Panics
+/// # Behavior
 ///
-/// Panics if `max_attempts` is 0 (at least one attempt must be configured).
+/// `max_attempts` is clamped to a minimum of 1 — passing 0 results in a
+/// single attempt rather than a panic. This is defense-in-depth against
+/// callers that build a `RetryConfig` with `max_attempts: 0` by mistake.
 pub async fn with_retry<T, E, F, Fut>(
     config: &RetryConfig,
     operation_name: &str,
@@ -162,9 +164,14 @@ where
     Fut: Future<Output = Result<T, E>>,
     E: std::fmt::Display,
 {
-    let mut last_error = None;
+    // Clamp to at least 1 attempt so the loop body always runs and the
+    // last iteration's error is returned directly via `return Err(e)` —
+    // this eliminates the "Option<E> accumulator + .expect()" pattern
+    // that previously panicked when `max_attempts` was 0.
+    let max_attempts = config.max_attempts.max(1);
+    let mut attempt: u32 = 0;
 
-    for attempt in 0..config.max_attempts {
+    loop {
         // Wait before retry (except first attempt)
         let delay = config.delay_for_attempt(attempt);
         if !delay.is_zero() {
@@ -189,19 +196,21 @@ where
                 return Ok(result);
             }
             Err(e) => {
+                let is_last_attempt = attempt + 1 >= max_attempts;
                 warn!(
                     operation = %operation_name,
                     attempt = attempt + 1,
-                    max_attempts = config.max_attempts,
+                    max_attempts = max_attempts,
                     error = %e,
                     "Operation failed"
                 );
-                last_error = Some(e);
+                if is_last_attempt {
+                    return Err(e);
+                }
+                attempt += 1;
             }
         }
     }
-
-    Err(last_error.expect("at least one attempt was made"))
 }
 
 /// Execute an async operation with retry, using a predicate to determine if retry should happen
@@ -211,9 +220,11 @@ where
 /// Returns the last error from the operation if all retry attempts fail or if the predicate
 /// returns false for a non-retryable error.
 ///
-/// # Panics
+/// # Behavior
 ///
-/// Panics if `max_attempts` is 0 (at least one attempt must be configured).
+/// `max_attempts` is clamped to a minimum of 1 — passing 0 results in a
+/// single attempt rather than a panic. This is defense-in-depth against
+/// callers that build a `RetryConfig` with `max_attempts: 0` by mistake.
 pub async fn with_retry_if<T, E, F, Fut, P>(
     config: &RetryConfig,
     operation_name: &str,
@@ -226,9 +237,12 @@ where
     E: std::fmt::Display,
     P: Fn(&E) -> bool,
 {
-    let mut last_error = None;
+    // Clamp to at least 1 attempt so the loop body always runs and the
+    // last iteration's error is returned directly via `return Err(e)`.
+    let max_attempts = config.max_attempts.max(1);
+    let mut attempt: u32 = 0;
 
-    for attempt in 0..config.max_attempts {
+    loop {
         // Wait before retry (except first attempt)
         let delay = config.delay_for_attempt(attempt);
         if !delay.is_zero() {
@@ -253,17 +267,18 @@ where
                 return Ok(result);
             }
             Err(e) => {
-                let is_last_attempt = attempt + 1 >= config.max_attempts;
+                let is_last_attempt = attempt + 1 >= max_attempts;
                 let should_retry_this = !is_last_attempt && should_retry(&e);
 
                 if should_retry_this {
                     warn!(
                         operation = %operation_name,
                         attempt = attempt + 1,
-                        max_attempts = config.max_attempts,
+                        max_attempts = max_attempts,
                         error = %e,
                         "Operation failed, will retry"
                     );
+                    attempt += 1;
                 } else {
                     warn!(
                         operation = %operation_name,
@@ -273,13 +288,9 @@ where
                     );
                     return Err(e);
                 }
-
-                last_error = Some(e);
             }
         }
     }
-
-    Err(last_error.expect("at least one attempt was made"))
 }
 
 #[cfg(test)]
@@ -401,6 +412,58 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(call_count, 3);
+    }
+
+    /// Regression test for FIND-010: previously panicked with
+    /// `expect("at least one attempt was made")` when `max_attempts == 0`.
+    /// Now clamped to 1 attempt and returns the operation's `Err` cleanly.
+    #[tokio::test]
+    async fn test_with_retry_max_attempts_zero_does_not_panic() {
+        let config = RetryConfig {
+            max_attempts: 0,
+            initial_delay_ms: 1,
+            jitter: 0.0,
+            ..Default::default()
+        };
+        let mut call_count = 0;
+
+        let result: Result<i32, String> = with_retry(&config, "test", || {
+            call_count += 1;
+            async { Err("op failed".to_string()) }
+        })
+        .await;
+
+        assert!(result.is_err(), "expected Err, got {result:?}");
+        assert_eq!(result.unwrap_err(), "op failed");
+        assert_eq!(call_count, 1, "loop should clamp to one attempt");
+    }
+
+    /// Regression test for FIND-011: previously panicked with
+    /// `expect("at least one attempt was made")` when `max_attempts == 0`.
+    #[tokio::test]
+    async fn test_with_retry_if_max_attempts_zero_does_not_panic() {
+        let config = RetryConfig {
+            max_attempts: 0,
+            initial_delay_ms: 1,
+            jitter: 0.0,
+            ..Default::default()
+        };
+        let mut call_count = 0;
+
+        let result: Result<i32, String> = with_retry_if(
+            &config,
+            "test",
+            || {
+                call_count += 1;
+                async { Err("op failed".to_string()) }
+            },
+            |_| true,
+        )
+        .await;
+
+        assert!(result.is_err(), "expected Err, got {result:?}");
+        assert_eq!(result.unwrap_err(), "op failed");
+        assert_eq!(call_count, 1, "loop should clamp to one attempt");
     }
 
     // ============== with_retry_if Tests ==============
