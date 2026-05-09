@@ -6,7 +6,7 @@
 //! (cross-session denial-of-observability).
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::Ordering;
 
 use mcp_ssh_bridge::mcp::protocol::{LogLevel, WriterMessage};
 use mcp_ssh_bridge::mcp::session_context::SessionContext;
@@ -46,10 +46,8 @@ async fn log_level_isolated_across_sessions() {
 
     // The Arc handles must be distinct allocations — same pointer would
     // collapse the per-session storage into a shared cell.
-    let a_ptr = Arc::as_ptr(&a.log_level) as *const AtomicU8;
-    let b_ptr = Arc::as_ptr(&b.log_level) as *const AtomicU8;
-    assert_ne!(
-        a_ptr, b_ptr,
+    assert!(
+        !Arc::ptr_eq(&a.log_level, &b.log_level),
         "FIND-035: per-session log_level must be a distinct allocation"
     );
 }
