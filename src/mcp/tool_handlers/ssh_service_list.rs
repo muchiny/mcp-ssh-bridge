@@ -80,11 +80,11 @@ impl StandardTool for ServiceListTool {
         crate::domain::output_kind::OutputKind::Tabular;
 
     fn build_command(args: &SshServiceListArgs, _host_config: &HostConfig) -> Result<String> {
-        Ok(SystemdCommandBuilder::build_list_command(
+        SystemdCommandBuilder::build_list_command(
             args.state.as_deref(),
             args.all.unwrap_or(false),
             args.unit_type.as_deref(),
-        ))
+        )
     }
 
     fn post_process(
