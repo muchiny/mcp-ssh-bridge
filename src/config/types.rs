@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
     pub hosts: HashMap<String, HostConfig>,
@@ -46,6 +47,7 @@ pub struct Config {
 /// This enables air-gapped environments where AWX is not directly
 /// reachable from the MCP server host.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct AwxConfig {
     /// SSH host alias (from `hosts` section) used to relay API calls.
     pub ssh_host: String,
@@ -76,6 +78,7 @@ fn default_true() -> bool {
 
 /// HTTP transport configuration for the YAML config.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct HttpTransportConfig {
     /// Bind address (default: `"127.0.0.1:3000"` — loopback only).
     #[serde(default = "default_http_bind")]
@@ -154,7 +157,7 @@ const fn default_http_max_sessions() -> usize {
 
 /// OAuth configuration for the HTTP transport (YAML-serializable).
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HttpOAuthConfig {
     /// Enable OAuth authentication (default: false).
     #[serde(default)]
@@ -201,7 +204,7 @@ pub struct HttpOAuthConfig {
 /// in-memory key map at boot. Keys are addressed by their JWT `kid`
 /// header.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HttpOAuthStaticKey {
     /// JWT `kid` header value this key matches.
     pub kid: String,
@@ -210,6 +213,7 @@ pub struct HttpOAuthStaticKey {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct HostConfig {
     pub hostname: String,
 
@@ -311,6 +315,7 @@ pub struct HostConfig {
 
 /// Per-host retry configuration override
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct HostRetryConfig {
     /// Maximum retry attempts (overrides global `limits.retry_attempts`)
     #[serde(default)]
@@ -433,6 +438,7 @@ const fn default_port() -> u16 {
 
 /// SOCKS proxy configuration for tunneling SSH connections
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SocksProxyConfig {
     /// Proxy hostname or IP
     pub hostname: String,
@@ -519,6 +525,7 @@ pub enum AuthConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
     #[serde(default = "default_security_mode")]
     pub mode: SecurityMode,
@@ -579,6 +586,7 @@ fn default_require_elicitation_on_destructive() -> bool {
 /// - Disable specific builtin pattern categories
 /// - Add custom patterns with custom replacement text
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SanitizeConfig {
     /// Enable/disable sanitization entirely (default: true)
     #[serde(default = "default_sanitize_enabled")]
@@ -664,6 +672,7 @@ const fn default_sanitize_enabled() -> bool {
 
 /// Custom sanitization pattern with configurable replacement
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CustomSanitizePattern {
     /// Regex pattern to match sensitive data
     pub pattern: String,
@@ -747,6 +756,7 @@ pub enum SecurityMode {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct LimitsConfig {
     #[serde(default = "default_command_timeout")]
     pub command_timeout_seconds: u64,
@@ -904,6 +914,7 @@ pub enum MatchMode {
 
 /// Per-client override for output limits, matched by MCP client name.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ClientOverride {
     /// Pattern to match against the MCP client name (case-insensitive)
     pub name_contains: String,
@@ -1034,6 +1045,7 @@ const fn default_sftp_write_threshold() -> usize {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuditConfig {
     #[serde(default = "default_audit_enabled")]
     pub enabled: bool,
@@ -1079,6 +1091,7 @@ const fn default_audit_retain() -> u32 {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SessionConfig {
     /// Maximum number of concurrent sessions
     #[serde(default = "default_max_sessions")]
@@ -1121,6 +1134,7 @@ const fn default_session_max_age() -> u64 {
 /// discover hosts. YAML-defined hosts take precedence over discovered ones.
 /// Enabled by default to reduce time-to-first-command.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct SshConfigDiscovery {
     /// Enable SSH config auto-discovery (default: true)
     #[serde(default = "default_ssh_config_enabled")]
@@ -1293,6 +1307,7 @@ fn default_ssh_config_path() -> String {
 /// - `recording`: `ssh_recording_start`, `ssh_recording_stop`, `ssh_recording_list`,
 ///   `ssh_recording_replay`, `ssh_recording_verify`
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolGroupsConfig {
     /// Map of group name to enabled status.
     /// Groups not listed are enabled by default.

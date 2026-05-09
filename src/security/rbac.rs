@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 /// RBAC configuration
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct RbacConfig {
     /// Whether RBAC is enabled (default: false for backward compatibility)
     #[serde(default)]
@@ -28,6 +29,7 @@ fn default_role_name() -> String {
 
 /// A role definition with access rules
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Role {
     /// Human-readable description
     #[serde(default)]

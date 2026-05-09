@@ -11,6 +11,7 @@ use tracing::{info, warn};
 
 /// A runbook definition loaded from YAML
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Runbook {
     pub name: String,
     pub description: String,
@@ -27,6 +28,7 @@ fn default_version() -> String {
 
 /// Runbook parameter definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RunbookParam {
     #[serde(rename = "type", default = "default_param_type")]
     pub param_type: String,
@@ -42,6 +44,7 @@ fn default_param_type() -> String {
 
 /// A single step in a runbook
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RunbookStep {
     pub name: String,
     #[serde(default)]
