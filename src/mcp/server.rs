@@ -79,16 +79,92 @@ pub struct McpServer {
     roots: Arc<RwLock<Vec<RootEntry>>>,
     /// Application metrics for token consumption analytics.
     metrics: Arc<crate::metrics::Metrics>,
-    /// Map of in-flight MCP request IDs to their `CancellationToken`.
+}
+
+/// Per-session map of in-flight JSON-RPC request ids to their
+/// `CancellationToken`.
+///
+/// FIND-038 (audit 2026-05-09): the previous implementation kept a
+/// server-singleton map keyed on the JSON-RPC `id` alone. Because the
+/// `id` is caller-chosen and is NOT scoped to a session, a concurrent
+/// client B could send `notifications/cancelled { requestId: "<A's id>" }`
+/// and cancel an in-flight request belonging to client A.
+///
+/// Allocating a fresh `ActiveRequests` per session in
+/// `serve_session()` makes lookups session-local: a cancel notification
+/// arriving on session B can only ever drain session B's map.
+///
+/// `std::sync::Mutex` (not `tokio::sync::Mutex`) because we only hold the
+/// lock for hashmap insert/remove — no `.await` inside the critical
+/// section.
+#[derive(Clone, Default)]
+pub struct ActiveRequests(
+    Arc<std::sync::Mutex<HashMap<String, tokio_util::sync::CancellationToken>>>,
+);
+
+impl ActiveRequests {
+    /// Build a fresh empty active-requests map.
+    #[must_use]
+    pub fn new() -> Self {
+        Self(Arc::new(std::sync::Mutex::new(HashMap::new())))
+    }
+
+    /// Register a new in-flight request and return its `CancellationToken`.
     ///
-    /// Populated at request spawn and drained when the request completes
-    /// (success or error). The `notifications/cancelled` handler looks up
-    /// a request by ID and calls `token.cancel()` to honor MCP 2025-11-25
-    /// `notifications/cancelled`.
+    /// The caller must call [`Self::unregister`] when the request completes
+    /// (success or error) to avoid the map growing unbounded.
+    #[must_use]
+    pub fn register(&self, request_id: String) -> tokio_util::sync::CancellationToken {
+        let token = tokio_util::sync::CancellationToken::new();
+        if let Ok(mut map) = self.0.lock() {
+            map.insert(request_id, token.clone());
+        }
+        token
+    }
+
+    /// Remove a request from the in-flight map.
     ///
-    /// `std::sync::Mutex` (not `tokio::sync::Mutex`) because we only hold it
-    /// for hashmap insert/remove — no `.await` inside the critical section.
-    active_requests: Arc<std::sync::Mutex<HashMap<String, tokio_util::sync::CancellationToken>>>,
+    /// No-op if the request was already removed (e.g. cancelled before
+    /// completion). Tolerates a poisoned mutex silently — losing track of
+    /// one request is not worth a panic in a long-running server.
+    pub fn unregister(&self, request_id: &str) {
+        if let Ok(mut map) = self.0.lock() {
+            map.remove(request_id);
+        }
+    }
+
+    /// Cancel an in-flight request by ID.
+    ///
+    /// Returns `true` if a matching request was found and cancelled,
+    /// `false` if the ID is unknown (already completed or never existed).
+    ///
+    /// The map entry is removed atomically with the cancel signal so a
+    /// follow-up [`Self::unregister`] call from the spawned task becomes
+    /// a no-op.
+    pub fn cancel(&self, request_id: &str) -> bool {
+        let token = match self.0.lock() {
+            Ok(mut map) => map.remove(request_id),
+            Err(_) => return false,
+        };
+        if let Some(token) = token {
+            token.cancel();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Number of currently-registered in-flight requests. Test helper.
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.0.lock().map(|m| m.len()).unwrap_or(0)
+    }
+
+    /// Snapshot of currently-registered request ids. Test helper.
+    #[cfg(test)]
+    fn contains(&self, id: &str) -> bool {
+        self.0.lock().map(|m| m.contains_key(id)).unwrap_or(false)
+    }
 }
 
 impl McpServer {
@@ -198,7 +274,6 @@ impl McpServer {
             resource_subscriptions: Arc::new(RwLock::new(HashMap::new())),
             roots: Arc::new(RwLock::new(Vec::new())),
             metrics: Arc::new(crate::metrics::Metrics::new()),
-            active_requests: Arc::new(std::sync::Mutex::new(HashMap::new())),
         };
 
         (server, audit_task)
@@ -234,52 +309,18 @@ impl McpServer {
         Arc::new(crate::mcp::session_capabilities::SessionCapabilities::new())
     }
 
-    /// Register a new in-flight request and return its `CancellationToken`.
+    /// Allocate a fresh per-session `ActiveRequests` handle.
     ///
-    /// The caller must call [`Self::unregister_request`] when the request
-    /// completes (success or error) to avoid the map growing unbounded.
+    /// Test helper used by `tests/cross_session_cancel.rs` to verify
+    /// that two sessions on the same `McpServer` instance get independent
+    /// `ActiveRequests` instances (FIND-038 audit 2026-05-09).
+    /// Integration tests live in their own crate so this helper cannot
+    /// be `#[cfg(test)]`; it is gated `#[doc(hidden)]` instead so it
+    /// stays out of the public docs.
+    #[doc(hidden)]
     #[must_use]
-    pub(crate) fn register_request(
-        &self,
-        request_id: String,
-    ) -> tokio_util::sync::CancellationToken {
-        let token = tokio_util::sync::CancellationToken::new();
-        if let Ok(mut map) = self.active_requests.lock() {
-            map.insert(request_id, token.clone());
-        }
-        token
-    }
-
-    /// Remove a request from the in-flight map.
-    ///
-    /// No-op if the request was already removed (e.g. cancelled before
-    /// completion). Tolerates a poisoned mutex silently — losing track of
-    /// one request is not worth a panic in a long-running server.
-    pub(crate) fn unregister_request(&self, request_id: &str) {
-        if let Ok(mut map) = self.active_requests.lock() {
-            map.remove(request_id);
-        }
-    }
-
-    /// Cancel an in-flight request by ID.
-    ///
-    /// Returns `true` if a matching request was found and cancelled,
-    /// `false` if the ID is unknown (already completed or never existed).
-    ///
-    /// The map entry is removed atomically with the cancel signal so a
-    /// follow-up `unregister_request` call from the spawned task becomes
-    /// a no-op.
-    pub(crate) fn cancel_request(&self, request_id: &str) -> bool {
-        let token = match self.active_requests.lock() {
-            Ok(mut map) => map.remove(request_id),
-            Err(_) => return false,
-        };
-        if let Some(token) = token {
-            token.cancel();
-            true
-        } else {
-            false
-        }
+    pub fn allocate_session_active_requests_for_test(&self) -> ActiveRequests {
+        ActiveRequests::new()
     }
 
     /// Create a `ToolContext` for tool execution
@@ -645,6 +686,13 @@ impl McpServer {
         // capabilities; a flag set by client A never leaks into client B.
         let session_caps = Arc::new(SessionCapabilities::new());
 
+        // Per-session active-requests map (FIND-038 audit 2026-05-09).
+        // Each connected client gets its own map keyed on JSON-RPC `id`;
+        // client B sending `notifications/cancelled { requestId: "<A's id>" }`
+        // can no longer cancel client A's in-flight request because the
+        // lookup runs against B's local map only.
+        let session_active_requests = ActiveRequests::new();
+
         // Store the per-session writer channel globally so config
         // watcher + background workers can find a live sender. With
         // stdio this is set once and cleared on exit; with multi-
@@ -692,7 +740,13 @@ impl McpServer {
             match incoming {
                 IncomingMessage::Single(message) => {
                     let Some(request) = self
-                        .route_incoming_message(message, &tx, &session_pending, &session_caps)
+                        .route_incoming_message(
+                            message,
+                            &tx,
+                            &session_pending,
+                            &session_caps,
+                            &session_active_requests,
+                        )
                         .await
                     else {
                         continue;
@@ -717,8 +771,9 @@ impl McpServer {
                     });
                     let cancel_token = request_id
                         .as_ref()
-                        .map(|id| server.register_request(id.clone()));
+                        .map(|id| session_active_requests.register(id.clone()));
                     let rid_cleanup = request_id;
+                    let session_active_requests_for_task = session_active_requests.clone();
 
                     // Attach request-scoped tracing fields. `.instrument()`
                     // (not `.entered()`) because `EnteredSpan` is not
@@ -745,7 +800,7 @@ impl McpServer {
                                 .await;
                             let _ = tx.send(WriterMessage::Response(Box::new(response))).await;
                             if let Some(rid) = rid_cleanup {
-                                server.unregister_request(&rid);
+                                session_active_requests_for_task.unregister(&rid);
                             }
                             drop(permit);
                         }
@@ -859,12 +914,19 @@ impl McpServer {
     /// requests are resolved against THIS session's map only — a different
     /// client on the same daemon cannot resolve a request another session
     /// initiated.
+    ///
+    /// The `session_active_requests` argument is the per-session
+    /// active-requests map (FIND-038 audit 2026-05-09). Client cancel
+    /// notifications are dispatched against THIS session's map only — a
+    /// different client cannot cancel a request another session is
+    /// running.
     async fn route_incoming_message(
         &self,
         message: JsonRpcMessage,
         tx: &mpsc::Sender<WriterMessage>,
         session_pending: &Arc<PendingRequests>,
         session_caps: &Arc<SessionCapabilities>,
+        session_active_requests: &ActiveRequests,
     ) -> Option<JsonRpcRequest> {
         // If no method, it's a response to a server-initiated request (elicitation/sampling)
         if message.method.is_none() {
@@ -896,7 +958,10 @@ impl McpServer {
             return None;
         }
         if message.method.as_deref() == Some("notifications/cancelled") {
-            self.handle_cancellation_notification(message.params.as_ref());
+            Self::handle_cancellation_notification(
+                session_active_requests,
+                message.params.as_ref(),
+            );
             return None;
         }
         if message.method.as_deref() == Some("notifications/initialized") {
@@ -1791,21 +1856,33 @@ impl McpServer {
 
     /// Handle a `notifications/cancelled` notification from the client.
     ///
-    /// Looks up the `requestId` in [`Self::active_requests`] and fires the
-    /// associated `CancellationToken`. Long-running tool handlers see the
-    /// fired token and bail out cleanly via their `tokio::select!` branch
-    /// (see [`crate::mcp::standard_tool::StandardToolHandler::execute`]).
+    /// Looks up the `requestId` in the **session-local** [`ActiveRequests`]
+    /// map and fires the associated `CancellationToken`. Long-running tool
+    /// handlers see the fired token and bail out cleanly via their
+    /// `tokio::select!` branch (see
+    /// [`crate::mcp::standard_tool::StandardToolHandler::execute`]).
+    ///
+    /// FIND-038 (audit 2026-05-09): the previous implementation looked up
+    /// the request in a server-singleton map, allowing a concurrent client
+    /// to cancel any other client's in-flight request by guessing or
+    /// observing the JSON-RPC `id`. The lookup is now scoped to
+    /// `session_active_requests`, the per-session map allocated in
+    /// `serve_session()`.
     ///
     /// Silently ignores:
     /// - Notifications with no `requestId` (malformed).
-    /// - Notifications for unknown request IDs (already completed, or
-    ///   referring to a task's `taskId` which is the wrong field to use —
-    ///   tasks are cancelled via the separate `tasks/cancel` request).
+    /// - Notifications for unknown request IDs (already completed, the
+    ///   request belongs to a different session, or the caller mistakenly
+    ///   used a task `taskId` — tasks are cancelled via the separate
+    ///   `tasks/cancel` request).
     ///
     /// This follows MCP 2025-11-25 spec guidance:
     /// *"Invalid cancellation notifications SHOULD be ignored by the
     ///  receiver."*
-    fn handle_cancellation_notification(&self, params: Option<&Value>) {
+    fn handle_cancellation_notification(
+        session_active_requests: &ActiveRequests,
+        params: Option<&Value>,
+    ) {
         let Some(request_id_val) = params.and_then(|p| p.get("requestId")) else {
             debug!("notifications/cancelled with no requestId, ignoring");
             return;
@@ -1823,7 +1900,7 @@ impl McpServer {
             .and_then(Value::as_str)
             .unwrap_or("");
 
-        if self.cancel_request(&request_id) {
+        if session_active_requests.cancel(&request_id) {
             info!(
                 request_id = %request_id,
                 reason = %reason,
@@ -2510,8 +2587,15 @@ mod tests {
 
         let session_pending = Arc::new(PendingRequests::new());
         let session_caps = Arc::new(SessionCapabilities::new());
+        let session_active_requests = ActiveRequests::new();
         let routed = server
-            .route_incoming_message(message, &tx, &session_pending, &session_caps)
+            .route_incoming_message(
+                message,
+                &tx,
+                &session_pending,
+                &session_caps,
+                &session_active_requests,
+            )
             .await;
 
         assert!(routed.is_none(), "notification must not be dispatched");
@@ -2545,9 +2629,16 @@ mod tests {
 
         let server_bg = Arc::clone(&server);
         let session_pending = Arc::new(PendingRequests::new());
+        let session_active_requests = ActiveRequests::new();
         let route_handle = tokio::spawn(async move {
             server_bg
-                .route_incoming_message(message, &tx, &session_pending, &session_caps)
+                .route_incoming_message(
+                    message,
+                    &tx,
+                    &session_pending,
+                    &session_caps,
+                    &session_active_requests,
+                )
                 .await
         });
 
@@ -4043,44 +4134,41 @@ mod tests {
 
     #[test]
     fn test_active_requests_starts_empty() {
-        let server = create_test_server();
-        let map = server.active_requests.lock().unwrap();
-        assert!(map.is_empty());
+        let active = ActiveRequests::new();
+        assert_eq!(active.len(), 0);
     }
 
     #[test]
     fn test_register_request_stores_token_in_map() {
-        let server = create_test_server();
-        let token = server.register_request("req-1".to_string());
+        let active = ActiveRequests::new();
+        let token = active.register("req-1".to_string());
 
         assert!(!token.is_cancelled(), "fresh token must not be cancelled");
-        let map = server.active_requests.lock().unwrap();
-        assert_eq!(map.len(), 1);
-        assert!(map.contains_key("req-1"));
+        assert_eq!(active.len(), 1);
+        assert!(active.contains("req-1"));
     }
 
     #[test]
     fn test_unregister_request_removes_from_map() {
-        let server = create_test_server();
-        let _ = server.register_request("req-2".to_string());
-        server.unregister_request("req-2");
-        let map = server.active_requests.lock().unwrap();
-        assert!(map.is_empty());
+        let active = ActiveRequests::new();
+        let _ = active.register("req-2".to_string());
+        active.unregister("req-2");
+        assert_eq!(active.len(), 0);
     }
 
     #[test]
     fn test_unregister_unknown_request_is_noop() {
-        let server = create_test_server();
+        let active = ActiveRequests::new();
         // Must not panic when the id is not present.
-        server.unregister_request("never-existed");
+        active.unregister("never-existed");
     }
 
     #[test]
     fn test_cancel_request_fires_token_and_returns_true() {
-        let server = create_test_server();
-        let token = server.register_request("req-3".to_string());
+        let active = ActiveRequests::new();
+        let token = active.register("req-3".to_string());
 
-        let cancelled = server.cancel_request("req-3");
+        let cancelled = active.cancel("req-3");
 
         assert!(cancelled);
         assert!(
@@ -4088,25 +4176,56 @@ mod tests {
             "token must be cancelled after cancel_request"
         );
         // Map entry should be removed as part of cancel.
-        let map = server.active_requests.lock().unwrap();
-        assert!(map.is_empty());
+        assert_eq!(active.len(), 0);
     }
 
     #[test]
     fn test_cancel_unknown_request_returns_false() {
-        let server = create_test_server();
-        assert!(!server.cancel_request("unknown"));
+        let active = ActiveRequests::new();
+        assert!(!active.cancel("unknown"));
     }
 
     #[test]
     fn test_cancel_request_removes_entry_to_prevent_double_cancel() {
-        let server = create_test_server();
-        let _ = server.register_request("req-4".to_string());
+        let active = ActiveRequests::new();
+        let _ = active.register("req-4".to_string());
 
         // First cancel fires and removes.
-        assert!(server.cancel_request("req-4"));
+        assert!(active.cancel("req-4"));
         // Second cancel finds nothing.
-        assert!(!server.cancel_request("req-4"));
+        assert!(!active.cancel("req-4"));
+    }
+
+    /// FIND-038: a cancel notification arriving on session B must NOT
+    /// touch session A's in-flight requests, even if it carries A's id.
+    #[test]
+    fn test_cancel_does_not_cross_sessions() {
+        let session_a = ActiveRequests::new();
+        let session_b = ActiveRequests::new();
+
+        // Session A registers an in-flight request id "42".
+        let token_a = session_a.register("42".to_string());
+
+        // Session B receives notifications/cancelled { requestId: "42" }.
+        // The handler runs against B's local map only.
+        McpServer::handle_cancellation_notification(
+            &session_b,
+            Some(&json!({ "requestId": "42", "reason": "cross-session attack" })),
+        );
+
+        assert!(
+            !token_a.is_cancelled(),
+            "session B must not be able to cancel session A's request"
+        );
+        assert!(
+            session_a.contains("42"),
+            "session A's map must still contain its request"
+        );
+        assert_eq!(
+            session_b.len(),
+            0,
+            "session B's map remains empty (no matching id locally)"
+        );
     }
 
     /// End-to-end: verifies that `handle_request_with_cancel` propagates
@@ -4159,45 +4278,45 @@ mod tests {
 
     #[test]
     fn test_handle_cancellation_notification_fires_token_for_known_id() {
-        let server = create_test_server();
-        let token = server.register_request("req-42".to_string());
+        let active = ActiveRequests::new();
+        let token = active.register("req-42".to_string());
         assert!(!token.is_cancelled());
 
         let params = json!({ "requestId": "req-42", "reason": "user abort" });
-        server.handle_cancellation_notification(Some(&params));
+        McpServer::handle_cancellation_notification(&active, Some(&params));
 
         assert!(token.is_cancelled(), "token must fire after notification");
     }
 
     #[test]
     fn test_handle_cancellation_notification_ignores_unknown_id() {
-        let server = create_test_server();
+        let active = ActiveRequests::new();
         // No panic, no observable side effect.
         let params = json!({ "requestId": "never-registered" });
-        server.handle_cancellation_notification(Some(&params));
+        McpServer::handle_cancellation_notification(&active, Some(&params));
     }
 
     #[test]
     fn test_handle_cancellation_notification_ignores_missing_request_id() {
-        let server = create_test_server();
+        let active = ActiveRequests::new();
         // Malformed notification (no requestId) must be silently ignored
         // per MCP spec.
         let params = json!({ "reason": "nothing specific" });
-        server.handle_cancellation_notification(Some(&params));
+        McpServer::handle_cancellation_notification(&active, Some(&params));
     }
 
     #[test]
     fn test_handle_cancellation_notification_accepts_numeric_request_id() {
         // JSON-RPC allows numeric IDs; the normalization to String must
-        // match what register_request stores for the raw ::Number case.
-        let server = create_test_server();
+        // match what register stores for the raw ::Number case.
+        let active = ActiveRequests::new();
         // The spawn path in run() uses `other.to_string()` for non-string
         // ids, which yields "7" for Value::Number(7). Test that the
         // notification handler applies the same normalization.
-        let token = server.register_request("7".to_string());
+        let token = active.register("7".to_string());
 
         let params = json!({ "requestId": 7 });
-        server.handle_cancellation_notification(Some(&params));
+        McpServer::handle_cancellation_notification(&active, Some(&params));
 
         assert!(token.is_cancelled());
     }
