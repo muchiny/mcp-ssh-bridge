@@ -646,7 +646,11 @@ tool_groups:
 # Discovered hosts use AcceptNew host key verification by default.
 
 ssh_config:
-  enabled: true            # Set to false to disable auto-discovery
+  # FIND-023 (audit 2026-05-09): default is `false`. Discovery exposes the
+  # operator's full personal SSH inventory (often >> the YAML-declared
+  # production set) to MCP clients via the bridge's host-listing surfaces.
+  # Set to `true` to opt in to time-to-first-command convenience.
+  enabled: false
   # path: ~/.ssh/config   # Default path
   # exclude:              # Host aliases to skip
   #   - personal-server

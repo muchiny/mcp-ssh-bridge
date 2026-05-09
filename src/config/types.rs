@@ -1132,11 +1132,14 @@ const fn default_session_max_age() -> u64 {
 ///
 /// When enabled, the bridge will parse `~/.ssh/config` and automatically
 /// discover hosts. YAML-defined hosts take precedence over discovered ones.
-/// Enabled by default to reduce time-to-first-command.
+/// FIND-023: disabled by default. Enabling exposes the operator's full
+/// personal SSH host inventory (often >> the YAML-declared production set)
+/// to MCP clients via the bridge's host-listing surfaces. Operators who
+/// want the time-to-first-command convenience must opt in explicitly.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SshConfigDiscovery {
-    /// Enable SSH config auto-discovery (default: true)
+    /// Enable SSH config auto-discovery (default: false — FIND-023).
     #[serde(default = "default_ssh_config_enabled")]
     pub enabled: bool,
 
@@ -1160,7 +1163,8 @@ impl Default for SshConfigDiscovery {
 }
 
 const fn default_ssh_config_enabled() -> bool {
-    true
+    // FIND-023: discovery is opt-in. See SshConfigDiscovery doc comment.
+    false
 }
 
 fn default_ssh_config_path() -> String {
