@@ -241,4 +241,81 @@ mod tests {
         assert!(cmd.contains("df -h"));
         assert!(cmd.contains("systemctl --failed"));
     }
+
+    #[tokio::test]
+    async fn test_enrich_no_summarize_returns_input() {
+        // summarize=None -> early return with input unchanged. Drives the
+        // pre-sample branch of the enrich() hook.
+        let ctx = create_test_context();
+        let args = SshDiagnoseArgs {
+            host: "h".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+            summarize: None,
+            summary_max_tokens: None,
+        };
+        let base = ToolCallResult::text("raw output".to_string());
+        let result = DiagnoseTool::enrich(base, &args, "raw output", &ctx)
+            .await
+            .unwrap();
+        // No mutation: same content text.
+        if let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] {
+            assert_eq!(text, "raw output");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_enrich_summarize_without_sampling_returns_input() {
+        // summarize=true but client doesn't advertise sampling -> sample()
+        // returns None and enrich falls back to raw-only.
+        let ctx = create_test_context();
+        let args = SshDiagnoseArgs {
+            host: "h".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+            summarize: Some(true),
+            summary_max_tokens: Some(256),
+        };
+        let base = ToolCallResult::text("disk full".to_string());
+        let result = DiagnoseTool::enrich(base, &args, "disk full", &ctx)
+            .await
+            .unwrap();
+        if let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] {
+            // No "=== LLM SUMMARY ===" appended in fallback path.
+            assert!(!text.contains("LLM SUMMARY"));
+        }
+    }
+
+    #[test]
+    fn test_args_debug() {
+        let args: SshDiagnoseArgs = serde_json::from_value(json!({"host": "h"})).unwrap();
+        let debug_str = format!("{args:?}");
+        assert!(debug_str.contains("SshDiagnoseArgs"));
+    }
+
+    #[test]
+    fn test_args_full_summarize_fields() {
+        let json = json!({
+            "host": "h",
+            "summarize": true,
+            "summary_max_tokens": 1024
+        });
+        let args: SshDiagnoseArgs = serde_json::from_value(json).unwrap();
+        assert_eq!(args.summarize, Some(true));
+        assert_eq!(args.summary_max_tokens, Some(1024));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_json_type() {
+        let handler = SshDiagnoseHandler::new();
+        let ctx = create_test_context();
+        let result = handler.execute(Some(json!({"host": 5})), &ctx).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(_) => {}
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
 }

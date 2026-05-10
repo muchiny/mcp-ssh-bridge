@@ -217,4 +217,63 @@ mod tests {
         assert!(cmd.contains("SERVICES"));
         assert!(cmd.contains("uname -r"));
     }
+
+    #[tokio::test]
+    async fn test_enrich_no_summarize_returns_input() {
+        let ctx = create_test_context();
+        let args = SshCompareStateArgs {
+            host: "h".to_string(),
+            summarize: None,
+            summary_max_tokens: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text("state".to_string());
+        let result = CompareStateTool::enrich(base, &args, "state", &ctx)
+            .await
+            .unwrap();
+        if let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] {
+            assert_eq!(text, "state");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_enrich_summarize_without_sampling_falls_back() {
+        let ctx = create_test_context();
+        let args = SshCompareStateArgs {
+            host: "h".to_string(),
+            summarize: Some(true),
+            summary_max_tokens: Some(128),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text("state".to_string());
+        let result = CompareStateTool::enrich(base, &args, "state", &ctx)
+            .await
+            .unwrap();
+        if let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] {
+            assert!(!text.contains("LLM SUMMARY"));
+        }
+    }
+
+    #[test]
+    fn test_args_debug() {
+        let args: SshCompareStateArgs = serde_json::from_value(json!({"host": "h"})).unwrap();
+        let debug_str = format!("{args:?}");
+        assert!(debug_str.contains("SshCompareStateArgs"));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_json_type() {
+        let handler = SshCompareStateHandler::new();
+        let ctx = create_test_context();
+        let result = handler.execute(Some(json!({"host": 9})), &ctx).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(_) => {}
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
 }

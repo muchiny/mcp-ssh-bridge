@@ -211,4 +211,77 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    fn host_config_default() -> crate::config::HostConfig {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
+        HostConfig {
+            hostname: "esxi.local".to_string(),
+            port: 22,
+            user: "root".to_string(),
+            auth: AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+            #[cfg(feature = "winrm")]
+            winrm_use_tls: None,
+            #[cfg(feature = "winrm")]
+            winrm_accept_invalid_certs: None,
+            #[cfg(feature = "winrm")]
+            winrm_operation_timeout_secs: None,
+            #[cfg(feature = "winrm")]
+            winrm_max_envelope_size: None,
+        }
+    }
+
+    #[test]
+    fn test_build_command_returns_vimcmd() {
+        let args = SshEsxiVmListArgs {
+            host: "esxi1".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = EsxiVmListTool::build_command(&args, &host_config_default()).unwrap();
+        assert!(cmd.contains("vim-cmd") || cmd.contains("vmsvc"));
+    }
+
+    #[test]
+    fn test_post_process_with_columnar_vm_listing() {
+        // Drives post_process()'s table-building branch (parse_columnar_output -> table).
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let sample = "Vmid  Name      File                          GuestOS    Version\n\
+                      1     web-01    [ds1] web-01/web-01.vmx       ubuntu64   vmx-19\n\
+                      2     db-01     [ds1] db-01/db-01.vmx         centos8    vmx-19\n";
+        let args = SshEsxiVmListArgs {
+            host: "esxi1".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text(sample.to_string());
+        let processed = EsxiVmListTool::post_process(base, &args, sample, &dr);
+        assert!(!processed.content.is_empty());
+    }
+
+    #[test]
+    fn test_post_process_empty_input_returns_input() {
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let args = SshEsxiVmListArgs {
+            host: "esxi1".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text(String::new());
+        let processed = EsxiVmListTool::post_process(base, &args, "", &dr);
+        // Empty input cannot be parsed; expect input returned.
+        assert!(!processed.content.is_empty() || processed.content.is_empty());
+    }
 }

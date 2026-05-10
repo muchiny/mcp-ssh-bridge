@@ -135,6 +135,7 @@ pub fn daemon_status(socket_path: &Path) -> Result<DaemonStatus> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     /// The default path is read at runtime from `$XDG_RUNTIME_DIR` (or
     /// falls back to `/tmp`). We can't mutate env vars in tests because
@@ -156,5 +157,31 @@ mod tests {
             "path must have .sock extension: {}",
             path.display()
         );
+    }
+
+    #[test]
+    fn test_default_socket_path_is_absolute_or_relative_consistent() {
+        // Whatever the env, the path must be non-empty and end in .sock.
+        let path = default_socket_path();
+        assert!(!path.as_os_str().is_empty());
+        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("sock"));
+    }
+
+    #[test]
+    fn test_daemon_status_returns_not_running_for_absent_socket() {
+        let tmp = TempDir::new().unwrap();
+        let sock = tmp.path().join("never-existed.sock");
+        // Public wrapper delegates to PidFile::status.
+        let status = daemon_status(&sock).expect("status read must succeed");
+        assert_eq!(status, DaemonStatus::NotRunning);
+    }
+
+    #[test]
+    fn test_stop_daemon_returns_error_when_no_pid_file() {
+        let tmp = TempDir::new().unwrap();
+        let sock = tmp.path().join("absent.sock");
+        // Public wrapper delegates to PidFile::stop.
+        let err = stop_daemon(&sock);
+        assert!(err.is_err(), "stop on missing pid file must error");
     }
 }

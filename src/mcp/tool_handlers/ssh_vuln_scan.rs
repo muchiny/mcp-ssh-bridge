@@ -222,4 +222,71 @@ mod tests {
         assert!(cmd.contains("KERNEL VERSION"));
         assert!(cmd.contains("PENDING UPDATES"));
     }
+
+    #[tokio::test]
+    async fn test_enrich_no_summarize_returns_input() {
+        let ctx = create_test_context();
+        let args = SshVulnScanArgs {
+            host: "h".to_string(),
+            summarize: None,
+            summary_max_tokens: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text("scan output".to_string());
+        let result = VulnScanTool::enrich(base, &args, "scan output", &ctx)
+            .await
+            .unwrap();
+        if let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] {
+            assert_eq!(text, "scan output");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_enrich_summarize_without_sampling_falls_back() {
+        let ctx = create_test_context();
+        let args = SshVulnScanArgs {
+            host: "h".to_string(),
+            summarize: Some(true),
+            summary_max_tokens: Some(256),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text("scan".to_string());
+        let result = VulnScanTool::enrich(base, &args, "scan", &ctx)
+            .await
+            .unwrap();
+        if let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] {
+            assert!(!text.contains("LLM SUMMARY"));
+        }
+    }
+
+    #[test]
+    fn test_args_debug() {
+        let args: SshVulnScanArgs = serde_json::from_value(json!({"host": "h"})).unwrap();
+        let debug_str = format!("{args:?}");
+        assert!(debug_str.contains("SshVulnScanArgs"));
+    }
+
+    #[test]
+    fn test_args_summarize_fields() {
+        let json = json!({"host": "h", "summarize": true, "summary_max_tokens": 512});
+        let args: SshVulnScanArgs = serde_json::from_value(json).unwrap();
+        assert_eq!(args.summarize, Some(true));
+        assert_eq!(args.summary_max_tokens, Some(512));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_json_type() {
+        let handler = SshVulnScanHandler::new();
+        let ctx = create_test_context();
+        let result = handler.execute(Some(json!({"host": 7})), &ctx).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(_) => {}
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
 }

@@ -217,4 +217,71 @@ mod tests {
         assert!(cmd.contains("SERVICES"));
         assert!(cmd.contains("CHECKSUM"));
     }
+
+    #[tokio::test]
+    async fn test_enrich_no_summarize_returns_input() {
+        let ctx = create_test_context();
+        let args = SshEnvDriftArgs {
+            host: "h".to_string(),
+            summarize: None,
+            summary_max_tokens: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text("snapshot data".to_string());
+        let result = EnvDriftTool::enrich(base, &args, "snapshot data", &ctx)
+            .await
+            .unwrap();
+        if let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] {
+            assert_eq!(text, "snapshot data");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_enrich_summarize_without_sampling_falls_back() {
+        let ctx = create_test_context();
+        let args = SshEnvDriftArgs {
+            host: "h".to_string(),
+            summarize: Some(true),
+            summary_max_tokens: Some(256),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text("snap".to_string());
+        let result = EnvDriftTool::enrich(base, &args, "snap", &ctx)
+            .await
+            .unwrap();
+        if let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] {
+            assert!(!text.contains("LLM SUMMARY"));
+        }
+    }
+
+    #[test]
+    fn test_args_debug() {
+        let args: SshEnvDriftArgs = serde_json::from_value(json!({"host": "h"})).unwrap();
+        let debug_str = format!("{args:?}");
+        assert!(debug_str.contains("SshEnvDriftArgs"));
+    }
+
+    #[test]
+    fn test_args_summarize_fields() {
+        let json = json!({"host": "h", "summarize": true, "summary_max_tokens": 1024});
+        let args: SshEnvDriftArgs = serde_json::from_value(json).unwrap();
+        assert_eq!(args.summarize, Some(true));
+        assert_eq!(args.summary_max_tokens, Some(1024));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_json_type() {
+        let handler = SshEnvDriftHandler::new();
+        let ctx = create_test_context();
+        let result = handler.execute(Some(json!({"host": 12})), &ctx).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(_) => {}
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
 }

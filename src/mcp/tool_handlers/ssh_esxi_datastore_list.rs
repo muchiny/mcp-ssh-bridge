@@ -215,4 +215,78 @@ mod tests {
             e => panic!("Expected McpInvalidRequest, got: {e:?}"),
         }
     }
+
+    #[test]
+    fn test_build_command_returns_esxcli() {
+        use crate::config::{AuthConfig, HostConfig, HostKeyVerification, OsType};
+        let host_config = HostConfig {
+            hostname: "esxi.local".to_string(),
+            port: 22,
+            user: "root".to_string(),
+            auth: AuthConfig::Agent,
+            description: None,
+            host_key_verification: HostKeyVerification::default(),
+            proxy_jump: None,
+            socks_proxy: None,
+            sudo_password: None,
+            tags: Vec::new(),
+            os_type: OsType::default(),
+            shell: None,
+            retry: None,
+            protocol: crate::config::Protocol::default(),
+            #[cfg(feature = "winrm")]
+            winrm_use_tls: None,
+            #[cfg(feature = "winrm")]
+            winrm_accept_invalid_certs: None,
+            #[cfg(feature = "winrm")]
+            winrm_operation_timeout_secs: None,
+            #[cfg(feature = "winrm")]
+            winrm_max_envelope_size: None,
+        };
+        let args = SshEsxiDatastoreListArgs {
+            host: "esxi1".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = EsxiDatastoreListTool::build_command(&args, &host_config).unwrap();
+        assert!(cmd.contains("esxcli") || cmd.contains("storage"));
+    }
+
+    #[test]
+    fn test_post_process_with_columnar_output() {
+        // Sample esxcli storage filesystem list output (multi-column,
+        // space-padded). Drives the post_process() table-building branch
+        // that the existing tests don't reach.
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let sample = "Mount Point        Volume Name   UUID                  Type   Size       Free\n\
+                      /vmfs/volumes/ds1  datastore1    abc-123-def           VMFS-6 1099511627776 549755813888\n\
+                      /vmfs/volumes/ds2  datastore2    ghi-456-jkl           NFS    549755813888  274877906944\n";
+        let args = SshEsxiDatastoreListArgs {
+            host: "esxi1".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text(sample.to_string());
+        let processed = EsxiDatastoreListTool::post_process(base, &args, sample, &dr);
+        // post_process either replaces with TSV+app, or returns unchanged
+        // if parsing fails. Either branch should produce some content.
+        assert!(!processed.content.is_empty());
+    }
+
+    #[test]
+    fn test_post_process_unparseable_input_returns_input() {
+        // Single-line input cannot form a table — branch returns input as-is.
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let args = SshEsxiDatastoreListArgs {
+            host: "esxi1".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base = ToolCallResult::text("only one line".to_string());
+        let processed = EsxiDatastoreListTool::post_process(base, &args, "only one line", &dr);
+        assert!(!processed.content.is_empty());
+    }
 }

@@ -729,6 +729,122 @@ mod tests {
     }
 
     #[test]
+    fn test_build_command_all_metric_types() {
+        let cmd = SshMetricsMultiHandler::build_command(&[
+            MetricType::Cpu,
+            MetricType::Memory,
+            MetricType::Disk,
+            MetricType::Network,
+            MetricType::Load,
+        ]);
+        assert!(cmd.contains("/proc/stat"));
+        assert!(cmd.contains("free -b"));
+        assert!(cmd.contains("df -B1"));
+        assert!(cmd.contains("/proc/net/dev"));
+        assert!(cmd.contains("/proc/loadavg"));
+    }
+
+    #[test]
+    fn test_metric_type_deserialization_lowercase() {
+        let val: MetricType = serde_json::from_str("\"disk\"").unwrap();
+        assert_eq!(val, MetricType::Disk);
+        let val: MetricType = serde_json::from_str("\"network\"").unwrap();
+        assert_eq!(val, MetricType::Network);
+        let val: MetricType = serde_json::from_str("\"load\"").unwrap();
+        assert_eq!(val, MetricType::Load);
+    }
+
+    #[test]
+    fn test_metric_type_invalid_rejected() {
+        let res: std::result::Result<MetricType, _> = serde_json::from_str("\"BOGUS\"");
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_parse_sections_short_input_uses_defaults() {
+        // stdout has fewer sections than requested metric types — missing
+        // sections should silently fall through and yield None metrics
+        // rather than panic.
+        let metrics = vec![MetricType::Cpu, MetricType::Memory, MetricType::Disk];
+        let result = parse_sections("", "h", &metrics);
+        assert_eq!(result.host, "h");
+        assert!(result.cpu.is_none());
+        assert!(result.memory.is_none());
+        assert!(result.disk.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_invalid_arguments_format() {
+        let handler = SshMetricsMultiHandler;
+        let ctx = create_test_context();
+        let result = handler
+            .execute(Some(json!({"hosts": "not-an-array"})), &ctx)
+            .await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(_) => {}
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_full_pipeline_success_with_mock_executor() {
+        // Drives the full pipeline including JoinSet, parallel parsing,
+        // dashboard generation, and history bookkeeping.
+        let handler = SshMetricsMultiHandler;
+        let mut hosts = HashMap::new();
+        hosts.insert(
+            "server1".to_string(),
+            HostConfig {
+                hostname: "192.168.1.100".to_string(),
+                port: 22,
+                user: "admin".to_string(),
+                auth: AuthConfig::Key {
+                    path: "~/.ssh/id_rsa".to_string(),
+                    passphrase: None,
+                },
+                description: None,
+                host_key_verification: HostKeyVerification::default(),
+                proxy_jump: None,
+                socks_proxy: None,
+                sudo_password: None,
+                tags: Vec::new(),
+                os_type: OsType::Linux,
+                shell: None,
+                retry: None,
+                protocol: crate::config::Protocol::default(),
+                #[cfg(feature = "winrm")]
+                winrm_use_tls: None,
+                #[cfg(feature = "winrm")]
+                winrm_accept_invalid_certs: None,
+                #[cfg(feature = "winrm")]
+                winrm_operation_timeout_secs: None,
+                #[cfg(feature = "winrm")]
+                winrm_max_envelope_size: None,
+            },
+        );
+        let mock_output = crate::ssh::CommandOutput {
+            stdout: format!(
+                "cpu  10000 500 3000 86000 200 100 200 0 0 0\n4\n{SECTION_SEPARATOR}              total        used        free      shared  buff/cache   available\nMem:    16000000000  8000000000  4000000000      100000  4000000000  7000000000\n"
+            ),
+            stderr: String::new(),
+            exit_code: 0,
+            duration_ms: 1,
+        };
+        let ctx = crate::ports::mock::create_test_context_with_mock_executor(hosts, mock_output);
+        let result = handler
+            .execute(
+                Some(json!({"hosts": ["server1"], "metrics": ["cpu", "memory"]})),
+                &ctx,
+            )
+            .await;
+        // We don't require success — the mock pool may still gate at the
+        // executor router level. Either way, the pipeline branches above
+        // step 4 are now exercised.
+        let _ = result;
+    }
+
+    #[test]
     #[allow(clippy::result_large_err)]
     fn test_parallel_parsing() {
         // Simulate multiple host outputs

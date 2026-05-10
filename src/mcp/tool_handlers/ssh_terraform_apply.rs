@@ -385,4 +385,77 @@ mod tests {
         assert!(cmd.contains("apply"));
         assert!(cmd.contains("-auto-approve"));
     }
+
+    #[test]
+    fn test_build_command_with_var_file_and_targets() {
+        let args = SshTerraformApplyArgs {
+            host: "s".to_string(),
+            dir: "/opt/infra".to_string(),
+            auto_approve: None,
+            vars: None,
+            var_file: Some("prod.tfvars".to_string()),
+            targets: Some(vec![
+                "aws_instance.web".to_string(),
+                "aws_instance.db".to_string(),
+            ]),
+            plan_file: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = TerraformApplyTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("apply"));
+        assert!(cmd.contains("prod.tfvars"));
+        assert!(cmd.contains("aws_instance.web"));
+    }
+
+    #[test]
+    fn test_build_command_with_plan_file() {
+        let args = SshTerraformApplyArgs {
+            host: "s".to_string(),
+            dir: "/opt/infra".to_string(),
+            auto_approve: None,
+            vars: None,
+            var_file: None,
+            targets: None,
+            plan_file: Some("saved.tfplan".to_string()),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let cmd = TerraformApplyTool::build_command(&args, &test_host_config()).unwrap();
+        assert!(cmd.contains("apply"));
+        assert!(cmd.contains("saved.tfplan"));
+    }
+
+    #[tokio::test]
+    async fn test_enrich_no_logger_returns_input_unchanged() {
+        // ctx.mcp_logger is None in test contexts -> early return path.
+        let ctx = create_test_context();
+        let args = SshTerraformApplyArgs {
+            host: "s".to_string(),
+            dir: "/opt/infra".to_string(),
+            auto_approve: Some(true),
+            vars: None,
+            var_file: None,
+            targets: Some(vec!["x".to_string()]),
+            plan_file: None,
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let base =
+            ToolCallResult::text("aws_instance.web: Creating...\nApply complete!".to_string());
+        let result = TerraformApplyTool::enrich(
+            base,
+            &args,
+            "aws_instance.web: Creating...\nApply complete!",
+            &ctx,
+        )
+        .await
+        .unwrap();
+        if let crate::ports::protocol::ToolContent::Text { text } = &result.content[0] {
+            assert!(text.contains("Apply complete!"));
+        }
+    }
 }

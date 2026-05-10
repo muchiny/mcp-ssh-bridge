@@ -182,3 +182,138 @@ impl Drop for FanoutGuard {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mcp::protocol::{JsonRpcNotification, LogLevel};
+
+    fn dummy_writer_tx() -> mpsc::Sender<WriterMessage> {
+        let (tx, _rx) = mpsc::channel::<WriterMessage>(8);
+        tx
+    }
+
+    #[tokio::test]
+    async fn session_context_new_initializes_default_state() {
+        let tx = dummy_writer_tx();
+        let ctx = SessionContext::new(tx);
+
+        // Default log level matches Warning severity (FIND-035 default).
+        assert_eq!(
+            ctx.log_level.load(std::sync::atomic::Ordering::Relaxed),
+            LogLevel::Warning.severity()
+        );
+
+        // All map/list state empty on construction.
+        assert!(ctx.runtime_max_output.read().await.is_none());
+        assert!(ctx.resource_subs.read().await.is_empty());
+        assert!(ctx.roots.read().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn session_context_clone_shares_inner_state() {
+        let tx = dummy_writer_tx();
+        let a = SessionContext::new(tx);
+        let b = a.clone();
+
+        // Mutating Arc-wrapped state through clone B is visible from A.
+        *b.runtime_max_output.write().await = Some(4096);
+        assert_eq!(*a.runtime_max_output.read().await, Some(4096));
+    }
+
+    #[test]
+    fn fanout_new_is_empty() {
+        let f = NotificationFanout::new();
+        assert_eq!(f.live_session_count(), 0);
+    }
+
+    #[test]
+    fn fanout_register_increments_live_count() {
+        let f = NotificationFanout::new();
+        let (tx1, _rx1) = mpsc::channel::<WriterMessage>(4);
+        let (tx2, _rx2) = mpsc::channel::<WriterMessage>(4);
+        let g1 = f.register(tx1);
+        let g2 = f.register(tx2);
+        assert_eq!(f.live_session_count(), 2);
+        drop(g1);
+        drop(g2);
+    }
+
+    #[test]
+    fn fanout_guard_drop_removes_entry() {
+        let f = NotificationFanout::new();
+        let (tx, _rx) = mpsc::channel::<WriterMessage>(4);
+        {
+            let _g = f.register(tx);
+            assert_eq!(f.live_session_count(), 1);
+        }
+        assert_eq!(f.live_session_count(), 0);
+    }
+
+    #[test]
+    fn fanout_guards_drop_only_their_own_entry() {
+        let f = NotificationFanout::new();
+        let (tx1, _rx1) = mpsc::channel::<WriterMessage>(4);
+        let (tx2, _rx2) = mpsc::channel::<WriterMessage>(4);
+        let g1 = f.register(tx1);
+        let g2 = f.register(tx2);
+        assert_eq!(f.live_session_count(), 2);
+        drop(g1);
+        assert_eq!(f.live_session_count(), 1);
+        drop(g2);
+        assert_eq!(f.live_session_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn fanout_broadcast_delivers_to_every_session() {
+        let f = NotificationFanout::new();
+        let (tx1, mut rx1) = mpsc::channel::<WriterMessage>(4);
+        let (tx2, mut rx2) = mpsc::channel::<WriterMessage>(4);
+        let _g1 = f.register(tx1);
+        let _g2 = f.register(tx2);
+
+        let msg = WriterMessage::Notification(JsonRpcNotification::tools_list_changed());
+        f.broadcast(&msg);
+
+        // Both sessions receive a copy of the broadcast.
+        for (idx, rx) in [&mut rx1, &mut rx2].iter_mut().enumerate() {
+            match rx.try_recv() {
+                Ok(WriterMessage::Notification(n)) => {
+                    assert_eq!(n.method, "notifications/tools/list_changed");
+                }
+                Ok(_) => panic!("session {idx}: expected Notification variant"),
+                Err(e) => panic!("session {idx}: try_recv failed: {e:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn fanout_broadcast_with_no_senders_is_noop() {
+        let f = NotificationFanout::new();
+        // Must not panic / must not deadlock.
+        f.broadcast(&WriterMessage::Notification(
+            JsonRpcNotification::tools_list_changed(),
+        ));
+        assert_eq!(f.live_session_count(), 0);
+    }
+
+    #[test]
+    fn fanout_broadcast_prunes_closed_senders() {
+        let f = NotificationFanout::new();
+        let (tx_dead, rx_dead) = mpsc::channel::<WriterMessage>(4);
+        let (tx_live, _rx_live) = mpsc::channel::<WriterMessage>(4);
+        let _g_dead = f.register(tx_dead);
+        let _g_live = f.register(tx_live);
+        assert_eq!(f.live_session_count(), 2);
+
+        // Close the first channel by dropping its receiver.
+        drop(rx_dead);
+
+        f.broadcast(&WriterMessage::Notification(
+            JsonRpcNotification::tools_list_changed(),
+        ));
+
+        // Dead sender pruned, live sender remains.
+        assert_eq!(f.live_session_count(), 1);
+    }
+}

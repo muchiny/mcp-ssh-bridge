@@ -220,4 +220,99 @@ mod tests {
         assert!(cmd.contains("dpkg-query"));
         assert!(cmd.contains("rpm -qa"));
     }
+
+    #[test]
+    fn test_post_process_extracts_packages_section() {
+        // Drives the in_packages=true branch of post_process — a TSV with
+        // package data is produced and other sections are appended.
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let args = SshSbomGenerateArgs {
+            host: "server1".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let raw = "=== SYSTEM ===\n\
+                   Linux foo 5.15.0\n\
+                   === INSTALLED PACKAGES ===\n\
+                   bash\t5.1\tamd64\tinstalled\n\
+                   curl\t7.81\tamd64\tinstalled\n\
+                   === END ===\n\
+                   done\n";
+        let base = ToolCallResult::text(raw.to_string());
+        let processed = SbomGenerateTool::post_process(base, &args, raw, &dr);
+        // Result should contain the TSV header and at least one package row.
+        if let crate::ports::protocol::ToolContent::Text { text } = &processed.content[0] {
+            assert!(text.contains("PACKAGE\tVERSION\tARCH\tSTATUS"));
+            assert!(text.contains("bash\t5.1\tamd64\tinstalled"));
+            assert!(text.contains("curl"));
+            // Other sections appended after the TSV.
+            assert!(text.contains("System Info") || text.contains("=== SYSTEM ==="));
+        } else {
+            panic!("Expected Text content");
+        }
+    }
+
+    #[test]
+    fn test_post_process_no_packages_returns_input() {
+        // No `=== INSTALLED PACKAGES ===` marker — branch returns input
+        // unchanged because tsv has only the header line.
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let args = SshSbomGenerateArgs {
+            host: "server1".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let raw = "no packages marker here\nsome content\n";
+        let base = ToolCallResult::text(raw.to_string());
+        let processed = SbomGenerateTool::post_process(base, &args, raw, &dr);
+        if let crate::ports::protocol::ToolContent::Text { text } = &processed.content[0] {
+            // Original input preserved (no TSV header inserted).
+            assert!(!text.contains("PACKAGE\tVERSION\tARCH\tSTATUS"));
+        } else {
+            panic!("Expected Text content");
+        }
+    }
+
+    #[test]
+    fn test_post_process_packages_only_no_other_sections() {
+        // Package marker present but no following === sections.
+        let dr = crate::domain::data_reduction::DataReductionArgs::default();
+        let args = SshSbomGenerateArgs {
+            host: "server1".to_string(),
+            timeout_seconds: None,
+            max_output: None,
+            save_output: None,
+        };
+        let raw = "=== INSTALLED PACKAGES ===\nbash\t5.1\tamd64\tinstalled\n";
+        let base = ToolCallResult::text(raw.to_string());
+        let processed = SbomGenerateTool::post_process(base, &args, raw, &dr);
+        if let crate::ports::protocol::ToolContent::Text { text } = &processed.content[0] {
+            assert!(text.contains("PACKAGE\tVERSION\tARCH\tSTATUS"));
+            assert!(text.contains("bash"));
+        } else {
+            panic!("Expected Text content");
+        }
+    }
+
+    #[test]
+    fn test_args_debug() {
+        let json = json!({"host": "server1"});
+        let args: SshSbomGenerateArgs = serde_json::from_value(json).unwrap();
+        let debug_str = format!("{args:?}");
+        assert!(debug_str.contains("SshSbomGenerateArgs"));
+    }
+
+    #[tokio::test]
+    async fn test_invalid_json_type() {
+        let handler = SshSbomGenerateHandler::new();
+        let ctx = create_test_context();
+        let result = handler.execute(Some(json!({"host": 99})), &ctx).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BridgeError::McpInvalidRequest(_) => {}
+            e => panic!("Expected McpInvalidRequest, got: {e:?}"),
+        }
+    }
 }
