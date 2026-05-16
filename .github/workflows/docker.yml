@@ -60,7 +60,7 @@ jobs:
         run: echo "tag=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)" >> "$GITHUB_OUTPUT"
 
       - name: Trivy scan (CRITICAL + HIGH — fail)
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.scan_target.outputs.tag }}
           format: sarif
@@ -70,7 +70,7 @@ jobs:
 
       - name: Trivy scan (MEDIUM — warn only)
         if: always()
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.scan_target.outputs.tag }}
           format: table
