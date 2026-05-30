@@ -170,13 +170,12 @@ Key sections: `hosts`, `security`, `limits`, `audit`, `tool_groups`, `recording`
 
 ## Known Advisories
 
-6 advisories ignored in `deny.toml` — all transitive, no upstream fix available:
+1 advisory actively ignored in `deny.toml` (transitive, no upstream fix):
 
 - RUSTSEC-2023-0071 — Marvin Attack on RSA (russh)
-- RUSTSEC-2026-0044 — aws-lc-sys X.509 bypass (aws-sdk)
-- RUSTSEC-2026-0048 — aws-lc-sys CRL logic error (aws-sdk)
-- RUSTSEC-2026-0049 — rustls-webpki CRL matching (russh/aws-sdk)
-- RUSTSEC-2025-0134 — rustls-pemfile unmaintained (kube)
+
+Previously ignored (now resolved — no longer triggered after dep-updates-2026-05-30):
+RUSTSEC-2025-0134, RUSTSEC-2026-0049, RUSTSEC-2026-0074, RUSTSEC-2026-0098, RUSTSEC-2026-0099, RUSTSEC-2026-0104
 
 ## Path-Scoped Rules
 

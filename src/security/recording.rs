@@ -11,8 +11,8 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use const_hex::encode as hex_encode;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tracing::{error, info, warn};
 
