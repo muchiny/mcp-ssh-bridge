@@ -148,7 +148,7 @@ tracing-opentelemetry = { version = "0.33", optional = true }
 similar = "3"
 inventory = "0.3"
 mcp-ssh-bridge-macros = { version = "0.1.0", path = "crates/mcp-ssh-bridge-macros" }
-jsonwebtoken = "9"
+jsonwebtoken = { version = "10", features = ["rust_crypto", "use_pem"] }
 
 [dev-dependencies]
 tempfile = "3"
