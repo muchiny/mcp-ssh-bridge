@@ -18,6 +18,7 @@
 //! - max alias events: 1 000
 //! - max structural depth: 50
 //! - max nodes (sequences + maps + scalars): 10 000
+//! - max total scalar bytes: [`MAX_YAML_BYTES`] (1 MiB, matching input cap)
 //!
 //! Test fixtures inside `#[cfg(test)] mod tests` blocks intentionally keep
 //! using the bare `serde_saphyr::from_str` so they can exercise edge cases
@@ -47,19 +48,23 @@ pub(crate) const MAX_DEPTH: usize = 50;
 pub(crate) const MAX_NODES: usize = 10_000;
 
 /// Build the hardened parser options for our threat model.
+///
+/// Uses the `budget!` / `options!` macros introduced in serde-saphyr 0.0.23
+/// (the direct-struct-construction path is deprecated since 0.0.23).
+/// All five original limits are preserved at their original values; the new
+/// `max_total_scalar_bytes` field (added in 0.0.22+) is set to
+/// `MAX_YAML_BYTES` so scalar amplification is bounded by the same 1 MiB
+/// cap as the input itself.
 fn hardened_options() -> serde_saphyr::Options {
-    let budget = serde_saphyr::Budget {
-        max_reader_input_bytes: Some(MAX_YAML_BYTES),
-        max_anchors: MAX_ANCHORS,
-        max_aliases: MAX_ALIASES,
-        max_depth: MAX_DEPTH,
-        max_nodes: MAX_NODES,
-        ..serde_saphyr::Budget::default()
-    };
-
-    serde_saphyr::Options {
-        budget: Some(budget),
-        ..serde_saphyr::Options::default()
+    serde_saphyr::options! {
+        budget: serde_saphyr::budget! {
+            max_reader_input_bytes: Some(MAX_YAML_BYTES),
+            max_anchors: MAX_ANCHORS,
+            max_aliases: MAX_ALIASES,
+            max_depth: MAX_DEPTH,
+            max_nodes: MAX_NODES,
+            max_total_scalar_bytes: MAX_YAML_BYTES,
+        },
     }
 }
 
