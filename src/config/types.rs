@@ -56,7 +56,11 @@ pub struct AwxConfig {
     pub url: String,
 
     /// `OAuth2` Bearer token for AWX API authentication.
-    pub token: String,
+    ///
+    /// Wrapped in [`RedactedSecret`] so the token is zeroized on drop and
+    /// never leaked through `Debug`/`Display`/`Serialize` (emits
+    /// `"[REDACTED]"`). Deserializes from a plain YAML/JSON string.
+    pub token: RedactedSecret,
 
     /// Request timeout in seconds (default: 30).
     #[serde(default = "default_awx_timeout")]
@@ -1515,6 +1519,29 @@ mod tests {
         assert!(matches!(agent, AuthConfig::Agent));
         assert!(
             matches!(password, AuthConfig::Password { password } if password.as_str() == "secret")
+        );
+    }
+
+    // ============== AwxConfig Tests ==============
+
+    #[test]
+    fn awx_token_is_redacted_in_debug() {
+        let awx = AwxConfig {
+            ssh_host: "h".to_string(),
+            url: "https://awx".to_string(),
+            token: RedactedSecret::from("awx-oauth-token-123"),
+            api_timeout: 30,
+            verify_ssl: true,
+        };
+        let rendered = format!("{awx:?}");
+        assert!(
+            !rendered.contains("awx-oauth-token-123"),
+            "AwxConfig Debug leaked the token: {rendered}"
+        );
+        let json = serde_json::to_string(&awx).unwrap();
+        assert!(
+            !json.contains("awx-oauth-token-123"),
+            "AwxConfig Serialize leaked the token"
         );
     }
 
